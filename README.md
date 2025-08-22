@@ -1,2 +1,6 @@
-# apc-msyadd1-template
-Template repository for APC SMSYADD1
+# AttendEase
+Group leader: Christian Luis Esguerra
+Members:
+- Moises James Sy
+- Suzanne Marie Rosco
+- Maria Sophea Balidio
