@@ -1,0 +1,48 @@
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="stylesheet" type="text/css" href="/static/styles/custom.css" />
+    <script
+      src="https://res.cdn.office.net/teams-js/2.31.1/js/MicrosoftTeams.min.js"
+      integrity="sha384-ihAqYgEJz9hzEU+HaYodG1aTzjebC/wKXQi1nWKZG7OLAUyOL9ZrzD/SfZu79Jeu"
+      crossorigin="anonymous"
+    ></script>
+    <script src="/static/scripts/professor.js"></script>
+    <title>AttendEase - Professor Dashboard</title>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div>
+      <h1>AttendEase - Professor Dashboard</h1>
+      
+      <div>
+        <h3>Generate QR Code for Attendance</h3>
+        
+        <!-- Duration Selection -->
+        <label for="duration">QR Code Duration:</label>
+        <select id="duration">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+        </select>
+        
+        <!-- Generate Button -->
+        <button id="generateBtn">Generate QR Code</button>
+        
+        <!-- QR Code Display -->
+        <div id="qrContainer" style="margin-top: 20px; display: none;">
+          <h4>Scan this QR code for attendance:</h4>
+          <img id="qrCode" alt="QR Code" />
+          <p id="timer"></p>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      microsoftTeams.appInitialization.notifySuccess();
+    </script>
+  </body>
+</html>
