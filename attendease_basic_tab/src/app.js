@@ -24,6 +24,15 @@ app.get("/tab", (req, res) => {
   send(req, path.join(__dirname, "views", "hello.html")).pipe(res);
 });
 
+// Add role-based routing
+app.get("/student", (req, res) => {
+  // Student interface 
+});
+
+app.get("/professor", (req, res) => {
+  // Professor interface
+});
+
 // Create HTTP server
 const port = process.env.port || process.env.PORT || 3333;
 
