@@ -11,6 +11,32 @@ Members:
 Before you begin working on the project, ensure you have the following installed:
 *   **Microsoft 365 Agents Toolkit extension**
 
+## Running the Project Locally
+
+To run this project locally for development and testing:
+
+1. **Navigate to the project folder**:
+   ```bash
+   cd attendease_basic_tab
+   ```
+
+2. **Install dependencies** (if not already done):
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**:
+   ```bash
+   npm run dev:teamsfx
+   ```
+
+4. **Access the application**:
+   - Open your browser and go to `http://localhost:3333`
+   - For professor dashboard: `http://localhost:3333/professor`
+   - For student interface: `http://localhost:3333/student`
+
+The server will start on port 3333 and you should see "Express server listening on port 3333" in your terminal.
+
 ## Commit Reference Table
 
 | Type       | Description                                                                 | Example Subject                                           |
