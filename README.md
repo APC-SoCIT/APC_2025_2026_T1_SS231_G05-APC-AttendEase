@@ -1,5 +1,6 @@
 # AttendEase
-Group leader: Christian Luis Esguerra
+Group leader: 
+- Christian Luis Esguerra
 
 Members:
 - Moises James Sy
