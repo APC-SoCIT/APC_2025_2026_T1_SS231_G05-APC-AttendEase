@@ -26,9 +26,18 @@
           <p><strong>Camera Status:</strong> <span id="statusText">Checking...</span></p>
         </div>
         
+        <!-- Camera Selection -->
+        <div id="cameraSelection" style="margin-bottom: 15px;">
+          <label for="cameraSelect"><strong>Select Camera:</strong></label>
+          <select id="cameraSelect" style="margin-left: 10px; margin-right: 10px;">
+            <option value="">No cameras available</option>
+          </select>
+          <button id="refreshCamerasBtn">Refresh Cameras</button>
+        </div>
+        
         <!-- Control Buttons -->
         <div style="margin-bottom: 20px;">
-          <button id="startCameraBtn">Start Camera</button>
+          <button id="startCameraBtn" disabled>Start Camera</button>
           <button id="stopCameraBtn" disabled>Stop Camera</button>
           <button id="refreshStatusBtn">Refresh Status</button>
         </div>

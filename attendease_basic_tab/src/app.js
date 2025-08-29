@@ -95,6 +95,17 @@ function generateDeviceId() {
 // Facial Recognition API endpoints
 const FACIAL_RECOGNITION_SERVICE_URL = 'http://localhost:5000';
 
+// List available cameras
+app.get('/api/facial-recognition/camera/list', async (req, res) => {
+  try {
+    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/list`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error listing cameras:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to list cameras' });
+  }
+});
+
 // Check camera status
 app.get('/api/facial-recognition/camera/status', async (req, res) => {
   try {
@@ -109,7 +120,7 @@ app.get('/api/facial-recognition/camera/status', async (req, res) => {
 // Start camera
 app.post('/api/facial-recognition/camera/start', async (req, res) => {
   try {
-    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/start`);
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/start`, req.body);
     res.json(response.data);
   } catch (error) {
     console.error('Error starting camera:', error.message);

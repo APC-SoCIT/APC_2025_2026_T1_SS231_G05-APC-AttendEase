@@ -169,16 +169,46 @@ def match_faces_to_trackers(face_locations, face_encodings):
             if face_tracker[tracker_id].is_expired():
                 del face_tracker[tracker_id]
 
+@app.route('/api/camera/list', methods=['GET'])
+def list_cameras():
+    """List all available cameras."""
+    available_cameras = []
+    
+    # Test up to 10 camera indices
+    for i in range(10):
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                # Try to read a frame to confirm the camera is working
+                ret, frame = cap.read()
+                if ret:
+                    available_cameras.append({
+                        "index": i,
+                        "name": f"Camera {i}",
+                        "description": f"Camera device at index {i}"
+                    })
+                cap.release()
+        except Exception:
+            continue
+    
+    return jsonify({
+        "status": "success" if available_cameras else "no_cameras",
+        "cameras": available_cameras,
+        "message": f"Found {len(available_cameras)} camera(s)" if available_cameras else "No cameras detected"
+    })
+
 @app.route('/api/camera/status', methods=['GET'])
 def camera_status():
     """Check if camera is available."""
     try:
-        cap_test = cv2.VideoCapture(0)
-        if cap_test.isOpened():
-            cap_test.release()
-            return jsonify({"status": "available", "message": "Camera is available"})
+        # Check if any camera is available
+        list_result = list_cameras()
+        data = list_result.get_json()
+        
+        if data["cameras"]:
+            return jsonify({"status": "available", "message": f"Found {len(data['cameras'])} camera(s)"})
         else:
-            return jsonify({"status": "unavailable", "message": "Camera not detected"})
+            return jsonify({"status": "unavailable", "message": "No cameras detected"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
@@ -191,17 +221,35 @@ def start_camera():
         return jsonify({"status": "already_running", "message": "Camera is already active"})
     
     try:
-        video_capture = cv2.VideoCapture(0)
+        # Get camera index from request body, default to 0
+        data = request.get_json() or {}
+        camera_index = data.get('camera_index', 0)
+        
+        print(f"Attempting to start camera at index {camera_index}")
+        
+        video_capture = cv2.VideoCapture(camera_index)
         if video_capture.isOpened():
-            video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            video_capture.set(cv2.CAP_PROP_FPS, 30)
-            camera_on = True
-            face_tracker.clear()
-            return jsonify({"status": "started", "message": "Camera started successfully"})
+            # Test if we can actually read a frame
+            ret, frame = video_capture.read()
+            if ret:
+                video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                video_capture.set(cv2.CAP_PROP_FPS, 30)
+                camera_on = True
+                face_tracker.clear()
+                return jsonify({
+                    "status": "started", 
+                    "message": f"Camera {camera_index} started successfully",
+                    "camera_index": camera_index
+                })
+            else:
+                video_capture.release()
+                return jsonify({"status": "error", "message": f"Camera {camera_index} detected but cannot read frames"})
         else:
-            return jsonify({"status": "error", "message": "Could not access camera"})
+            return jsonify({"status": "error", "message": f"Could not access camera at index {camera_index}"})
     except Exception as e:
+        if video_capture:
+            video_capture.release()
         return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/camera/stop', methods=['POST'])

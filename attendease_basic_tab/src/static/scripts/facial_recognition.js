@@ -5,31 +5,39 @@ let frameUpdateInterval = null;
 let statusCheckInterval = null;
 
 // DOM Elements
-let startCameraBtn, stopCameraBtn, refreshStatusBtn;
-let statusText, videoFrame, faceCount, facesList, messagesDiv;
+let startCameraBtn, stopCameraBtn, refreshStatusBtn, refreshCamerasBtn;
+let statusText, videoFrame, faceCount, facesList, messagesDiv, cameraSelect;
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     initializeElements();
-    checkCameraStatus();
     setupEventListeners();
+    loadAvailableCameras();
 });
 
 function initializeElements() {
     startCameraBtn = document.getElementById('startCameraBtn');
     stopCameraBtn = document.getElementById('stopCameraBtn');
     refreshStatusBtn = document.getElementById('refreshStatusBtn');
+    refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     statusText = document.getElementById('statusText');
     videoFrame = document.getElementById('videoFrame');
     faceCount = document.getElementById('faceCount');
     facesList = document.getElementById('facesList');
     messagesDiv = document.getElementById('messages');
+    cameraSelect = document.getElementById('cameraSelect');
 }
 
 function setupEventListeners() {
     startCameraBtn.addEventListener('click', startCamera);
     stopCameraBtn.addEventListener('click', stopCamera);
     refreshStatusBtn.addEventListener('click', checkCameraStatus);
+    refreshCamerasBtn.addEventListener('click', loadAvailableCameras);
+    
+    // Enable/disable start button based on camera selection
+    cameraSelect.addEventListener('change', function() {
+        startCameraBtn.disabled = cameraSelect.value === '';
+    });
 }
 
 function addMessage(message, type = 'info') {
@@ -61,6 +69,53 @@ function addMessage(message, type = 'info') {
     }
 }
 
+async function loadAvailableCameras() {
+    try {
+        statusText.textContent = 'Loading cameras...';
+        addMessage('Scanning for available cameras...', 'info');
+        
+        const response = await fetch('/api/facial-recognition/camera/list');
+        const data = await response.json();
+        
+        // Clear existing options
+        cameraSelect.innerHTML = '';
+        
+        if (data.status === 'success' && data.cameras && data.cameras.length > 0) {
+            // Add cameras to dropdown
+            data.cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera.index;
+                option.textContent = `${camera.name} (Index ${camera.index})`;
+                cameraSelect.appendChild(option);
+            });
+            
+            // Select first camera by default
+            cameraSelect.selectedIndex = 0;
+            startCameraBtn.disabled = false;
+            
+            statusText.textContent = `${data.cameras.length} camera(s) found`;
+            statusText.style.color = '#388e3c';
+            addMessage(`Found ${data.cameras.length} camera(s): ${data.cameras.map(c => c.name).join(', ')}`, 'success');
+        } else {
+            // No cameras found
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No cameras available';
+            cameraSelect.appendChild(option);
+            
+            startCameraBtn.disabled = true;
+            statusText.textContent = 'No cameras detected';
+            statusText.style.color = '#d32f2f';
+            addMessage('No cameras detected. Please check your camera connections and permissions.', 'error');
+        }
+    } catch (error) {
+        statusText.textContent = 'Error loading cameras';
+        statusText.style.color = '#d32f2f';
+        startCameraBtn.disabled = true;
+        addMessage(`Error loading cameras: ${error.message}`, 'error');
+    }
+}
+
 async function checkCameraStatus() {
     try {
         statusText.textContent = 'Checking...';
@@ -88,14 +143,23 @@ async function checkCameraStatus() {
 
 async function startCamera() {
     try {
-        addMessage('Starting camera...', 'info');
+        const selectedCameraIndex = parseInt(cameraSelect.value);
+        if (isNaN(selectedCameraIndex)) {
+            addMessage('Please select a camera first.', 'warning');
+            return;
+        }
+        
+        addMessage(`Starting camera ${selectedCameraIndex}...`, 'info');
         startCameraBtn.disabled = true;
         
         const response = await fetch('/api/facial-recognition/camera/start', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+                camera_index: selectedCameraIndex
+            })
         });
         
         const data = await response.json();
@@ -104,9 +168,10 @@ async function startCamera() {
             cameraActive = true;
             startCameraBtn.disabled = true;
             stopCameraBtn.disabled = false;
-            statusText.textContent = 'Active';
+            cameraSelect.disabled = true; // Disable camera selection while active
+            statusText.textContent = `Active (Camera ${selectedCameraIndex})`;
             statusText.style.color = '#388e3c';
-            addMessage('Camera started successfully!', 'success');
+            addMessage(`Camera ${selectedCameraIndex} started successfully!`, 'success');
             
             // Start frame updates
             startFrameUpdates();
@@ -138,8 +203,9 @@ async function stopCamera() {
         const data = await response.json();
         
         cameraActive = false;
-        startCameraBtn.disabled = false;
+        startCameraBtn.disabled = cameraSelect.value === ''; // Enable only if camera is selected
         stopCameraBtn.disabled = true;
+        cameraSelect.disabled = false; // Re-enable camera selection
         statusText.textContent = 'Stopped';
         statusText.style.color = '#1976d2';
         
