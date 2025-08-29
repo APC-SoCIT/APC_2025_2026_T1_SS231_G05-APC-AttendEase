@@ -150,6 +150,36 @@ app.get('/api/facial-recognition/camera/frame', async (req, res) => {
   }
 });
 
+// Process frame from browser
+app.post('/api/facial-recognition/process-frame', async (req, res) => {
+  try {
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/process-frame`, req.body);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error processing frame:', error.message);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to process frame';
+    let statusCode = 500;
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = 'Python facial recognition service is not running. Please start it with: python facial_recognition_service.py';
+      statusCode = 503;
+    } else if (error.response) {
+      errorMessage = `Python service error: ${error.response.data?.message || error.response.statusText}`;
+      statusCode = error.response.status;
+    } else {
+      errorMessage = `Connection error: ${error.message}`;
+    }
+    
+    res.status(statusCode).json({ 
+      status: 'error', 
+      message: errorMessage,
+      details: error.code || 'unknown_error'
+    });
+  }
+});
+
 // Create HTTP server
 const port = process.env.port || process.env.PORT || 3333;
 

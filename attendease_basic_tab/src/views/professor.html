@@ -46,7 +46,9 @@
         <div id="videoContainer" style="margin-bottom: 20px;">
           <h4>Live Camera Feed:</h4>
           <div id="videoFrame" style="border: 2px solid #ccc; width: 640px; height: 480px; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center;">
-            <p>Camera not active</p>
+            <video id="cameraVideo" width="640" height="480" style="display: none;"></video>
+            <canvas id="processedCanvas" width="640" height="480" style="display: none;"></canvas>
+            <p id="videoPlaceholder">Camera not active</p>
           </div>
         </div>
         

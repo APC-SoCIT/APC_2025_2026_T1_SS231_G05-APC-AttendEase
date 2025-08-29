@@ -71,9 +71,14 @@ def load_reference_data():
     ]
     
     print("📸 Loading reference images...")
+    print(f"   Photos directory: {photos_dir}")
+    print(f"   Directory exists: {os.path.exists(photos_dir)}")
     
     for name, path in reference_people:
         print(f"   - Loading {name} from {path}...")
+        print(f"     Full path: {os.path.abspath(path)}")
+        print(f"     File exists: {os.path.exists(path)}")
+        
         try:
             if os.path.exists(path):
                 image = face_recognition.load_image_file(path)
@@ -85,14 +90,22 @@ def load_reference_data():
                     known_face_names.append(name)
                     print(f"     ✓ Face encoding extracted for {name}.")
                 else:
-                    print(f"     ⚠️ Warning: No faces found in {path}. Skipping.")
+                    print(f"     ⚠️ Warning: No faces found in {path}. The image might not contain a clear face.")
             else:
                 print(f"     ❌ Error: Reference image not found at '{path}'.")
+                # List what files are actually in the photos directory
+                if os.path.exists(photos_dir):
+                    files = os.listdir(photos_dir)
+                    print(f"     Available files in {photos_dir}: {files}")
         except Exception as e:
             print(f"     ❌ Error processing {path}: {e}")
     
     print(f"✅ Loaded {len(known_face_encodings)} face encodings: {', '.join(known_face_names)}")
-    return len(known_face_encodings) > 0
+    
+    if len(known_face_encodings) == 0:
+        print("⚠️ Warning: No face encodings loaded. Face recognition will only detect unknown faces.")
+    
+    return True  # Return True even if no encodings to allow detection of unknown faces
 
 def calculate_distance(loc1, loc2):
     """Calculate Euclidean distance between two face locations."""
@@ -353,6 +366,100 @@ def get_frame():
         "detected_faces": detected_faces,
         "total_faces": len(detected_faces)
     })
+
+@app.route('/api/process-frame', methods=['POST'])
+def process_frame():
+    """Process a single frame sent from the browser."""
+    global known_face_encodings, known_face_names, face_tracker, next_face_id
+    
+    try:
+        data = request.get_json()
+        if not data or 'frame' not in data:
+            return jsonify({"status": "error", "message": "No frame data provided"})
+        
+        print("🎥 Received frame for processing...")
+        
+        # Decode base64 image
+        frame_data = base64.b64decode(data['frame'])
+        nparr = np.frombuffer(frame_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({"status": "error", "message": "Invalid image data"})
+        
+        print(f"   Frame size: {frame.shape}")
+        
+        # Process face detection (similar to existing logic but for single frame)
+        try:
+            # Resize frame for faster processing
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            
+            print(f"   Processing frame size: {small_frame.shape}")
+            
+            # Find faces
+            face_locations = face_recognition.face_locations(rgb_small_frame)
+            print(f"   Found {len(face_locations)} face location(s)")
+            
+            current_face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+            print(f"   Generated {len(current_face_encodings)} face encoding(s)")
+            
+            detected_faces = []
+            
+            # Process each detected face
+            for i, (face_location, face_encoding) in enumerate(zip(face_locations, current_face_encodings)):
+                # Scale face location back to full size
+                top, right, bottom, left = face_location
+                top *= 4
+                right *= 4
+                bottom *= 4
+                left *= 4
+                
+                print(f"   Face {i+1}: location ({left}, {top}, {right}, {bottom})")
+                
+                name = "Unknown"
+                confidence = 0.0
+                
+                # Try to recognize the face
+                if known_face_encodings:
+                    matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=TRACKING_THRESHOLD)
+                    face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+                    
+                    print(f"   Face {i+1}: distances {face_distances}")
+                    
+                    if len(face_distances) > 0:
+                        best_match_index = np.argmin(face_distances)
+                        if matches[best_match_index]:
+                            name = known_face_names[best_match_index]
+                            confidence = 1 - face_distances[best_match_index]
+                            print(f"   Face {i+1}: Recognized as {name} (confidence: {confidence:.3f})")
+                else:
+                    print(f"   Face {i+1}: No known encodings to compare against")
+                
+                detected_faces.append({
+                    "id": i,
+                    "name": name,
+                    "confidence": float(confidence),
+                    "is_confirmed": confidence > 0.6,
+                    "location": {"top": top, "right": right, "bottom": bottom, "left": left}
+                })
+            
+            print(f"✅ Returning {len(detected_faces)} detected faces")
+            
+            return jsonify({
+                "status": "success",
+                "detected_faces": detected_faces,
+                "total_faces": len(detected_faces),
+                "message": f"Processed frame with {len(detected_faces)} face(s)"
+            })
+            
+        except Exception as e:
+            print(f"❌ Face processing error: {e}")
+            return jsonify({"status": "error", "message": f"Face processing error: {str(e)}"})
+            
+    except Exception as e:
+        print(f"❌ Frame processing error: {e}")
+        return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
 
 if __name__ == '__main__':
     print("🔧 Initializing Facial Recognition Service...")
