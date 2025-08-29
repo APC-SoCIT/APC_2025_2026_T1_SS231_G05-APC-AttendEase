@@ -7,10 +7,49 @@ Members:
 - Suzanne Marie Rosco
 - Maria Sophea Balidio
 
+## About AttendEase
+
+AttendEase is a smart attendance system with facial recognition integration for Microsoft Teams. This system integrates Python facial recognition functionality into a web-based professor dashboard.
+
+### System Architecture
+
+The system consists of two main components:
+
+1. **Python Facial Recognition Service** (`facial_recognition_service.py`) - Runs on port 5000
+   - Handles camera access and facial recognition processing
+   - Provides REST API endpoints for camera control
+   - Returns processed video frames with face detection annotations
+
+2. **Express.js Web Server** (`src/app.js`) - Runs on port 3333
+   - Serves the web interface
+   - Acts as a proxy to the Python service
+   - Provides the `/professor` route with facial recognition interface
+
 ## Prerequisites
 
 Before you begin working on the project, ensure you have the following installed:
 *   **Microsoft 365 Agents Toolkit extension**
+
+### For Facial Recognition System
+
+#### Python Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+Required packages:
+- Flask (web service framework)
+- flask-cors (Cross-Origin Resource Sharing)
+- opencv-python (computer vision)
+- face-recognition (facial recognition library)
+- dlib (machine learning library)
+- numpy (numerical computing)
+- Pillow (image processing)
+
+#### Node.js Dependencies
+```bash
+npm install
+```
 
 ## Running the Project Locally
 
@@ -37,6 +76,91 @@ To run this project locally for development and testing:
    - For student interface: `http://localhost:3333/student`
 
 The server will start on port 3333 and you should see "Express server listening on port 3333" in your terminal.
+
+### Running with Facial Recognition
+
+#### Option 1: Use the Startup Script (Recommended)
+```bash
+python start_services.py
+```
+This will start both services automatically.
+
+#### Option 2: Manual Startup
+
+1. **Start the Python service:**
+```bash
+python facial_recognition_service.py
+```
+
+2. **Start the Express server (in a new terminal):**
+```bash
+npm start
+```
+
+#### Usage
+
+1. Open your browser and navigate to: `http://localhost:3333/professor`
+
+2. The interface will show:
+   - Camera status (Available/Not Available)
+   - Control buttons (Start Camera, Stop Camera, Refresh Status)
+   - Live video feed with face detection
+   - List of detected faces with confidence scores
+
+3. Click "Start Camera" to begin facial recognition
+
+4. The system will:
+   - Detect faces in real-time
+   - Attempt to recognize known faces (Christian Esguerra, Moises Sy)
+   - Show bounding boxes around detected faces
+   - Display recognition confidence scores
+
+## API Endpoints
+
+### Python Service (port 5000)
+- `GET /api/camera/status` - Check camera availability
+- `POST /api/camera/start` - Start camera
+- `POST /api/camera/stop` - Stop camera
+- `GET /api/camera/frame` - Get current frame with annotations
+
+### Express Server (port 3333)
+- `GET /professor` - Professor dashboard with facial recognition
+- `GET /api/facial-recognition/camera/*` - Proxy to Python service
+
+## Face Recognition Data
+
+The system currently recognizes:
+- Christian Esguerra (from `photos/christian_esguerra.jpg`)
+- Moises Sy (from `photos/moises_sy.jpg`)
+
+To add more people:
+1. Add their photo to the `photos/` directory
+2. Update the `reference_people` list in `facial_recognition_service.py`
+
+## Troubleshooting
+
+### Camera Issues
+- Ensure no other applications are using the camera
+- Check camera permissions
+- Try restarting the Python service
+
+### Recognition Issues
+- Ensure reference photos are clear and contain visible faces
+- Check file paths in the `load_reference_data()` function
+- Adjust the `TRACKING_THRESHOLD` for sensitivity
+
+### Service Communication Issues
+- Ensure both services are running
+- Check that ports 3333 and 5000 are available
+- Verify firewall settings
+
+## System Messages
+
+The interface shows real-time system messages including:
+- Camera status updates
+- Face detection events
+- Error messages
+- Service status changes
 
 ## Commit Reference Table
 
