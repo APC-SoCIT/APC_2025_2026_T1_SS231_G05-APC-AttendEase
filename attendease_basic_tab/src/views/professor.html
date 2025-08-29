@@ -9,7 +9,7 @@
       integrity="sha384-ihAqYgEJz9hzEU+HaYodG1aTzjebC/wKXQi1nWKZG7OLAUyOL9ZrzD/SfZu79Jeu"
       crossorigin="anonymous"
     ></script>
-    <script src="/static/scripts/professor.js"></script>
+    <script src="/static/scripts/facial_recognition.js"></script>
     <title>AttendEase - Professor Dashboard</title>
   </head>
 
@@ -19,24 +19,38 @@
       <h1>AttendEase - Professor Dashboard</h1>
       
       <div>
-        <h3>Generate QR Code for Attendance</h3>
+        <h3>Facial Recognition Attendance System</h3>
         
-        <!-- Duration Selection -->
-        <label for="duration">QR Code Duration:</label>
-        <select id="duration">
-          <option value="5">5 minutes</option>
-          <option value="10">10 minutes</option>
-          <option value="15">15 minutes</option>
-        </select>
+        <!-- Camera Status -->
+        <div id="cameraStatus" style="margin-bottom: 15px;">
+          <p><strong>Camera Status:</strong> <span id="statusText">Checking...</span></p>
+        </div>
         
-        <!-- Generate Button -->
-        <button id="generateBtn">Generate QR Code</button>
+        <!-- Control Buttons -->
+        <div style="margin-bottom: 20px;">
+          <button id="startCameraBtn">Start Camera</button>
+          <button id="stopCameraBtn" disabled>Stop Camera</button>
+          <button id="refreshStatusBtn">Refresh Status</button>
+        </div>
         
-        <!-- QR Code Display -->
-        <div id="qrContainer" style="margin-top: 20px; display: none;">
-          <h4>Scan this QR code for attendance:</h4>
-          <img id="qrCode" alt="QR Code" />
-          <p id="timer"></p>
+        <!-- Video Feed -->
+        <div id="videoContainer" style="margin-bottom: 20px;">
+          <h4>Live Camera Feed:</h4>
+          <div id="videoFrame" style="border: 2px solid #ccc; width: 640px; height: 480px; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center;">
+            <p>Camera not active</p>
+          </div>
+        </div>
+        
+        <!-- Detected Faces Info -->
+        <div id="facesInfo">
+          <h4>Detected Faces:</h4>
+          <p><strong>Total Faces Detected:</strong> <span id="faceCount">0</span></p>
+          <div id="facesList"></div>
+        </div>
+        
+        <!-- System Messages -->
+        <div id="messages" style="margin-top: 20px; min-height: 50px; border: 1px solid #ddd; padding: 10px; background-color: #f9f9f9;">
+          <p>System ready. Click "Start Camera" to begin facial recognition.</p>
         </div>
       </div>
     </div>
