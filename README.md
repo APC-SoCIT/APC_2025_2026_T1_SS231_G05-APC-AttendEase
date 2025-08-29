@@ -129,10 +129,6 @@ npm start
 
 ## Face Recognition Data
 
-The system currently recognizes:
-- Christian Esguerra (from `photos/christian_esguerra.jpg`)
-- Moises Sy (from `photos/moises_sy.jpg`)
-
 To add more people:
 1. Add their photo to the `photos/` directory
 2. Update the `reference_people` list in `facial_recognition_service.py`
