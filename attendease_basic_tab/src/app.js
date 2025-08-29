@@ -4,6 +4,7 @@ const https = require("https");
 const path = require("path");
 const send = require("send");
 const QRCode = require('qrcode');
+const axios = require('axios');
 
 const app = express();
 
@@ -90,6 +91,53 @@ function generateDeviceId() {
   const random = Math.random().toString(36).substring(2, 15);
   return `device_${timestamp}_${random}`;
 }
+
+// Facial Recognition API endpoints
+const FACIAL_RECOGNITION_SERVICE_URL = 'http://localhost:5000';
+
+// Check camera status
+app.get('/api/facial-recognition/camera/status', async (req, res) => {
+  try {
+    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/status`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error checking camera status:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to check camera status' });
+  }
+});
+
+// Start camera
+app.post('/api/facial-recognition/camera/start', async (req, res) => {
+  try {
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/start`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error starting camera:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to start camera' });
+  }
+});
+
+// Stop camera
+app.post('/api/facial-recognition/camera/stop', async (req, res) => {
+  try {
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/stop`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error stopping camera:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to stop camera' });
+  }
+});
+
+// Get current frame
+app.get('/api/facial-recognition/camera/frame', async (req, res) => {
+  try {
+    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/frame`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error getting camera frame:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to get camera frame' });
+  }
+});
 
 // Create HTTP server
 const port = process.env.port || process.env.PORT || 3333;
