@@ -51,7 +51,7 @@ Required packages:
 npm install
 ```
 
-## Running the Project Locally
+## Running the Project Locally (without Facial Recognition)
 
 To run this project locally for development and testing:
 
