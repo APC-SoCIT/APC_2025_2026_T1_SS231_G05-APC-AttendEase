@@ -440,8 +440,8 @@ def process_frame():
                     "id": i,
                     "name": name,
                     "confidence": float(confidence),
-                    "is_confirmed": confidence > 0.6,
-                    "location": {"top": top, "right": right, "bottom": bottom, "left": left}
+                    "is_confirmed": bool(confidence > 0.6),
+                    "location": {"top": int(top), "right": int(right), "bottom": int(bottom), "left": int(left)}
                 })
             
             print(f"✅ Returning {len(detected_faces)} detected faces")
