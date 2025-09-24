@@ -51,7 +51,7 @@ Required packages:
 npm install
 ```
 
-## Running the Project Locally (without Facial Recognition)
+## Running the Project Locally
 
 To run this project locally for development and testing:
 
@@ -73,19 +73,10 @@ To run this project locally for development and testing:
 4. **Access the application**:
    - Open your browser and go to `http://localhost:3333`
    - For professor dashboard: `http://localhost:3333/professor`
-   - For student interface: `http://localhost:3333/student`
 
 The server will start on port 3333 and you should see "Express server listening on port 3333" in your terminal.
 
-### Running with Facial Recognition
-
-#### Option 1: Use the Startup Script (Recommended)
-```bash
-python start_services.py
-```
-This will start both services automatically.
-
-#### Option 2: Manual Startup
+####  Setup the Facial Recognition Script 
 
 1. **Start the Python service:**
 ```bash
