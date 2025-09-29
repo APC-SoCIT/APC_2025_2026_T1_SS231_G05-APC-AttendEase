@@ -5,7 +5,7 @@ This section outlines the core technologies and frameworks utilized in this proj
 ## Overview
 
 *   **Frontend**: React
-*   **Backend**: FastAPI (with Microsoft 365 Agents Toolkit integration)
+*   **Backend**: FastAPI + Microsoft 365 Agents Toolkit integration
 *   **Communication**: REST + WebSockets
 *   **Database**: PostgreSQL
 *   **Open Source Solutions**: dlib, face_recognition
