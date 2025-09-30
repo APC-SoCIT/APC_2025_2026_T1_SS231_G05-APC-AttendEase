@@ -9,147 +9,308 @@ Members:
 
 ## About AttendEase
 
-AttendEase is a smart attendance system with facial recognition integration for Microsoft Teams. This system integrates Python facial recognition functionality into a web-based professor dashboard.
+AttendEase is an **automated hybrid attendance system** designed for Asia Pacific College's **HyFlex learning model**. It seamlessly tracks both **online** and **onsite** student attendance during Microsoft Teams meetings.
 
-### System Architecture
+### Key Features
 
-The system consists of two main components:
+-  **Online Attendance** - Automatic tracking via Microsoft Graph API
+-  **Onsite Attendance** - Real-time facial recognition using classroom cameras
+-  **Unified Dashboard** - React + Fluent UI interface within Microsoft Teams
+-  **Report Generation** - Export combined attendance as CSV
+-  **Real-time Updates** - Live attendance tracking during class
 
-1. **Python Facial Recognition Service** (`facial_recognition_service.py`) - Runs on port 5000
-   - Handles camera access and facial recognition processing
-   - Provides REST API endpoints for camera control
-   - Returns processed video frames with face detection annotations
+---
 
-2. **Express.js Web Server** (`src/app.js`) - Runs on port 3333
-   - Serves the web interface
-   - Acts as a proxy to the Python service
-   - Provides the `/professor` route with facial recognition interface
+### Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| **Frontend** | React 18 + Fluent UI + Vite |
+| **Backend API** | Express.js (Node.js) |
+| **Online Tracking** | Microsoft Graph API |
+| **Onsite Tracking** | Python + dlib + face_recognition |
+| **Database** | Supabase  |
 
 ## Prerequisites
 
-Before you begin working on the project, ensure you have the following installed:
-*   **Microsoft 365 Agents Toolkit extension**
+Before running the app, ensure you have:
 
-### For Facial Recognition System
+1. **Node.js** (v18, v20, or v22) - [Download](https://nodejs.org/)
+2. **Python 3.8+** - For facial recognition service
+3. **Microsoft 365 Account** - With Teams access
+4. **Microsoft 365 Agents Toolkit** - VS Code extension installed
+5. **Classroom Camera** - Logitech or compatible camera
 
-#### Python Dependencies
+### Install Python Dependencies
+
 ```bash
+cd attendease_tab
 pip install -r requirements.txt
 ```
 
-Required packages:
-- Flask (web service framework)
-- flask-cors (Cross-Origin Resource Sharing)
-- opencv-python (computer vision)
-- face-recognition (facial recognition library)
-- dlib (machine learning library)
-- numpy (numerical computing)
-- Pillow (image processing)
+**Required packages:**
+- Flask, flask-cors
+- opencv-python
+- face-recognition, dlib
+- numpy, Pillow
 
-#### Node.js Dependencies
+### Install Node.js Dependencies
+
 ```bash
+cd attendease_tab
 npm install
 ```
 
-## Running the Project Locally
+## Quick Start - Local Development (3 Terminals)
 
-To run this project locally for development and testing:
+### Step 1: Install Dependencies (First time only)
 
-1. **Navigate to the project folder**:
-   ```bash
-   cd attendease_basic_tab
-   ```
-
-2. **Install dependencies** (if not already done):
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server**:
-   ```bash
-   npm run dev:teamsfx
-   ```
-
-4. **Access the application**:
-   - Open your browser and go to `http://localhost:3333`
-   - For professor dashboard: `http://localhost:3333/professor`
-
-The server will start on port 3333 and you should see "Express server listening on port 3333" in your terminal.
-
-####  Setup the Facial Recognition Script 
-
-1. **Start the Python service:**
 ```bash
+cd attendease_tab
+npm install
+pip install -r requirements.txt
+```
+
+### Step 2: Open 3 Terminal Windows
+
+You need **3 separate terminals** running at the same time:
+
+#### **Terminal 1: Python Facial Recognition Service**
+
+```bash
+cd attendease_tab
 python facial_recognition_service.py
 ```
 
-2. **Start the Express server (in a new terminal):**
+You should see:
+```
+ * Running on http://127.0.0.1:5000
+ * Running on all addresses (0.0.0.0)
+```
+**Keep this terminal open**
+
+---
+
+#### **Terminal 2: Express Backend**
+
 ```bash
+cd attendease_tab
 npm start
 ```
 
-#### Usage
+ **You should see:**
+```
+ Graph API credentials not found. Online attendance tracking will not work.
+Express server listening on port 3333
+```
+*Note: The Graph API warning is normal for local development*
 
-1. Open your browser and navigate to: `http://localhost:3333/professor`
+**Keep this terminal open**
 
-2. The interface will show:
-   - Camera status (Available/Not Available)
-   - Control buttons (Start Camera, Stop Camera, Refresh Status)
-   - Live video feed with face detection
-   - List of detected faces with confidence scores
+---
 
-3. Click "Start Camera" to begin facial recognition
+#### **Terminal 3: React Frontend (Vite)**
 
-4. The system will:
-   - Detect faces in real-time
-   - Attempt to recognize known faces (Christian Esguerra, Moises Sy)
-   - Show bounding boxes around detected faces
-   - Display recognition confidence scores
+```bash
+cd attendease_tab
+npx vite
+```
 
-## API Endpoints
+**You should see:**
+```
+VITE v5.4.20  ready in 500ms
+➜  Local:   http://localhost:5173/
+```
+**Keep this terminal open**
+
+---
+
+### Step 3: Access the Application
+
+Open your browser and go to:
+- **React Dashboard:** `http://localhost:5173`
+- **Legacy Professor View:** `http://localhost:3333/professor`
+
+### What Works Locally:
+- ✅ React UI with Fluent UI components
+- ✅ Facial recognition and camera detection
+- ✅ Live video feed with face bounding boxes
+- ✅ Onsite attendance tracking
+- ✅ CSV export
+
+### ⏸Not Available Locally (Requires Microsoft 365):
+- ⏸️ Online attendance via Graph API (will show "not configured")
+- ⏸️ Teams integration
+- ⏸️ HTTPS/SSL
+
+---
+
+## How to Use During a HyFlex Class
+
+### Before Class:
+
+1. **Start Python service** in a terminal
+2. **Start AttendEase** with F5 in VS Code
+3. **Create/Join Teams Meeting** in Microsoft Teams
+4. **Open AttendEase Tab** in the meeting
+
+### During Class:
+
+#### Track Online Students:
+1. Click **"Start Tracking"** in the Online Attendance card
+2. System polls Graph API every 10 seconds
+3. Online students appear automatically as they join
+4. See join times, duration, and status (present/left)
+
+#### Track Onsite Students:
+1. Select classroom camera from dropdown
+2. Click **"Start Camera"**
+3. Faces detected and identified in real-time
+4. Confirmed students appear in Onsite Attendance list
+
+#### View Combined Attendance:
+- See total count in Summary card
+- View breakdown: Online vs Onsite
+- Real-time updates as students join/leave
+
+### After Class:
+
+1. Click **"Export Attendance Report (CSV)"**
+2. Save CSV file with all attendance data
+3. Open in Excel for record-keeping
+
+---
+
+##  API Endpoints
+
+### Express Backend (port 53000)
+- `GET /api/attendance/graph-status` - Check Graph API configuration
+- `GET /api/attendance/online/:meetingId` - Get meeting attendance from Graph API
+- `GET /api/facial-recognition/camera/status` - Check camera status
+- `POST /api/facial-recognition/process-frame` - Process frame for face recognition
 
 ### Python Service (port 5000)
 - `GET /api/camera/status` - Check camera availability
-- `POST /api/camera/start` - Start camera
-- `POST /api/camera/stop` - Stop camera
-- `GET /api/camera/frame` - Get current frame with annotations
+- `POST /api/process-frame` - Process image for face detection
 
-### Express Server (port 3333)
-- `GET /professor` - Professor dashboard with facial recognition
-- `GET /api/facial-recognition/camera/*` - Proxy to Python service
+##  Troubleshooting
 
-## Face Recognition Data
+### Issue: Graph API returns "Permission denied"
 
-To add more people:
-1. Add their photo to the `photos/` directory
-2. Update the `reference_people` list in `facial_recognition_service.py`
+**Solution:**
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to Azure Active Directory → App Registrations
+3. Find your app (`attendease_auth`)
+4. Go to API Permissions
+5. Add `OnlineMeetings.Read.All` permission
+6. Click **"Grant admin consent"**
 
-## Troubleshooting
+### Issue: "No meeting ID available"
 
-### Camera Issues
-- Ensure no other applications are using the camera
-- Check camera permissions
-- Try restarting the Python service
+**Solution:**
+- Make sure you're opening the tab **during an active Teams meeting**
+- The meeting must be started for meeting ID to be available
+- Try refreshing the tab
 
-### Recognition Issues
-- Ensure reference photos are clear and contain visible faces
-- Check file paths in the `load_reference_data()` function
-- Adjust the `TRACKING_THRESHOLD` for sensitivity
+### Issue: Facial recognition not working
 
-### Service Communication Issues
-- Ensure both services are running
-- Check that ports 3333 and 5000 are available
-- Verify firewall settings
+**Solution:**
+1. Ensure Python service is running: `python facial_recognition_service.py`
+2. Check camera permissions in browser
+3. Verify camera is not in use by another app
+4. Check Python service logs for errors
 
-## System Messages
+### Issue: Port 53000 or 53001 already in use
 
-The interface shows real-time system messages including:
-- Camera status updates
-- Face detection events
-- Error messages
-- Service status changes
+**Solution:**
+```powershell
+# Windows PowerShell
+Get-Process -Id (Get-NetTCPConnection -LocalPort 53000).OwningProcess | Stop-Process
+```
 
-## Commit Reference Table
+### Issue: SSL Certificate errors
+
+**Solution:**
+- Click "Advanced" → "Proceed anyway" in browser
+- Or re-run provisioning to regenerate certificates
+
+---
+
+##  Microsoft Graph API Configuration
+
+The Microsoft 365 Agents Toolkit automatically provisions an Azure AD app and configures Graph API access.
+
+**Required Permissions:**
+- `OnlineMeetings.Read.All` - To read meeting attendance
+- `User.Read.All` - To read user information
+
+**Environment Variables** (auto-generated in `.localConfigs`):
+- `AAD_APP_CLIENT_ID`
+- `AAD_APP_CLIENT_SECRET`
+- `AAD_APP_TENANT_ID`
+
+---
+
+##  Success Indicators
+
+You know it's working when:
+- ✅ Graph API status shows "Connected ✓"
+- ✅ Python service status shows "Running ✓"
+- ✅ Online students appear automatically when they join meeting
+- ✅ Camera shows live feed with face bounding boxes
+- ✅ Attendance summary updates in real-time
+- ✅ CSV export contains both online and onsite students
+
+---
+
+##  Documentation
+
+- **[Documentation Folder](./docs/)** - Overall Documentation of the Project
+- **[PRD.md](./docs/PRD.md)** - Product Requirements Document with technical specifications
+- **[Technology Stack](./docs/SSYADD1/02%20Technology%20Stack%20Definition%20%26%20Implementation/)** - Detailed tech stack documentation
+
+---
+
+##  Ports Reference
+
+### Local Development (3 Terminals):
+- **5000** - Python facial recognition service (Terminal 1)
+- **3333** - Express backend (Terminal 2)
+- **5173** - React frontend via Vite (Terminal 3)
+
+### Production (Microsoft 365 Deployment):
+- **5000** - Python facial recognition service
+- **53000** - Express backend (API)
+- **53001** - React frontend (Vite dev server)
+- **9239** - Node.js debugger
+
+---
+
+##  Graph API Data Structure
+
+When online students join, Graph API returns:
+
+```json
+{
+  "status": "success",
+  "students": [
+    {
+      "name": "John Doe",
+      "email": "john.doe@apc.edu.ph",
+      "joinTime": "2024-01-15T10:00:00Z",
+      "leaveTime": null,
+      "status": "present",
+      "duration": 1800,
+      "role": "Attendee"
+    }
+  ]
+}
+```
+
+---
+
+
+### Commit Reference Table
 
 | Type       | Description                                                                 | Example Subject                                           |
 | :--------- | :-------------------------------------------------------------------------- | :-------------------------------------------------------- |
