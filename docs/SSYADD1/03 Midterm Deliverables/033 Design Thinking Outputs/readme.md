@@ -1,6 +1,6 @@
 # 033 Design Thinking Outputs
 
-This section documents the outputs from the Design Thinking process, including the Empathize, Define, Ideate, Prototype, and Test stages. Note that visual elements (e.g., diagrams, boards, sketches) are placeholders for manual insertion.
+This section documents the outputs from the Design Thinking process, including the Empathize, Define, Ideate, Prototype, and Test stages. Note that visual elements for now are placeholders and will be added later on.
 
 ## Stage 1: Empathize
 
