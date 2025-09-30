@@ -53,7 +53,7 @@ The primary goal is to enhance operational efficiency by reducing the administra
 
 | Component                 | Technology                     |
 | :-------------------------| :----------------------------- |
-| **Frontend**              | **VueJS**                      |
+| **Frontend**              | **React**                      |
 | **Backend**               | **Python**                     |
 | **Communication**         | REST + WebSockets              |
 | **Database**              | Existing APC database          |
