@@ -1,0 +1,40 @@
+{
+    "name": "attendeasebasictab",
+    "version": "0.1.0",
+    "engines": {
+        "node": "18 || 20 || 22"
+    },
+    "type": "module",
+    "private": true,
+    "dependencies": {
+        "@azure/identity": "^4.0.0",
+        "@azure/msal-node": "^2.6.0",
+        "@fluentui/react-components": "^9.55.1",
+        "@microsoft/microsoft-graph-client": "^3.0.7",
+        "@microsoft/teams-js": "^2.31.1",
+        "axios": "^1.6.0",
+        "express": "^4.21.1",
+        "isomorphic-fetch": "^3.0.0",
+        "qrcode": "^1.5.4",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "send": "^0.18.0",
+        "ws": "^8.16.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.3.1",
+        "concurrently": "^8.2.2",
+        "env-cmd": "^10.1.0",
+        "nodemon": "^2.0.21",
+        "vite": "^5.4.2"
+    },
+    "scripts": {
+        "dev:teamsfx": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+        "dev:backend": "env-cmd --silent -f .localConfigs nodemon --inspect=9239 --signal SIGINT src/app.js",
+        "dev:frontend": "env-cmd --silent -f .localConfigs vite",
+        "start": "nodemon --inspect=9239 --signal SIGINT src/app.js",
+        "build": "vite build",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "homepage": "."
+}

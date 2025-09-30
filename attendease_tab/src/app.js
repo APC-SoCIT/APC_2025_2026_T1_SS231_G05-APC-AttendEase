@@ -1,10 +1,17 @@
-const express = require("express");
-const fs = require("fs");
-const https = require("https");
-const path = require("path");
-const send = require("send");
-const QRCode = require('qrcode');
-const axios = require('axios');
+import express from 'express';
+import fs from 'fs';
+import https from 'https';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import send from 'send';
+import QRCode from 'qrcode';
+import axios from 'axios';
+import { Client } from '@microsoft/microsoft-graph-client';
+import { ClientSecretCredential } from '@azure/identity';
+import 'isomorphic-fetch';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -179,6 +186,156 @@ app.post('/api/facial-recognition/process-frame', async (req, res) => {
     });
   }
 });
+
+// ============================================
+// MICROSOFT GRAPH API CONFIGURATION
+// ============================================
+
+let graphClient = null;
+
+// Initialize Graph Client if credentials are available
+function initializeGraphClient() {
+  const clientId = process.env.AAD_APP_CLIENT_ID || process.env.M365_CLIENT_ID;
+  const clientSecret = process.env.AAD_APP_CLIENT_SECRET || process.env.M365_CLIENT_SECRET;
+  const tenantId = process.env.AAD_APP_TENANT_ID || process.env.M365_TENANT_ID;
+
+  if (clientId && clientSecret && tenantId) {
+    try {
+      const credential = new ClientSecretCredential(
+        tenantId,
+        clientId,
+        clientSecret
+      );
+
+      graphClient = Client.initWithMiddleware({
+        authProvider: {
+          getAccessToken: async () => {
+            const tokenResponse = await credential.getToken('https://graph.microsoft.com/.default');
+            return tokenResponse.token;
+          }
+        }
+      });
+
+      console.log('✅ Microsoft Graph API client initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Error initializing Graph client:', error.message);
+      return false;
+    }
+  } else {
+    console.warn('⚠️ Graph API credentials not found. Online attendance tracking will not work.');
+    console.warn('   Required env vars: AAD_APP_CLIENT_ID, AAD_APP_CLIENT_SECRET, AAD_APP_TENANT_ID');
+    return false;
+  }
+}
+
+// Check Graph API configuration status
+app.get('/api/attendance/graph-status', (req, res) => {
+  if (graphClient) {
+    res.json({ status: 'configured', message: 'Graph API is ready' });
+  } else {
+    res.json({ status: 'not_configured', message: 'Graph API credentials not configured' });
+  }
+});
+
+// Get online attendance from Teams meeting using Graph API
+app.get('/api/attendance/online/:meetingId', async (req, res) => {
+  try {
+    if (!graphClient) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Graph API not configured. Please check your environment variables.'
+      });
+    }
+
+    const { meetingId } = req.params;
+    console.log(`\n=== FETCHING ONLINE ATTENDANCE ===`);
+    console.log(`Meeting ID: ${meetingId}`);
+
+    try {
+      // Get attendance reports for the meeting
+      const attendanceReports = await graphClient
+        .api(`/me/onlineMeetings/${meetingId}/attendanceReports`)
+        .get();
+
+      if (!attendanceReports.value || attendanceReports.value.length === 0) {
+        console.log('No attendance reports found for this meeting yet.');
+        return res.json({ 
+          status: 'no_data', 
+          students: [],
+          message: 'No attendance data available. Meeting may not have started or ended yet.' 
+        });
+      }
+
+      // Get the latest attendance report
+      const latestReport = attendanceReports.value[0];
+      const attendanceRecords = latestReport.attendanceRecords || [];
+
+      console.log(`Found ${attendanceRecords.length} attendance record(s)`);
+
+      // Format attendance data for frontend
+      const onlineStudents = attendanceRecords.map(record => {
+        const joinDateTime = record.attendanceIntervals?.[0]?.joinDateTime;
+        const leaveDateTime = record.attendanceIntervals?.[0]?.leaveDateTime;
+        
+        return {
+          name: record.identity?.displayName || 'Unknown',
+          email: record.emailAddress,
+          joinTime: joinDateTime,
+          leaveTime: leaveDateTime,
+          status: leaveDateTime ? 'left' : 'present',
+          duration: record.totalAttendanceInSeconds,
+          role: record.role
+        };
+      });
+
+      console.log(`Returning ${onlineStudents.length} student(s)`);
+      console.log(`===================================\n`);
+
+      res.json({ 
+        status: 'success', 
+        students: onlineStudents,
+        totalCount: onlineStudents.length
+      });
+
+    } catch (graphError) {
+      console.error('Graph API Error:', graphError);
+      
+      if (graphError.statusCode === 404) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Meeting not found or you do not have access to this meeting.'
+        });
+      } else if (graphError.statusCode === 403) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Permission denied. Ensure the app has OnlineMeetings.Read permission.'
+        });
+      } else {
+        return res.status(500).json({
+          status: 'error',
+          message: `Graph API error: ${graphError.message || 'Unknown error'}`,
+          details: graphError.code
+        });
+      }
+    }
+
+  } catch (error) {
+    console.error('Error fetching online attendance:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: error.message || 'Failed to fetch online attendance',
+      details: error.code
+    });
+  }
+});
+
+// Initialize Graph API on startup
+initializeGraphClient();
+
+// ============================================
+// END MICROSOFT GRAPH API CONFIGURATION
+// ============================================
 
 // Create HTTP server
 const port = process.env.port || process.env.PORT || 3333;
