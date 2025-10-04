@@ -10,6 +10,18 @@ import { Client } from '@microsoft/microsoft-graph-client';
 import { ClientSecretCredential } from '@azure/identity';
 import 'isomorphic-fetch';
 
+// Supabase services
+import { supabase, testSupabaseConnection } from './config/supabase.config.js';
+import sessionService from './services/supabase/sessionService.js';
+import attendanceService from './services/supabase/attendanceService.js';
+import courseService from './services/supabase/courseService.js';
+
+// Azure services (placeholders)
+import { initializeGraphClient } from './services/graph/graphClient.js';
+
+// Utilities
+import { generateAttendanceCSV, generateAttendanceSummary, generateBulkSummary } from './utils/exportHelpers.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -337,8 +349,329 @@ initializeGraphClient();
 // END MICROSOFT GRAPH API CONFIGURATION
 // ============================================
 
+// ============================================
+// SUPABASE API ENDPOINTS
+// ============================================
+
+// Test Supabase connection on startup
+testSupabaseConnection();
+
+// ==================== COURSE ENDPOINTS ====================
+
+// Get all courses
+app.get('/api/courses', async (req, res) => {
+  try {
+    const result = await courseService.getAllCourses();
+    if (result.success) {
+      res.json({ status: 'success', courses: result.courses });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get courses for a professor
+app.get('/api/courses/professor/:professorId', async (req, res) => {
+  try {
+    const { professorId } = req.params;
+    const result = await courseService.getProfessorCourses(professorId);
+    if (result.success) {
+      res.json({ status: 'success', courses: result.courses });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get course by ID
+app.get('/api/courses/:courseId', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const result = await courseService.getCourseById(courseId);
+    if (result.success) {
+      res.json({ status: 'success', course: result.course });
+    } else {
+      res.status(404).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Create new course
+app.post('/api/courses', async (req, res) => {
+  try {
+    const result = await courseService.createCourse(req.body);
+    if (result.success) {
+      res.status(201).json({ status: 'success', course: result.course });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get students enrolled in a course
+app.get('/api/courses/:courseId/students', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const result = await courseService.getCourseStudents(courseId);
+    if (result.success) {
+      res.json({ status: 'success', students: result.students });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ==================== SESSION ENDPOINTS ====================
+
+// Start a new session
+app.post('/api/sessions/start', async (req, res) => {
+  try {
+    const { courseId } = req.body;
+    if (!courseId) {
+      return res.status(400).json({ status: 'error', message: 'courseId is required' });
+    }
+    
+    const result = await sessionService.startSession(courseId);
+    if (result.success) {
+      res.status(201).json({ status: 'success', session: result.session });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// End a session
+app.post('/api/sessions/:sessionId/end', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await sessionService.endSession(sessionId);
+    if (result.success) {
+      res.json({ status: 'success', session: result.session });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get active session for a course
+app.get('/api/sessions/active/:courseId', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const result = await sessionService.getActiveSession(courseId);
+    if (result.success) {
+      res.json({ status: 'success', session: result.session });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get session by ID with full details
+app.get('/api/sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await sessionService.getSessionById(sessionId);
+    if (result.success) {
+      res.json({ status: 'success', session: result.session });
+    } else {
+      res.status(404).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get session history for a course
+app.get('/api/sessions/history/:courseId', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+    const result = await sessionService.getCourseSessionHistory(courseId, limit);
+    if (result.success) {
+      res.json({ status: 'success', sessions: result.sessions });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get all completed sessions
+app.get('/api/sessions/completed', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const result = await sessionService.getAllCompletedSessions(limit);
+    if (result.success) {
+      res.json({ status: 'success', sessions: result.sessions });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ==================== ATTENDANCE ENDPOINTS ====================
+
+// Record attendance
+app.post('/api/attendance/record', async (req, res) => {
+  try {
+    const { sessionId, studentId, type, metadata } = req.body;
+    
+    if (!sessionId || !studentId || !type) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'sessionId, studentId, and type are required' 
+      });
+    }
+    
+    // Check if already recorded
+    const checkResult = await attendanceService.checkAttendanceExists(sessionId, studentId);
+    if (checkResult.exists) {
+      return res.status(409).json({
+        status: 'error',
+        message: 'Attendance already recorded for this student in this session',
+        existingRecord: checkResult.record
+      });
+    }
+    
+    const result = await attendanceService.recordAttendance(sessionId, studentId, type, metadata);
+    if (result.success) {
+      res.status(201).json({ status: 'success', attendance: result.attendance });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get attendance for a session
+app.get('/api/attendance/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await attendanceService.getSessionAttendance(sessionId);
+    if (result.success) {
+      res.json({ status: 'success', attendance: result.attendance });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get attendance summary for a session
+app.get('/api/attendance/session/:sessionId/summary', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await attendanceService.getSessionAttendanceSummary(sessionId);
+    if (result.success) {
+      res.json({ status: 'success', summary: result.summary });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ==================== EXPORT ENDPOINTS ====================
+
+// Export session attendance as CSV
+app.get('/api/export/session/:sessionId/csv', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await sessionService.getSessionById(sessionId);
+    
+    if (!result.success) {
+      return res.status(404).json({ status: 'error', message: 'Session not found' });
+    }
+    
+    const csv = generateAttendanceCSV(result.session);
+    const filename = `attendance_${result.session.courses.course_code}_${new Date(result.session.start_time).toISOString().split('T')[0]}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Export bulk sessions as CSV
+app.post('/api/export/bulk/csv', async (req, res) => {
+  try {
+    const { sessionIds } = req.body;
+    
+    if (!sessionIds || !Array.isArray(sessionIds)) {
+      return res.status(400).json({ status: 'error', message: 'sessionIds array is required' });
+    }
+    
+    // Fetch all sessions
+    const sessions = await Promise.all(
+      sessionIds.map(id => sessionService.getSessionById(id))
+    );
+    
+    const validSessions = sessions
+      .filter(r => r.success)
+      .map(r => r.session);
+    
+    if (validSessions.length === 0) {
+      return res.status(404).json({ status: 'error', message: 'No valid sessions found' });
+    }
+    
+    const csv = generateAttendanceCSV(validSessions, true);
+    const filename = `attendance_bulk_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get session summary for reporting
+app.get('/api/export/session/:sessionId/summary', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await sessionService.getSessionById(sessionId);
+    
+    if (!result.success) {
+      return res.status(404).json({ status: 'error', message: 'Session not found' });
+    }
+    
+    const summary = generateAttendanceSummary(result.session);
+    res.json({ status: 'success', summary });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ============================================
+// END SUPABASE API ENDPOINTS
+// ============================================
+
 // Create HTTP server
-const port = process.env.port || process.env.PORT || 3333;
+const port = process.env.PORT || 53000;
 
 if (sslOptions.key && sslOptions.cert) {
   https.createServer(sslOptions, app).listen(port, () => {
