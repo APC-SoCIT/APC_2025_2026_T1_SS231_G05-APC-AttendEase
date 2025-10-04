@@ -128,7 +128,6 @@ VITE v5.4.20  ready in 500ms
 ### Step 3: Access the Application
 
 Open your browser and go to:
-- **React Dashboard:** `http://localhost:5173`
 - **Legacy Professor View:** `http://localhost:3333/professor`
 
 ### What Works Locally:
