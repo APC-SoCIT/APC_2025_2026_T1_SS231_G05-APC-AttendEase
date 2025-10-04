@@ -1,11 +1,5 @@
 # 014 Test Cases
 
-This document contains the test cases for the **AttendEase** system.
-
----
-
-## Test Cases
-
 | Test Case # | Test Case Description                                      | Test Data                          | Expected Result                                                | Actual Result | Pass/Fail |
 |-------------|-------------------------------------------------------------|------------------------------------|----------------------------------------------------------------|---------------|-----------|
 | 1           | Check response when entering school credentials on the Teams App. | Email:<br>Password:                 | Authentication successful                                      |               |           |
