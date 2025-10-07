@@ -82,10 +82,11 @@ function FacialRecognition({ onAttendanceUpdate }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
+  const cameraActiveRef = useRef(false); // Use ref instead of state to avoid closure issues
   
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
-  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false); // Keep for UI display
   const [detectedFaces, setDetectedFaces] = useState([]);
   const [messages, setMessages] = useState([]);
   const [mediaStream, setMediaStream] = useState(null);
@@ -173,16 +174,27 @@ function FacialRecognition({ onAttendanceUpdate }) {
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        
+        // Wait for video to be ready before setting cameraActive
+        await new Promise((resolve) => {
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play().then(resolve);
+          };
+        });
       }
       
-      setCameraActive(true);
+      // Set camera active AFTER video is ready (both state and ref)
+      cameraActiveRef.current = true; // Set ref immediately for interval callback
+      setCameraActive(true); // Set state for UI
+      console.log('Camera active state set to TRUE');
       addMessage('Camera started successfully!', 'success');
       
+      // Start processing frames
       frameIntervalRef.current = setInterval(processFrame, 1000);
       
     } catch (error) {
       addMessage(`Error starting camera: ${error.message}`, 'error');
+      console.error('Camera start error:', error);
     }
   };
 
@@ -201,22 +213,38 @@ function FacialRecognition({ onAttendanceUpdate }) {
       videoRef.current.srcObject = null;
     }
     
-    setCameraActive(false);
+    cameraActiveRef.current = false; // Set ref
+    setCameraActive(false); // Set state for UI
     setDetectedFaces([]);
     addMessage('Camera stopped', 'info');
   };
 
   const processFrame = async () => {
-    if (!videoRef.current || !canvasRef.current || !cameraActive) return;
+    if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current) {
+      console.log('Frame processing skipped:', { 
+        hasVideo: !!videoRef.current, 
+        hasCanvas: !!canvasRef.current, 
+        cameraActive: cameraActiveRef.current 
+      });
+      return;
+    }
     
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       
+      // Check if video is ready
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        console.log('Video not ready yet');
+        return;
+      }
+      
       ctx.drawImage(video, 0, 0, 640, 480);
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
       const base64Data = imageData.split(',')[1];
+      
+      console.log('Sending frame to Python service...');
       
       const response = await fetch('/api/facial-recognition/process-frame', {
         method: 'POST',
@@ -229,6 +257,7 @@ function FacialRecognition({ onAttendanceUpdate }) {
       }
       
       const data = await response.json();
+      console.log('Python service response:', data);
       
       if (data.status === 'success') {
         const faces = data.detected_faces || [];
@@ -249,6 +278,7 @@ function FacialRecognition({ onAttendanceUpdate }) {
       }
     } catch (error) {
       console.error('Frame processing error:', error);
+      addMessage(`Frame error: ${error.message}`, 'error');
     }
   };
 

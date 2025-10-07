@@ -67,7 +67,9 @@ def load_reference_data():
     
     reference_people = [
         ("Christian Esguerra", os.path.join(photos_dir, "christian_esguerra.jpg")),
-        ("Moises Sy", os.path.join(photos_dir, "moises_sy.jpg"))
+        ("Moises Sy", os.path.join(photos_dir, "moises_sy.jpg")),
+        ("Maria Sophea Balidio", os.path.join(photos_dir, "maria_sophea_balidio.jpg")),
+        ("Suzanne Rosco", os.path.join(photos_dir, "suzanne_rosco.jpg"))
     ]
     
     print("📸 Loading reference images...")
@@ -391,14 +393,14 @@ def process_frame():
         
         # Process face detection (similar to existing logic but for single frame)
         try:
-            # Resize frame for faster processing
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            # Resize frame for faster processing (increased from 0.25 to 0.5 for better detection)
+            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
             rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
             
             print(f"   Processing frame size: {small_frame.shape}")
             
-            # Find faces
-            face_locations = face_recognition.face_locations(rgb_small_frame)
+            # Find faces using CNN model for better detection (more accurate than HOG)
+            face_locations = face_recognition.face_locations(rgb_small_frame, model="cnn")
             print(f"   Found {len(face_locations)} face location(s)")
             
             current_face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)

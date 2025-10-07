@@ -82,14 +82,12 @@ function ProfessorDashboard({ userContext }) {
       <h2>Professor Dashboard</h2>
       
       <div className={styles.container}>
-        {/* Onsite Attendance Card */}
         <Card className={styles.card}>
           <h3>🔵 Onsite Attendance</h3>
           <Text>Facial Recognition System</Text>
           <FacialRecognition onAttendanceUpdate={setOnsiteAttendance} />
         </Card>
 
-        {/* Online Attendance Card */}
         <Card className={styles.card}>
           <h3>🟢 Online Attendance</h3>
           <Text>Microsoft Teams Meeting Participants (via Graph API)</Text>
@@ -100,9 +98,8 @@ function ProfessorDashboard({ userContext }) {
         </Card>
       </div>
 
-      {/* Combined Attendance Summary */}
       <Card className={styles.summaryCard}>
-        <h3>📊 Attendance Summary</h3>
+        <h3>Attendance Summary</h3>
         <div className={styles.summaryStats}>
           <div className={styles.statItem}>
             <Text weight="semibold" size={500}>Total Present</Text>

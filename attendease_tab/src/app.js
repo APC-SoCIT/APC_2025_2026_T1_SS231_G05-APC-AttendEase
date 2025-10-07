@@ -16,9 +16,6 @@ import sessionService from './services/supabase/sessionService.js';
 import attendanceService from './services/supabase/attendanceService.js';
 import courseService from './services/supabase/courseService.js';
 
-// Azure services (placeholders)
-import { initializeGraphClient } from './services/graph/graphClient.js';
-
 // Utilities
 import { generateAttendanceCSV, generateAttendanceSummary, generateBulkSummary } from './utils/exportHelpers.js';
 
@@ -37,25 +34,12 @@ const sslOptions = {
 
 app.use("/static", express.static(path.join(__dirname, "static")));
 
-// Adding tabs to our app. This will setup routes to various views
-// Setup home page
-app.get("/", (req, res) => {
-  send(req, path.join(__dirname, "views", "hello.html")).pipe(res);
-});
-
-// Setup the static tab
-app.get("/tab", (req, res) => {
-  send(req, path.join(__dirname, "views", "hello.html")).pipe(res);
-});
-
-// Add role-based routing
-app.get("/student", (req, res) => {
-  // Student interface 
-});
-
-app.get("/professor", (req, res) => {
-  send(req, path.join(__dirname, "views", "professor.html")).pipe(res);
-});
+// Serve React build in production
+const distPath = path.join(__dirname, "..", "dist");
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  console.log('✅ Serving React app from /dist');
+}
 
 // API endpoint to generate QR code
 app.post('/api/generate-qr', async (req, res) => {
@@ -670,8 +654,23 @@ app.get('/api/export/session/:sessionId/summary', async (req, res) => {
 // END SUPABASE API ENDPOINTS
 // ============================================
 
+// SPA fallback: serve index.html for all non-API routes (React Router support)
+app.get('*', (req, res) => {
+  // Only serve index.html for non-API routes
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/static')) {
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('React app not built. Run: npm run build');
+    }
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
 // Create HTTP server
-const port = process.env.PORT || 53000;
+const port = process.env.PORT || 3333;
 
 if (sslOptions.key && sslOptions.cert) {
   https.createServer(sslOptions, app).listen(port, () => {

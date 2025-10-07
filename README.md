@@ -100,7 +100,8 @@ npm start
 
  **You should see:**
 ```
- Graph API credentials not found. Online attendance tracking will not work.
+✅ Serving React app from /dist (if built)
+Graph API credentials not found. Online attendance tracking will not work.
 Express server listening on port 3333
 ```
 *Note: The Graph API warning is normal for local development*
@@ -128,10 +129,20 @@ VITE v5.4.20  ready in 500ms
 ### Step 3: Access the Application
 
 Open your browser and go to:
-- **Legacy Professor View:** `http://localhost:3333/professor`
+- **Main App:** `http://localhost:5173/` (Landing page with Student/Professor options)
+- **Student Portal:** `http://localhost:5173/student`
+- **Professor Dashboard:** `http://localhost:5173/professor`
+
+### App Structure (React Router):
+- **`/`** - Landing page with role selection (Student/Professor)
+- **`/student`** - Student portal with profile information
+- **`/professor`** - Professor dashboard with attendance tracking
 
 ### What Works Locally:
 - ✅ React UI with Fluent UI components
+- ✅ React Router navigation
+- ✅ Landing page with Student/Professor options
+- ✅ Student Portal (placeholder data)
 - ✅ Facial recognition and camera detection
 - ✅ Live video feed with face bounding boxes
 - ✅ Onsite attendance tracking
@@ -180,9 +191,36 @@ Open your browser and go to:
 
 ---
 
+---
+
+## 🏗️ Building for Production
+
+To build the React app for production:
+
+```bash
+cd attendease_tab
+npm run build
+```
+
+This creates a `/dist` folder with the optimized React app. The Express backend automatically serves this build when it detects the `/dist` folder.
+
+To run in production mode:
+
+```bash
+# Terminal 1: Python service
+python facial_recognition_service.py
+
+# Terminal 2: Express backend (serves both API + React build)
+npm start
+```
+
+Then access the app at: `http://localhost:3333`
+
+---
+
 ##  API Endpoints
 
-### Express Backend (port 53000)
+### Express Backend (port 3333 in development)
 - `GET /api/attendance/graph-status` - Check Graph API configuration
 - `GET /api/attendance/online/:meetingId` - Get meeting attendance from Graph API
 - `GET /api/facial-recognition/camera/status` - Check camera status
@@ -272,15 +310,19 @@ You know it's working when:
 
 ##  Ports Reference
 
-### Local Development (3 Terminals):
+### Local Development (3 Terminals - HTTP):
 - **5000** - Python facial recognition service (Terminal 1)
-- **3333** - Express backend (Terminal 2)
-- **5173** - React frontend via Vite (Terminal 3)
+- **3333** - Express backend (Terminal 2) - serves API and built React app
+- **5173** - React frontend via Vite (Terminal 3) - proxies API calls to port 3333
 
-### Production (Microsoft 365 Deployment):
+### Production Build:
+- **3333** - Express backend serves both API and built React app from `/dist`
 - **5000** - Python facial recognition service
-- **53000** - Express backend (API)
-- **53001** - React frontend (Vite dev server)
+
+### Microsoft 365 Deployment (HTTPS - Future):
+- **5000** - Python facial recognition service
+- **53000** - Express backend (API + React build)
+- **53001** - Vite dev server (development only)
 - **9239** - Node.js debugger
 
 ---
