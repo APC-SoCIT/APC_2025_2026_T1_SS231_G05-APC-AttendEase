@@ -7,6 +7,7 @@ import {
   shorthands
 } from '@fluentui/react-components';
 import ProfessorDashboard from './components/ProfessorDashboard';
+import StudentDashboard from './components/StudentDashboard';
 
 const useStyles = makeStyles({
   root: {
@@ -52,7 +53,7 @@ function App() {
       </TabList>
 
       {selectedTab === 'professor' && <ProfessorDashboard userContext={userContext} />}
-      {selectedTab === 'student' && <div>Student Portal (Coming Soon)</div>}
+      {selectedTab === 'student' && <StudentDashboard userContext={userContext} />}
       {selectedTab === 'reports' && <div>Reports (Coming Soon)</div>}
     </div>
   );

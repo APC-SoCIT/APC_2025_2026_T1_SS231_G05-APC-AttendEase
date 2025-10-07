@@ -6,11 +6,30 @@
     <link rel="stylesheet" type="text/css" href="/static/styles/custom.css" />
     <script
       src="https://res.cdn.office.net/teams-js/2.31.1/js/MicrosoftTeams.min.js"
-      integrity="sha384-ihAqYgEJz9hzEU+HaYodG1aTzjebC/wKXQi1nWKZG7OLAUyOL9ZrzD/SfZu79Jeu"
+      xintegrity="sha384-ihAqYgEJz9hzEU+HaYodG1aTzjebC/wKXQi1nWKZG7OLAUyOL9ZrzD/SfZu79Jeu"
       crossorigin="anonymous"
     ></script>
     <script src="/static/scripts/facial_recognition.js"></script>
     <title>AttendEase - Professor Dashboard</title>
+    <style>
+      /* Removed .dashboard-actions CSS */
+      #exportCsvBtn {
+        padding: 10px 15px;
+        background-color: #0078d4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        /* Added margin for new location */
+        margin-top: 15px;
+        margin-bottom: 20px;
+        display: block; 
+      }
+      #exportCsvBtn:hover {
+        background-color: #005a9e;
+      }
+    </style>
   </head>
 
   <body>
@@ -56,6 +75,12 @@
         <div id="facesInfo">
           <h4>Detected Faces:</h4>
           <p><strong>Total Faces Detected:</strong> <span id="faceCount">0</span></p>
+
+          <!-- MOVED: Export CSV Button (No onclick attribute) -->
+          <button id="exportCsvBtn">
+            ⬇️ Export Attendance Report (CSV)
+          </button>
+
           <div id="facesList"></div>
         </div>
         
@@ -67,6 +92,7 @@
     </div>
 
     <script type="text/javascript">
+      // Initialize Microsoft Teams App
       microsoftTeams.appInitialization.notifySuccess();
     </script>
   </body>

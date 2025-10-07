@@ -26,7 +26,8 @@
         "concurrently": "^8.2.2",
         "env-cmd": "^10.1.0",
         "nodemon": "^2.0.21",
-        "vite": "^5.4.2"
+        "vite": "^5.4.2",
+        "vite-plugin-mkcert": "^1.17.9"
     },
     "scripts": {
         "dev:teamsfx": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
