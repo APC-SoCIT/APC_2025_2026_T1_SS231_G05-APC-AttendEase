@@ -83,6 +83,7 @@ function FacialRecognition({ onAttendanceUpdate }) {
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
   const cameraActiveRef = useRef(false); // Use ref instead of state to avoid closure issues
+  const processingRef = useRef(false);
   
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
@@ -123,8 +124,13 @@ function FacialRecognition({ onAttendanceUpdate }) {
       }
       
       const data = await response.json();
-      setServiceStatus('Running ✓');
-      addMessage('✅ Python service is running!', 'success');
+      
+      if (data.status === 'available' || data.status === 'unavailable') {
+        setServiceStatus('Running ✓');
+        addMessage('✅ Python service is running!', 'success');
+      } else {
+        throw new Error('Invalid response');
+      }
     } catch (error) {
       setServiceStatus('Not Running ✗');
       addMessage('❌ Python service error. Start with: python facial_recognition_service.py', 'error');
@@ -189,8 +195,8 @@ function FacialRecognition({ onAttendanceUpdate }) {
       console.log('Camera active state set to TRUE');
       addMessage('Camera started successfully!', 'success');
       
-      // Start processing frames
-      frameIntervalRef.current = setInterval(processFrame, 1000);
+      // Start processing frames (approx. 10 FPS) without overlapping requests
+      frameIntervalRef.current = setInterval(processFrame, 100);
       
     } catch (error) {
       addMessage(`Error starting camera: ${error.message}`, 'error');
@@ -198,12 +204,17 @@ function FacialRecognition({ onAttendanceUpdate }) {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = async () => {
+    // Stop camera IMMEDIATELY (set ref first to stop processFrame)
+    cameraActiveRef.current = false;
+    
+    // Stop interval
     if (frameIntervalRef.current) {
       clearInterval(frameIntervalRef.current);
       frameIntervalRef.current = null;
     }
     
+    // Stop media stream
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop());
       setMediaStream(null);
@@ -213,14 +224,32 @@ function FacialRecognition({ onAttendanceUpdate }) {
       videoRef.current.srcObject = null;
     }
     
-    cameraActiveRef.current = false; // Set ref
-    setCameraActive(false); // Set state for UI
+    // Clear detected faces state first
     setDetectedFaces([]);
+    
+    // Clear the overlay canvas (wait a tiny bit for any in-flight draws to finish)
+    setTimeout(() => {
+      if (overlayRef.current) {
+        const ctx = overlayRef.current.getContext('2d');
+        ctx.clearRect(0, 0, 640, 480);
+        console.log('Canvas cleared');
+      }
+    }, 50);
+    
+    // Clear face trackers on the Python service
+    try {
+      await fetch('/api/facial-recognition/clear-trackers', { method: 'POST' });
+      addMessage('Face trackers cleared', 'info');
+    } catch (error) {
+      console.error('Error clearing trackers:', error);
+    }
+    
+    setCameraActive(false); // Set state for UI
     addMessage('Camera stopped', 'info');
   };
 
   const processFrame = async () => {
-    if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current) {
+    if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current || processingRef.current) {
       console.log('Frame processing skipped:', { 
         hasVideo: !!videoRef.current, 
         hasCanvas: !!canvasRef.current, 
@@ -230,6 +259,7 @@ function FacialRecognition({ onAttendanceUpdate }) {
     }
     
     try {
+      processingRef.current = true;
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
@@ -240,6 +270,7 @@ function FacialRecognition({ onAttendanceUpdate }) {
         return;
       }
       
+      // Process every frame (backend handles detection/tracking logic)
       ctx.drawImage(video, 0, 0, 640, 480);
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
       const base64Data = imageData.split(',')[1];
@@ -280,10 +311,13 @@ function FacialRecognition({ onAttendanceUpdate }) {
       console.error('Frame processing error:', error);
       addMessage(`Frame error: ${error.message}`, 'error');
     }
+    finally {
+      processingRef.current = false;
+    }
   };
 
   const drawBoundingBoxes = (faces) => {
-    if (!overlayRef.current) return;
+    if (!overlayRef.current || !cameraActiveRef.current) return;
     
     const ctx = overlayRef.current.getContext('2d');
     ctx.clearRect(0, 0, 640, 480);

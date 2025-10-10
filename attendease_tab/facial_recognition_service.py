@@ -20,17 +20,18 @@ next_face_id = 0
 
 # Configuration
 TRACKING_THRESHOLD = 0.6  # Increased from 0.5 to 0.6 for better matching
-TRACKING_FRAMES = 20
-FACE_DISTANCE_THRESHOLD = 420  # Prevent duplicate trackers during fast motion while keeping tight matching
-TRACKER_MERGE_THRESHOLD = 200  # Merge trackers within this distance with same name
-UNKNOWN_TRACKER_MERGE_THRESHOLD = 120
+TRACKING_FRAMES = 12
+FACE_DISTANCE_THRESHOLD = 360  # Prevent duplicate trackers during fast motion while keeping tight matching
+TRACKER_MERGE_THRESHOLD = 180  # Merge trackers within this distance with same name
+UNKNOWN_TRACKER_MERGE_THRESHOLD = 100
 ENCODING_MATCH_THRESHOLD = 0.45
 DETECTION_DEDUP_THRESHOLD = 25
 UPSAMPLE_TIMES = 0
-LOCATION_SMOOTHING_FACTOR = 0.85
-SMOOTHING_DISTANCE_THRESHOLD = 120
-MAX_TRACKING_VELOCITY = 35
-PREDICTION_DECAY = 0.6
+LOCATION_SMOOTHING_FACTOR = 0.45
+SMOOTHING_DISTANCE_THRESHOLD = 90
+MAX_TRACKING_VELOCITY = 50
+PREDICTION_DECAY = 0.65
+RAPID_MOVEMENT_THRESHOLD = 60
 frame_count = 0
 process_frame_count = 0  # For /api/process-frame endpoint
 
@@ -65,6 +66,9 @@ class FaceTracker:
         if speed > MAX_TRACKING_VELOCITY:
             scale = MAX_TRACKING_VELOCITY / speed
             self.velocity = (dx * scale, dy * scale)
+            dx, dy = self.velocity
+        if speed > RAPID_MOVEMENT_THRESHOLD:
+            self.velocity = (dx * 0.75, dy * 0.75)
             dx, dy = self.velocity
         if abs(dx) < 0.1 and abs(dy) < 0.1:
             return
@@ -192,27 +196,8 @@ def smooth_face_locations(face_locations):
         return face_locations
 
     smoothed = []
-    accumulators = []
     for loc in face_locations:
-        c_loc = ((loc[1] + loc[3]) // 2, (loc[0] + loc[2]) // 2)
-        matched = False
-        for idx, (acc_center, acc_loc, count) in enumerate(accumulators):
-            dist = np.sqrt((c_loc[0] - acc_center[0])**2 + (c_loc[1] - acc_center[1])**2)
-            if dist < SMOOTHING_DISTANCE_THRESHOLD:
-                new_count = count + 1
-                new_center = (
-                    (acc_center[0] * count + c_loc[0]) / new_count,
-                    (acc_center[1] * count + c_loc[1]) / new_count
-                )
-                new_loc = tuple(int((acc_loc[i] * count + loc[i]) / new_count) for i in range(4))
-                accumulators[idx] = (new_center, new_loc, new_count)
-                matched = True
-                break
-        if not matched:
-            accumulators.append((c_loc, loc, 1))
-
-    for _, location, _ in accumulators:
-        smoothed.append(location)
+        smoothed.append(tuple(int(v) for v in loc))
 
     return smoothed
 
