@@ -2,13 +2,10 @@ import face_recognition
 import cv2
 import numpy as np
 import base64
-import json
 import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import threading
 import os
-import sys
 
 app = Flask(__name__)
 CORS(app)
@@ -22,36 +19,94 @@ face_tracker = {}
 next_face_id = 0
 
 # Configuration
-TRACKING_THRESHOLD = 0.5
-TRACKING_FRAMES = 100
-FACE_DISTANCE_THRESHOLD = 100
+TRACKING_THRESHOLD = 0.6  # Increased from 0.5 to 0.6 for better matching
+TRACKING_FRAMES = 20
+FACE_DISTANCE_THRESHOLD = 420  # Prevent duplicate trackers during fast motion while keeping tight matching
+TRACKER_MERGE_THRESHOLD = 200  # Merge trackers within this distance with same name
+UNKNOWN_TRACKER_MERGE_THRESHOLD = 120
+ENCODING_MATCH_THRESHOLD = 0.45
+DETECTION_DEDUP_THRESHOLD = 25
+UPSAMPLE_TIMES = 0
+LOCATION_SMOOTHING_FACTOR = 0.85
+SMOOTHING_DISTANCE_THRESHOLD = 120
+MAX_TRACKING_VELOCITY = 35
+PREDICTION_DECAY = 0.6
 frame_count = 0
+process_frame_count = 0  # For /api/process-frame endpoint
 
 class FaceTracker:
     def __init__(self, face_id, name, location, encoding=None):
+        location = tuple(int(v) for v in location)
         self.id = face_id
         self.name = name
         self.location = location
+        self.raw_location = location
         self.encoding = encoding
         self.last_seen = time.time()
         self.confidence_history = []
         self.missed_frames = 0
         self.is_confirmed = False
-        
-    def update_location(self, new_location, confidence=None):
-        self.location = new_location
+        self.velocity = (0.0, 0.0)
+
+    @staticmethod
+    def _center(location):
+        return ((location[1] + location[3]) / 2.0, (location[0] + location[2]) / 2.0)
+
+    def _smooth_location(self, new_location):
+        if self.location is None:
+            return tuple(int(v) for v in new_location)
+        return tuple(int(self.location[i] * (1 - LOCATION_SMOOTHING_FACTOR) + new_location[i] * LOCATION_SMOOTHING_FACTOR) for i in range(4))
+
+    def _apply_velocity_prediction(self):
+        if self.location is None:
+            return
+        dx, dy = self.velocity
+        speed = np.sqrt(dx**2 + dy**2)
+        if speed > MAX_TRACKING_VELOCITY:
+            scale = MAX_TRACKING_VELOCITY / speed
+            self.velocity = (dx * scale, dy * scale)
+            dx, dy = self.velocity
+        if abs(dx) < 0.1 and abs(dy) < 0.1:
+            return
+        shift_x = dx * PREDICTION_DECAY
+        shift_y = dy * PREDICTION_DECAY
+        top, right, bottom, left = self.location
+        predicted = (
+            int(top + shift_y),
+            int(right + shift_x),
+            int(bottom + shift_y),
+            int(left + shift_x)
+        )
+        self.location = predicted
+        self.raw_location = predicted
+        self.velocity = (dx * PREDICTION_DECAY, dy * PREDICTION_DECAY)
+
+    def update_location(self, new_location, confidence=None, encoding=None):
+        new_location = tuple(int(v) for v in new_location)
+        prev_center = self._center(self.location) if self.location is not None else None
+        smoothed_location = self._smooth_location(new_location)
+        self.raw_location = new_location
+        self.location = smoothed_location
+        if prev_center is not None:
+            new_center = self._center(smoothed_location)
+            self.velocity = (new_center[0] - prev_center[0], new_center[1] - prev_center[1])
+        else:
+            self.velocity = (0.0, 0.0)
         self.last_seen = time.time()
         self.missed_frames = 0
+        if encoding is not None:
+            self.encoding = encoding
         if confidence is not None:
             self.confidence_history.append(confidence)
             if len(self.confidence_history) > 5:
                 self.confidence_history.pop(0)
-            if len(self.confidence_history) >= 3 and all(c > 0.4 for c in self.confidence_history):
+            if len(self.confidence_history) >= 3 and all(c > 0.45 for c in self.confidence_history):
                 self.is_confirmed = True
-    
+
     def increment_missed_frames(self):
         self.missed_frames += 1
-        
+        self._apply_velocity_prediction()
+
     def is_expired(self):
         return self.missed_frames > TRACKING_FRAMES
 
@@ -114,6 +169,94 @@ def calculate_distance(loc1, loc2):
     center1 = ((loc1[1] + loc1[3]) // 2, (loc1[0] + loc1[2]) // 2)
     center2 = ((loc2[1] + loc2[3]) // 2, (loc2[0] + loc2[2]) // 2)
     return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
+
+def deduplicate_face_locations(face_locations, threshold=DETECTION_DEDUP_THRESHOLD):
+    """Remove duplicate face detections within threshold distance."""
+    deduplicated = []
+    for loc in face_locations:
+        is_duplicate = False
+        for existing in deduplicated:
+            c1 = ((loc[1] + loc[3]) // 2, (loc[0] + loc[2]) // 2)
+            c2 = ((existing[1] + existing[3]) // 2, (existing[0] + existing[2]) // 2)
+            dist = np.sqrt((c1[0] - c2[0])**2 + (c1[1] - c2[1])**2)
+            if dist < threshold:
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            deduplicated.append(loc)
+    return deduplicated
+
+def smooth_face_locations(face_locations):
+    """Smooth raw face detections to reduce jitter before tracking."""
+    if not face_locations:
+        return face_locations
+
+    smoothed = []
+    accumulators = []
+    for loc in face_locations:
+        c_loc = ((loc[1] + loc[3]) // 2, (loc[0] + loc[2]) // 2)
+        matched = False
+        for idx, (acc_center, acc_loc, count) in enumerate(accumulators):
+            dist = np.sqrt((c_loc[0] - acc_center[0])**2 + (c_loc[1] - acc_center[1])**2)
+            if dist < SMOOTHING_DISTANCE_THRESHOLD:
+                new_count = count + 1
+                new_center = (
+                    (acc_center[0] * count + c_loc[0]) / new_count,
+                    (acc_center[1] * count + c_loc[1]) / new_count
+                )
+                new_loc = tuple(int((acc_loc[i] * count + loc[i]) / new_count) for i in range(4))
+                accumulators[idx] = (new_center, new_loc, new_count)
+                matched = True
+                break
+        if not matched:
+            accumulators.append((c_loc, loc, 1))
+
+    for _, location, _ in accumulators:
+        smoothed.append(location)
+
+    return smoothed
+
+def merge_duplicate_trackers():
+    """Merge duplicate trackers with the same name that are close to each other."""
+    global face_tracker
+    
+    tracker_ids = list(face_tracker.keys())
+    merged_ids = set()
+    
+    for i, tracker_id_1 in enumerate(tracker_ids):
+        if tracker_id_1 in merged_ids:
+            continue
+            
+        tracker_1 = face_tracker.get(tracker_id_1)
+        if not tracker_1 or tracker_1.name == "Unknown":
+            continue
+        
+        for tracker_id_2 in tracker_ids[i+1:]:
+            if tracker_id_2 in merged_ids:
+                continue
+                
+            tracker_2 = face_tracker.get(tracker_id_2)
+            if not tracker_2:
+                continue
+            
+            # Check if same name and close distance
+            if tracker_1.name == tracker_2.name:
+                distance = calculate_distance(tracker_1.location, tracker_2.location)
+                
+                if distance < TRACKER_MERGE_THRESHOLD:
+                    # Keep the tracker with higher confidence, remove the other
+                    conf_1 = np.mean(tracker_1.confidence_history) if tracker_1.confidence_history else 0
+                    conf_2 = np.mean(tracker_2.confidence_history) if tracker_2.confidence_history else 0
+                    
+                    if conf_1 >= conf_2:
+                        print(f"   Merging duplicate tracker {tracker_id_2} into {tracker_id_1} (distance: {distance:.0f}px)")
+                        del face_tracker[tracker_id_2]
+                        merged_ids.add(tracker_id_2)
+                    else:
+                        print(f"   Merging duplicate tracker {tracker_id_1} into {tracker_id_2} (distance: {distance:.0f}px)")
+                        del face_tracker[tracker_id_1]
+                        merged_ids.add(tracker_id_1)
+                        break
 
 def match_faces_to_trackers(face_locations, face_encodings):
     """Match detected faces to existing trackers or create new ones."""
@@ -183,6 +326,9 @@ def match_faces_to_trackers(face_locations, face_encodings):
             face_tracker[tracker_id].increment_missed_frames()
             if face_tracker[tracker_id].is_expired():
                 del face_tracker[tracker_id]
+    
+    # After matching, merge any duplicate trackers
+    merge_duplicate_trackers()
 
 @app.route('/api/camera/list', methods=['GET'])
 def list_cameras():
@@ -369,17 +515,30 @@ def get_frame():
         "total_faces": len(detected_faces)
     })
 
+@app.route('/api/clear-trackers', methods=['POST'])
+def clear_trackers():
+    """Clear all face trackers (called when camera stops)."""
+    global face_tracker, next_face_id, process_frame_count
+    
+    face_tracker.clear()
+    next_face_id = 0
+    process_frame_count = 0
+    print("Cleared all face trackers and reset frame count")
+    
+    return jsonify({"status": "success", "message": "Face trackers cleared"})
+
 @app.route('/api/process-frame', methods=['POST'])
 def process_frame():
-    """Process a single frame sent from the browser."""
-    global known_face_encodings, known_face_names, face_tracker, next_face_id
+    """Process a single frame sent from the browser with face tracking."""
+    global known_face_encodings, known_face_names, face_tracker, next_face_id, process_frame_count
     
     try:
         data = request.get_json()
         if not data or 'frame' not in data:
             return jsonify({"status": "error", "message": "No frame data provided"})
         
-        print("🎥 Received frame for processing...")
+        process_frame_count += 1
+        print(f"Received frame #{process_frame_count} for processing...")
         
         # Decode base64 image
         frame_data = base64.b64decode(data['frame'])
@@ -391,83 +550,78 @@ def process_frame():
         
         print(f"   Frame size: {frame.shape}")
         
-        # Process face detection (similar to existing logic but for single frame)
+        # Process face detection with tracking
         try:
-            # Resize frame for faster processing (increased from 0.25 to 0.5 for better detection)
-            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+            # Detect on every frame for smooth tracking
+            print(f"   DETECTING faces on frame #{process_frame_count}")
+
+            # Resize frame to 1/4 resolution for faster processing (face_recognition recommendation)
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
             rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-            
+
             print(f"   Processing frame size: {small_frame.shape}")
-            
-            # Find faces using CNN model for better detection (more accurate than HOG)
-            face_locations = face_recognition.face_locations(rgb_small_frame, model="cnn")
-            print(f"   Found {len(face_locations)} face location(s)")
-            
+
+            # Find faces using HOG model and deduplicate overlapping detections
+            face_locations = face_recognition.face_locations(rgb_small_frame, model="hog")
+            print(f"   Raw HOG detections: {len(face_locations)}")
+            face_locations = smooth_face_locations(face_locations)
+            face_locations = deduplicate_face_locations(face_locations)
+            print(f"   After smoothing & deduplication: {len(face_locations)}")
+
             current_face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
             print(f"   Generated {len(current_face_encodings)} face encoding(s)")
+
+            # Use the existing FaceTracker system for persistent tracking
+            match_faces_to_trackers(face_locations, current_face_encodings)
             
+            # Build response from tracked faces (always return tracked faces, even on non-detection frames)
             detected_faces = []
-            
-            # Process each detected face
-            for i, (face_location, face_encoding) in enumerate(zip(face_locations, current_face_encodings)):
-                # Scale face location back to full size
-                top, right, bottom, left = face_location
-                top *= 4
-                right *= 4
-                bottom *= 4
-                left *= 4
-                
-                print(f"   Face {i+1}: location ({left}, {top}, {right}, {bottom})")
-                
-                name = "Unknown"
-                confidence = 0.0
-                
-                # Try to recognize the face
-                if known_face_encodings:
-                    matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=TRACKING_THRESHOLD)
-                    face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+            for tracker_id, tracker in list(face_tracker.items()):
+                if tracker.is_expired():
+                    print(f"   ❌ Tracker {tracker_id} expired, removing")
+                    del face_tracker[tracker_id]
+                    continue
                     
-                    print(f"   Face {i+1}: distances {face_distances}")
-                    
-                    if len(face_distances) > 0:
-                        best_match_index = np.argmin(face_distances)
-                        if matches[best_match_index]:
-                            name = known_face_names[best_match_index]
-                            confidence = 1 - face_distances[best_match_index]
-                            print(f"   Face {i+1}: Recognized as {name} (confidence: {confidence:.3f})")
-                else:
-                    print(f"   Face {i+1}: No known encodings to compare against")
+                top, right, bottom, left = tracker.location
+                
+                avg_confidence = np.mean(tracker.confidence_history) if tracker.confidence_history else 0.0
                 
                 detected_faces.append({
-                    "id": i,
-                    "name": name,
-                    "confidence": float(confidence),
-                    "is_confirmed": bool(confidence > 0.6),
+                    "id": tracker_id,
+                    "name": tracker.name,
+                    "confidence": float(avg_confidence),
+                    "is_confirmed": tracker.is_confirmed,
                     "location": {"top": int(top), "right": int(right), "bottom": int(bottom), "left": int(left)}
                 })
+                
+                print(f"   ✓ Tracker {tracker_id}: {tracker.name} (confirmed: {tracker.is_confirmed}, confidence: {avg_confidence:.3f}, missed: {tracker.missed_frames})")
             
-            print(f"✅ Returning {len(detected_faces)} detected faces")
+            print(f"✅ Returning {len(detected_faces)} tracked faces (total active trackers: {len(face_tracker)})")
             
             return jsonify({
                 "status": "success",
                 "detected_faces": detected_faces,
                 "total_faces": len(detected_faces),
-                "message": f"Processed frame with {len(detected_faces)} face(s)"
+                "message": f"Frame #{process_frame_count} processed with {len(detected_faces)} tracked face(s)"
             })
             
         except Exception as e:
             print(f"❌ Face processing error: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({"status": "error", "message": f"Face processing error: {str(e)}"})
             
     except Exception as e:
         print(f"❌ Frame processing error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
 
 if __name__ == '__main__':
-    print("🔧 Initializing Facial Recognition Service...")
+    print("Initializing Facial Recognition Service...")
     
     if not load_reference_data():
         print("❌ Warning: Could not load reference data. Face recognition will not work properly.")
     
-    print("🚀 Starting Flask service on port 5000...")
+    print("Starting Flask service on port 5000...")
     app.run(host='0.0.0.0', port=5000, debug=True)
