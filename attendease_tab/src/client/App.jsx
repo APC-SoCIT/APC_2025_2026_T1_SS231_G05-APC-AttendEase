@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { app as teamsApp } from '@microsoft/teams-js';
-import { FluentProvider, webLightTheme } from '@fluentui/react-components';
+import { FluentProvider, webLightTheme, makeStyles, shorthands } from '@fluentui/react-components';
 import Landing from './components/Landing';
 import StudentPortal from './components/StudentPortal';
 import ProfessorDashboard from './components/ProfessorDashboard';
 
+const useStyles = makeStyles({
+  root: {
+    backgroundColor: 'transparent',
+    ...shorthands.overflow('auto'),
+  },
+});
+
 function App() {
   const [userContext, setUserContext] = useState(null);
   const [isTeamsEnvironment, setIsTeamsEnvironment] = useState(false);
+  const styles = useStyles();
 
   useEffect(() => {
     // Try to initialize Teams SDK (gracefully handle browser mode)
@@ -29,13 +37,15 @@ function App() {
 
   return (
     <FluentProvider theme={webLightTheme}>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/student" element={<StudentPortal />} />
-          <Route path="/professor" element={<ProfessorDashboard userContext={userContext} isTeamsEnvironment={isTeamsEnvironment} />} />
-        </Routes>
-      </Router>
+      <div className={styles.root}>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/student" element={<StudentPortal />} />
+            <Route path="/professor" element={<ProfessorDashboard userContext={userContext} isTeamsEnvironment={isTeamsEnvironment} />} />
+          </Routes>
+        </Router>
+      </div>
     </FluentProvider>
   );
 }

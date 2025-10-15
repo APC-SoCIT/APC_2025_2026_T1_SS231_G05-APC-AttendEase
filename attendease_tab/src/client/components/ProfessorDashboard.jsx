@@ -11,6 +11,11 @@ import FacialRecognition from './FacialRecognition';
 import OnlineAttendance from './OnlineAttendance';
 
 const useStyles = makeStyles({
+  root: {
+    minHeight: '100vh',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
+    ...shorthands.padding('20px'),
+  },
   container: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -36,6 +41,19 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('5px')
+  },
+  dashboardButton: {
+    backgroundColor: '#244670',
+    color: '#ffffff',
+    '&:hover': {
+      backgroundColor: '#1a3350',
+    },
+    '&:active': {
+      backgroundColor: '#1a3350',
+    },
+    '&:focus': {
+      backgroundColor: '#1a3350',
+    }
   }
 });
 
@@ -78,8 +96,8 @@ function ProfessorDashboard({ userContext }) {
   };
 
   return (
-    <div>
-      <h2>Professor Dashboard</h2>
+    <div className={styles.root}>
+      <h2 style={{ color: '#ffffff' }}>Professor Dashboard</h2>
       
       <div className={styles.container}>
         <Card className={styles.card}>
@@ -123,6 +141,7 @@ function ProfessorDashboard({ userContext }) {
         <Button 
           appearance="primary" 
           onClick={handleExportReport}
+          className={styles.dashboardButton}
           style={{ marginTop: '20px' }}
           disabled={onlineAttendance.length + onsiteAttendance.length === 0}
         >

@@ -15,7 +15,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     alignItems: 'center',
     ...shorthands.padding('40px', '20px'),
-    backgroundColor: '#f5f5f5',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
     minHeight: '100vh'
   },
   card: {
@@ -97,6 +97,22 @@ const useStyles = makeStyles({
   },
   button: {
     minWidth: '200px'
+  },
+  updateProfileButton: {
+    backgroundColor: '#244670',
+    color: '#ffffff',
+    
+    '&:hover': {
+      backgroundColor: '#1a3350',
+    },
+    
+    '&:active': {
+      backgroundColor: '#1a3350',
+    },
+    
+    '&:focus': {
+      backgroundColor: '#1a3350',
+    }
   }
 });
 
@@ -139,7 +155,7 @@ function StudentPortal() {
             </div>
             <Button 
               appearance="primary"
-              className={styles.button}
+              className={styles.updateProfileButton}
             >
               Update Facial Profile
             </Button>
@@ -171,8 +187,8 @@ function StudentPortal() {
 
         <div className={styles.buttonSection}>
           <Button 
-            appearance="secondary"
-            className={styles.button}
+            appearance="primary"
+            className={styles.updateProfileButton}
             onClick={handleUpdateAppProfileClick} // Add onClick handler
           >
             Update App Profile

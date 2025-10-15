@@ -24,7 +24,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
     ...shorthands.padding('20px')
   },
   card: {
@@ -53,7 +53,18 @@ const useStyles = makeStyles({
   button: {
     minWidth: '200px',
     height: '50px',
-    fontSize: '16px'
+    fontSize: '16px',
+    backgroundColor: '#244670',
+    color: '#ffffff',
+    '&:hover': {
+      backgroundColor: '#1a3350',
+    },
+    '&:active': {
+      backgroundColor: '#1a3350',
+    },
+    '&:focus': {
+      backgroundColor: '#1a3350',
+    }
   },
   loginSection: {
     display: 'flex',
@@ -70,7 +81,18 @@ const useStyles = makeStyles({
   loginButton: {
     width: '100%',
     height: '50px',
-    fontSize: '16px'
+    fontSize: '16px',
+    backgroundColor: '#244670',
+    color: '#ffffff',
+    '&:hover': {
+      backgroundColor: '#1a3350',
+    },
+    '&:active': {
+      backgroundColor: '#1a3350',
+    },
+    '&:focus': {
+      backgroundColor: '#1a3350',
+    }
   },
   termsCheckbox: {
     marginBottom: '20px'
@@ -83,10 +105,18 @@ const useStyles = makeStyles({
   accordionPanel: {
     maxHeight: '200px', // Adjust this value as needed
     overflowY: 'auto',
-    ...shorthands.padding('0px', '10px')
+    ...shorthands.padding('0px', '10px'),
+    color: '#ffffff' // Set text color to white
   },
   boldText: {
     fontWeight: 'bold'
+  },
+  accordionHeader: {
+    // Fluent UI components often use specific CSS variables or nested selectors for icons.
+    // This targets the icon within the header.
+    '& .fui-AccordionHeader__expandIcon': {
+      color: '#ffffff',
+    },
   }
 });
 
@@ -192,7 +222,7 @@ function Landing() {
         onToggle={() => setIsTermsAccordionOpen(!isTermsAccordionOpen)}
       >
         <AccordionItem value="terms">
-          <AccordionHeader><Text className={styles.boldText}>Terms of Service</Text></AccordionHeader>
+          <AccordionHeader className={styles.accordionHeader}><Text className={styles.boldText} style={{ color: '#ffffff' }}>Terms of Service</Text></AccordionHeader>
           <AccordionPanel className={styles.accordionPanel}>
             <Text>
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
