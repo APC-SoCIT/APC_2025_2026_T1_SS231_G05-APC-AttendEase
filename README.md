@@ -13,11 +13,11 @@ AttendEase is an **automated hybrid attendance system** designed for Asia Pacifi
 
 ### Key Features
 
--  **Online Attendance** - Automatic tracking via Microsoft Graph API
 -  **Onsite Attendance** - Real-time facial recognition using classroom cameras
--  **Unified Dashboard** - React + Fluent UI interface within Microsoft Teams
+-  **Online Attendance (post-meeting)** - Download Microsoft Teams attendance reports via Microsoft Graph
+-  **Role-Based Access** - Automatic student/professor routing with email-domain validation inside Teams
+-  **Admin Console (prototype)** - Launch admin controls from the professor dashboard with a modal login
 -  **Report Generation** - Export combined attendance as CSV
--  **Real-time Updates** - Live attendance tracking during class
 
 ---
 
@@ -27,7 +27,7 @@ AttendEase is an **automated hybrid attendance system** designed for Asia Pacifi
 |-----------|------------|
 | **Frontend** | React 18 + Fluent UI + Vite |
 | **Backend API** | Express.js (Node.js) |
-| **Online Tracking** | Microsoft Graph API |
+| **Online Tracking** | Microsoft Graph API (post-meeting reports) |
 | **Onsite Tracking** | Python + dlib + face_recognition |
 | **Database** | Supabase  |
 
@@ -146,12 +146,15 @@ Open your browser and go to:
 - ✅ Facial recognition and camera detection
 - ✅ Live video feed with face bounding boxes
 - ✅ Onsite attendance tracking
+- ✅ Role-based routing + professor dashboard
+- ✅ Admin login modal and placeholder admin dashboard
 - ✅ CSV export
 
 ### ⏸Not Available Locally (Requires Microsoft 365):
-- ⏸️ Online attendance via Graph API (will show "not configured")
+- ⏸️ Online attendance via Graph API (post-meeting report download)
 - ⏸️ Teams integration
 - ⏸️ HTTPS/SSL
+- ⏸️ Real-time online attendance (Graph provides only post-meeting reports)
 
 ---
 
@@ -166,11 +169,9 @@ Open your browser and go to:
 
 ### During Class:
 
-#### Track Online Students:
-1. Click **"Start Tracking"** in the Online Attendance card
-2. System polls Graph API every 10 seconds
-3. Online students appear automatically as they join
-4. See join times, duration, and status (present/left)
+#### Track Online Students (Future Work):
+1. After the Teams meeting ends, download the attendance report from the dashboard (Graph API post-meeting report).
+2. For real-time online tracking, a Teams bot or new API will be required (under investigation).
 
 #### Track Onsite Students:
 1. Select classroom camera from dropdown
@@ -191,32 +192,7 @@ Open your browser and go to:
 
 ---
 
----
 
-## 🏗️ Building for Production
-
-To build the React app for production:
-
-```bash
-cd attendease_tab
-npm run build
-```
-
-This creates a `/dist` folder with the optimized React app. The Express backend automatically serves this build when it detects the `/dist` folder.
-
-To run in production mode:
-
-```bash
-# Terminal 1: Python service
-python facial_recognition_service.py
-
-# Terminal 2: Express backend (serves both API + React build)
-npm start
-```
-
-Then access the app at: `http://localhost:3333`
-
----
 
 ##  API Endpoints
 
