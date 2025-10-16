@@ -16,6 +16,11 @@ import AdminLoginModal from './modals/AdminLoginModal';
 import { setAdminSession } from '../utils/auth';
 
 const useStyles = makeStyles({
+  root: {
+    minHeight: '100vh',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
+    ...shorthands.padding('20px'),
+  },
   container: {
     ...shorthands.padding('24px'),
     backgroundColor: '#fafafa',
