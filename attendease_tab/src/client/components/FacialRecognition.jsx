@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Button, 
+import {
+  Button,
   Select,
   makeStyles,
   shorthands,
@@ -77,7 +77,7 @@ const useStyles = makeStyles({
   }
 });
 
-function FacialRecognition({ onAttendanceUpdate }) {
+function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
   const styles = useStyles();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -111,7 +111,13 @@ function FacialRecognition({ onAttendanceUpdate }) {
 
   const addMessage = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
-    setMessages(prev => [...prev.slice(-9), { timestamp, message, type }]);
+    setMessages(prev => {
+      const newMessages = [...prev.slice(-9), { timestamp, message, type }];
+      if (onMessagesUpdate) {
+        onMessagesUpdate(newMessages);
+      }
+      return newMessages;
+    });
   };
 
   const checkPythonService = async () => {
@@ -295,15 +301,15 @@ function FacialRecognition({ onAttendanceUpdate }) {
         setDetectedFaces(faces);
         
         // Update parent component with attendance data
-        const attendanceData = faces
-          .filter(face => face.name !== 'Unknown' && face.is_confirmed)
-          .map(face => ({
-            name: face.name,
-            confidence: face.confidence,
-            detectedTime: new Date().toLocaleTimeString(),
-            status: 'Present'
-          }));
-        
+        const now = new Date().toLocaleTimeString();
+        const attendanceData = faces.map(face => ({
+          name: face.name,
+          confidence: face.confidence,
+          detectedTime: now,
+          status: face.is_confirmed ? 'Present' : 'Tentative',
+          isConfirmed: face.is_confirmed
+        }));
+
         onAttendanceUpdate(attendanceData);
         drawBoundingBoxes(faces);
       }
@@ -421,23 +427,6 @@ function FacialRecognition({ onAttendanceUpdate }) {
             ))
           )}
         </div>
-      </div>
-
-      <div className={styles.messages}>
-        <Text weight="semibold">System Messages:</Text>
-        {messages.map((msg, index) => (
-          <div 
-            key={index} 
-            style={{ 
-              color: msg.type === 'error' ? '#d32f2f' : 
-                     msg.type === 'success' ? '#388e3c' : 
-                     msg.type === 'warning' ? '#f57c00' : '#1976d2',
-              fontSize: '11px'
-            }}
-          >
-            [{msg.timestamp}] {msg.message}
-          </div>
-        ))}
       </div>
     </div>
   );
