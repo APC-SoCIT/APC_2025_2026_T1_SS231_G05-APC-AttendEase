@@ -234,6 +234,74 @@ app.get('/api/attendance/graph-status', (req, res) => {
   }
 });
 
+// Delegated Graph proxy using a provided access token (e.g., from Graph Explorer)
+app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'error', message: 'Missing Bearer token in Authorization header' });
+    }
+
+    const { meetingId } = req.params;
+
+    const reportsUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings/${encodeURIComponent(meetingId)}/attendanceReports`;
+    const reportsResponse = await axios.get(reportsUrl, {
+      headers: {
+        Authorization: authHeader
+      }
+    });
+
+    const reports = reportsResponse.data?.value || [];
+
+    if (reports.length === 0) {
+      return res.json({
+        status: 'no_data',
+        students: [],
+        message: 'No attendance reports available yet for this meeting.'
+      });
+    }
+
+    const latestReportId = reports[0].id;
+    const reportUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings/${encodeURIComponent(meetingId)}/attendanceReports/${encodeURIComponent(latestReportId)}`;
+    const reportResponse = await axios.get(reportUrl, {
+      headers: {
+        Authorization: authHeader
+      }
+    });
+
+    const attendanceRecords = reportResponse.data?.attendanceRecords || [];
+
+    const students = attendanceRecords.map(record => {
+      const joinDateTime = record.attendanceIntervals?.[0]?.joinDateTime;
+      const leaveDateTime = record.attendanceIntervals?.[0]?.leaveDateTime;
+
+      return {
+        name: record.identity?.displayName || 'Unknown',
+        email: record.emailAddress,
+        joinTime: joinDateTime,
+        leaveTime: leaveDateTime,
+        status: leaveDateTime ? 'left' : 'present',
+        duration: record.totalAttendanceInSeconds,
+        role: record.role
+      };
+    });
+
+    return res.json({
+      status: 'success',
+      students,
+      totalCount: students.length
+    });
+  } catch (error) {
+    console.error('Delegated Graph proxy error:', error?.response?.data || error.message);
+    const statusCode = error?.response?.status || 500;
+    const message = error?.response?.data?.error?.message || error.message || 'Graph API error';
+    return res.status(statusCode).json({
+      status: 'error',
+      message
+    });
+  }
+});
+
 // Get online attendance from Teams meeting using Graph API
 app.get('/api/attendance/online/:meetingId', async (req, res) => {
   try {
