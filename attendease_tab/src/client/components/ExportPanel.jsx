@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     borderRadius: '8px',
     ...shorthands.border('1px', 'solid', '#e6e6e6'),
     overflow: 'hidden',
-    marginTop: '20px'
+    marginTop: '0px'
   },
   trigger: {
     width: '100%',
@@ -46,7 +46,7 @@ const useStyles = makeStyles({
   }
 });
 
-function ExportPanel({ onExport, disabled }) {
+function ExportPanel({ onExport }) {
   const styles = useStyles();
   const [open, setOpen] = useState(false);
 
@@ -72,7 +72,6 @@ function ExportPanel({ onExport, disabled }) {
           <Button
             appearance="primary"
             onClick={onExport}
-            disabled={disabled}
             icon={<ArrowDownload24Regular />}
             style={{ maxWidth: '200px' }}
           >

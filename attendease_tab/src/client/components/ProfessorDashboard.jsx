@@ -137,10 +137,6 @@ const useStyles = makeStyles({
     borderRadius: '8px',
     maxHeight: '200px',
     overflowY: 'auto'
-  },
-  exportCard: {
-    ...shorthands.padding('20px'),
-    marginTop: '24px'
   }
 });
 
@@ -170,10 +166,6 @@ function ProfessorDashboard({ userContext }) {
       ...onsiteAttendance.map(s => ({ ...s, mode: 'Onsite' })),
       ...unknownFaces.map(s => ({ ...s, mode: 'Unknown' }))
     ];
-
-    if (combinedData.length === 0) {
-      return;
-    }
 
     const headers = ['Name', 'Mode', 'Status', 'Time'];
     const csvContent = [
@@ -361,16 +353,11 @@ function ProfessorDashboard({ userContext }) {
               ))
             )}
           </div>
+
+          {/* Export Panel */}
+          <ExportPanel onExport={handleExportReport} />
         </div>
       </div>
-
-      {/* Bottom: Export Options */}
-      <Card className={styles.exportCard}>
-        <ExportPanel
-          onExport={handleExportReport}
-          disabled={onsiteAttendance.length + unknownFaces.length === 0}
-        />
-      </Card>
 
       <AdminLoginModal
         open={isAdminModalOpen}
