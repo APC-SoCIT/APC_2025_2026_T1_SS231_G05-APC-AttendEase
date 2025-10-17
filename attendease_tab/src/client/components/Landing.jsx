@@ -113,6 +113,7 @@ function Landing() {
 
     if (matchedCredential) {
       setMessageBar({ visible: false, message: '' });
+      localStorage.setItem('userEmail', email);
       navigate(matchedCredential.route);
       return;
     }
@@ -121,10 +122,12 @@ function Landing() {
     if (password === 'test123') {
       if (email.endsWith('@student.apc.edu.ph')) {
         setMessageBar({ visible: false, message: '' });
+        localStorage.setItem('userEmail', email);
         navigate('/student');
         return;
       } else if (email.endsWith('@apc.edu.ph')) {
         setMessageBar({ visible: false, message: '' });
+        localStorage.setItem('userEmail', email);
         navigate('/professor');
         return;
       }
