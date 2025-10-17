@@ -124,16 +124,24 @@ def load_reference_data():
     # Get the path to the photos directory (now local to this folder)
     photos_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'photos')
     
-    reference_people = [
-        ("Christian Esguerra", os.path.join(photos_dir, "christian_esguerra.jpg")),
-        ("Moises Sy", os.path.join(photos_dir, "moises_sy.jpg")),
-        ("Maria Sophea Balidio", os.path.join(photos_dir, "maria_sophea_balidio.jpg")),
-        ("Suzanne Rosco", os.path.join(photos_dir, "suzanne_rosco.jpg"))
-    ]
-    
     print("📸 Loading reference images...")
     print(f"   Photos directory: {photos_dir}")
     print(f"   Directory exists: {os.path.exists(photos_dir)}")
+    
+    # Dynamically scan the photos directory for all image files
+    reference_people = []
+    if os.path.exists(photos_dir):
+        for filename in os.listdir(photos_dir):
+            # Check if file is an image
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                # Convert filename to readable name
+                # e.g., "christian_esguerra.jpg" -> "Christian Esguerra"
+                name_without_ext = os.path.splitext(filename)[0]
+                readable_name = name_without_ext.replace('_', ' ').title()
+                file_path = os.path.join(photos_dir, filename)
+                reference_people.append((readable_name, file_path))
+    
+    print(f"   Found {len(reference_people)} image file(s) in {photos_dir}")
     
     for name, path in reference_people:
         print(f"   - Loading {name} from {path}...")
