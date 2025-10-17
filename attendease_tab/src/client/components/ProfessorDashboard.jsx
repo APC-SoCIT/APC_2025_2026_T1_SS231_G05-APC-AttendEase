@@ -23,7 +23,7 @@ const useStyles = makeStyles({
   },
   container: {
     ...shorthands.padding('24px'),
-    backgroundColor: '#fafafa',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
     minHeight: '100vh'
   },
   header: {
@@ -36,7 +36,8 @@ const useStyles = makeStyles({
   headerTitle: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('4px')
+    ...shorthands.gap('4px'),
+    color: '#ffffff'
   },
   adminButton: {
     backgroundColor: '#d32f2f',

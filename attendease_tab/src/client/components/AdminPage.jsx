@@ -19,19 +19,21 @@ import { setAdminSession } from '../utils/auth';
 const useStyles = makeStyles({
   container: {
     minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
+    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
     ...shorthands.padding('40px')
   },
   header: {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: '24px'
+    marginBottom: '24px',
+    color: 'white'
   },
   headerTitle: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('6px')
+    ...shorthands.gap('6px'),
+    color: 'white'
   },
   actions: {
     display: 'flex',
@@ -108,7 +110,7 @@ function AdminPage() {
       <div className={styles.header}>
         <div className={styles.headerTitle}>
           <Text weight="bold" size={600}>Administrative Controls</Text>
-          <Text size={300} style={{ color: '#666' }}>Manage prototype settings and oversee system operations.</Text>
+          <Text size={300} style={{ color: '#ffffff' }}>Manage prototype settings and oversee system operations.</Text>
         </div>
         <div className={styles.actions}>
           <Button

@@ -9,12 +9,15 @@ import {
   Input,
   Label,
   Checkbox,
-  Accordion,
-  AccordionItem,
-  AccordionHeader,
-  AccordionPanel,
   MessageBar,
-  MessageBarBody
+  MessageBarBody,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent
 } from '@fluentui/react-components';
 
 const useStyles = makeStyles({
@@ -43,28 +46,6 @@ const useStyles = makeStyles({
     fontSize: '16px',
     color: '#7f8c8d',
     marginBottom: '40px'
-  },
-  buttonContainer: {
-    display: 'flex',
-    ...shorthands.gap('20px'),
-    justifyContent: 'center',
-    flexWrap: 'wrap'
-  },
-  button: {
-    minWidth: '200px',
-    height: '50px',
-    fontSize: '16px',
-    backgroundColor: '#244670',
-    color: '#ffffff',
-    '&:hover': {
-      backgroundColor: '#1a3350',
-    },
-    '&:active': {
-      backgroundColor: '#1a3350',
-    },
-    '&:focus': {
-      backgroundColor: '#1a3350',
-    }
   },
   loginSection: {
     display: 'flex',
@@ -97,26 +78,10 @@ const useStyles = makeStyles({
   termsCheckbox: {
     marginBottom: '20px'
   },
-  accordion: {
-    width: '100%',
-    marginTop: '20px',
-    marginBottom: '20px'
-  },
-  accordionPanel: {
-    maxHeight: '200px', // Adjust this value as needed
+  dialogContent: {
+    maxHeight: '400px',
     overflowY: 'auto',
-    ...shorthands.padding('0px', '10px'),
-    color: '#ffffff' // Set text color to white
-  },
-  boldText: {
-    fontWeight: 'bold'
-  },
-  accordionHeader: {
-    // Fluent UI components often use specific CSS variables or nested selectors for icons.
-    // This targets the icon within the header.
-    '& .fui-AccordionHeader__expandIcon': {
-      color: '#ffffff',
-    },
+    ...shorthands.padding('20px')
   }
 });
 
@@ -126,7 +91,7 @@ function Landing() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [acceptedTerms, setAcceptedTerms] = React.useState(false);
-  const [isTermsAccordionOpen, setIsTermsAccordionOpen] = React.useState(false);
+  const [isTermsDialogOpen, setIsTermsDialogOpen] = React.useState(false);
   const [messageBar, setMessageBar] = React.useState({ visible: false, message: '' });
 
   const handleLogin = () => {
@@ -134,9 +99,39 @@ function Landing() {
       setMessageBar({ visible: true, message: 'Please accept the terms of service.' });
       return;
     }
-    setMessageBar({ visible: false, message: '' }); // Clear message on successful attempt
-    console.log('Login attempt with:', { email, password, acceptedTerms });
-    // Add actual login logic here later
+
+    // Simple credential validation
+    const validCredentials = [
+      { email: 'test@student.apc.edu.ph', password: 'test123', route: '/student' },
+      { email: 'test@apc.edu.ph', password: 'test123', route: '/professor' }
+    ];
+
+    // Check if credentials match
+    const matchedCredential = validCredentials.find(
+      cred => cred.email === email && cred.password === password
+    );
+
+    if (matchedCredential) {
+      setMessageBar({ visible: false, message: '' });
+      navigate(matchedCredential.route);
+      return;
+    }
+
+    // Check email domain and password for general pattern matching
+    if (password === 'test123') {
+      if (email.endsWith('@student.apc.edu.ph')) {
+        setMessageBar({ visible: false, message: '' });
+        navigate('/student');
+        return;
+      } else if (email.endsWith('@apc.edu.ph')) {
+        setMessageBar({ visible: false, message: '' });
+        navigate('/professor');
+        return;
+      }
+    }
+
+    // Invalid credentials
+    setMessageBar({ visible: true, message: 'Invalid email or password.' });
   };
 
   return (
@@ -186,51 +181,45 @@ function Landing() {
         <Checkbox 
           label={(
             <Text>
-              I accept the <a href="#" onClick={(e) => { e.preventDefault(); setIsTermsAccordionOpen(!isTermsAccordionOpen); }}>Terms of Service</a>
+              I accept the <a href="#" onClick={(e) => { e.preventDefault(); setIsTermsDialogOpen(true); }}>Terms of Service</a>
             </Text>
           )}
           checked={acceptedTerms}
           onChange={(e) => setAcceptedTerms(e.target.checked)}
           className={styles.termsCheckbox}
         />
-        
-        <div className={styles.buttonContainer}>
-          <Button 
-            appearance="primary" 
-            size="large"
-            className={styles.button}
-            onClick={() => navigate('/student')}
-          >
-            Student Portal
-          </Button>
-          
-          <Button 
-            appearance="primary" 
-            size="large"
-            className={styles.button}
-            onClick={() => navigate('/professor')}
-          >
-            Professor Dashboard
-          </Button>
-        </div>
       </Card>
       
-      <Accordion 
-        className={styles.accordion} 
-        collapsible
-        openItems={isTermsAccordionOpen ? ['terms'] : []}
-        onToggle={() => setIsTermsAccordionOpen(!isTermsAccordionOpen)}
-      >
-        <AccordionItem value="terms">
-          <AccordionHeader className={styles.accordionHeader}><Text className={styles.boldText} style={{ color: '#ffffff' }}>Terms of Service</Text></AccordionHeader>
-          <AccordionPanel className={styles.accordionPanel}>
-            <Text>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-            </Text>
-          </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
+      <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => setIsTermsDialogOpen(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Terms of Service</DialogTitle>
+            <DialogContent className={styles.dialogContent}>
+              <Text>
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                <br /><br />
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                <br /><br />
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                <br /><br />
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+              </Text>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setIsTermsDialogOpen(false)}>Close</Button>
+              <Button 
+                appearance="primary" 
+                onClick={() => {
+                  setAcceptedTerms(true);
+                  setIsTermsDialogOpen(false);
+                }}
+              >
+                Accept
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }
