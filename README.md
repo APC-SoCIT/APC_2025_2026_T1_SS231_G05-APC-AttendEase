@@ -7,6 +7,8 @@ Members:
 - Suzanne Marie Rosco
 - Maria Sophea Balidio
 
+Refactor Branch
+
 ## About AttendEase
 
 AttendEase is an **automated hybrid attendance system** designed for Asia Pacific College's **HyFlex learning model**. It seamlessly tracks both **online** and **onsite** student attendance during Microsoft Teams meetings.
