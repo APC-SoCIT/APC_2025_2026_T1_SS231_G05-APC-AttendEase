@@ -38,95 +38,55 @@ AttendEase is an **automated hybrid attendance system** designed for Asia Pacifi
 Before running the app, ensure you have:
 
 1. **Node.js** (v18, v20, or v22) - [Download](https://nodejs.org/)
-2. **Python 3.8+** - For facial recognition service
-3. **Microsoft 365 Account** - With Teams access
-4. **Microsoft 365 Agents Toolkit** - VS Code extension installed
-5. **Classroom Camera** - Logitech or compatible camera
+2. **Python 3.11 or 3.12** - For facial recognition service
+3. **cmake** (Linux/Mac only) - Required to compile dlib
+4. **Microsoft 365 Account** - With Teams access
+5. **Microsoft 365 Agents Toolkit** - VS Code extension installed
+6. **Classroom Camera** - Logitech or compatible camera
 
-### Install Python Dependencies
+## Quick Start - Local Development
+
+### Step 1: Setup (First time only)
+
+#### Windows Setup
+
+```batch
+cd attendease_tab
+setup_dev.bat
+```
+
+After setup completes, activate the virtual environment:
+
+```batch
+venv\Scripts\activate
+```
+
+#### Linux/Mac Setup
 
 ```bash
 cd attendease_tab
-pip install -r requirements.txt
+chmod +x setup_dev.sh
+./setup_dev.sh
 ```
 
-**Required packages:**
-- Flask, flask-cors
-- opencv-python
-- face-recognition, dlib
-- numpy, Pillow
-
-### Install Node.js Dependencies
+After setup completes, activate the virtual environment:
 
 ```bash
-cd attendease_tab
-npm install
+source venv/bin/activate
 ```
 
-## Quick Start - Local Development (3 Terminals)
+### Step 2: Start the Application
 
-### Step 1: Install Dependencies (First time only)
+With the virtual environment activated, run:
 
 ```bash
-cd attendease_tab
-npm install
-pip install -r requirements.txt
+npm run dev
 ```
 
-### Step 2: Open 3 Terminal Windows
-
-You need **3 separate terminals** running at the same time:
-
-#### **Terminal 1: Python Facial Recognition Service**
-
-```bash
-cd attendease_tab
-python facial_recognition_service.py
-```
-
-You should see:
-```
- * Running on http://127.0.0.1:5000
- * Running on all addresses (0.0.0.0)
-```
-**Keep this terminal open**
-
----
-
-#### **Terminal 2: Express Backend**
-
-```bash
-cd attendease_tab
-npm start
-```
-
- **You should see:**
-```
-✅ Serving React app from /dist (if built)
-Graph API credentials not found. Online attendance tracking will not work.
-Express server listening on port 3333
-```
-*Note: The Graph API warning is normal for local development*
-
-**Keep this terminal open**
-
----
-
-#### **Terminal 3: React Frontend (Vite)**
-
-```bash
-cd attendease_tab
-npx vite
-```
-
-**You should see:**
-```
-VITE v5.4.20  ready in 500ms
-➜  Local:   http://localhost:5173/
-```
-**Keep this terminal open**
-
----
+This single command starts all three services concurrently:
+- **Python** - Facial recognition service (`facial_recognition_service.py`) on port 5000
+- **Backend** - Express.js server (`src/app.js`) on port 3333
+- **Frontend** - Vite dev server (React app) on port 5173
 
 ### Step 3: Access the Application
 
@@ -134,6 +94,16 @@ Open your browser and go to:
 - **Main App:** `http://localhost:5173/` (Landing page with Student/Professor options)
 - **Student Portal:** `http://localhost:5173/student`
 - **Professor Dashboard:** `http://localhost:5173/professor`
+
+## Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start all services (Python + Backend + Frontend) |
+| `npm run dev:backend` | Start only the Express.js backend |
+| `npm run dev:frontend` | Start only the Vite frontend |
+| `npm run start:python` | Start only the facial recognition service |
+| `npm run build` | Build the frontend for production |
 
 ### App Structure (React Router):
 - **`/`** - Landing page with role selection (Student/Professor)
@@ -209,6 +179,30 @@ Open your browser and go to:
 - `POST /api/process-frame` - Process image for face detection
 
 ##  Troubleshooting
+
+### Windows: dlib installation fails
+
+The setup script automatically installs a pre-compiled dlib wheel for Python 3.11 or 3.12. If you're using a different Python version, you may need to:
+1. Install Visual Studio Build Tools
+2. Or switch to Python 3.11/3.12
+
+### Linux/Mac: dlib compilation fails
+
+Make sure cmake is installed:
+- **Ubuntu/Debian:** `sudo apt install cmake`
+- **Fedora:** `sudo dnf install cmake`
+- **Arch:** `sudo pacman -S cmake`
+- **macOS:** `brew install cmake`
+
+### 'python' command not found
+
+On some systems, Python 3 is only available as `python3`. You can create an alias:
+
+```bash
+alias python=python3
+```
+
+Or update the `start:python` script in `package.json` to use `python3`.
 
 ### Issue: Graph API returns "Permission denied"
 
