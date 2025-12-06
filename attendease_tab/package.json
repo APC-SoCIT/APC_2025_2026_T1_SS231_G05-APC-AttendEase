@@ -31,10 +31,12 @@
         "vite": "^5.4.2"
     },
     "scripts": {
+        "dev": "concurrently \"npm run start:python\" \"npm run dev:backend\" \"npm run dev:frontend\"",
         "dev:teamsfx": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
         "dev:backend": "env-cmd --silent -f .localConfigs nodemon --inspect=9239 --signal SIGINT src/app.js",
         "dev:frontend": "env-cmd --silent -f .localConfigs vite",
         "start": "nodemon --inspect=9239 --signal SIGINT src/app.js",
+        "start:python": "python facial_recognition_service.py",
         "build": "vite build",
         "test": "echo \"Error: no test specified\" && exit 1",
         "upload-photos": "node src/utils/uploadPhotos.js"
