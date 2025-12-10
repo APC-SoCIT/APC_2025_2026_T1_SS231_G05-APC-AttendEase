@@ -33,6 +33,37 @@ AttendEase is an **automated hybrid attendance system** designed for Asia Pacifi
 | **Onsite Tracking** | Python + dlib + face_recognition |
 | **Database** | Supabase  |
 
+## Project Structure
+
+```
+attendease_tab/
+├── python/                     # Python facial recognition service
+│   ├── facial_recognition_service.py   # Flask API for face detection
+│   ├── photos/                 # Reference photos for known faces
+│   └── requirements.txt        # Python dependencies
+├── scripts/                    # Development setup scripts
+│   ├── setup_dev.bat           # Windows setup script
+│   └── setup_dev.sh            # Linux/Mac setup script
+├── src/                        # Node.js source code
+│   ├── app.js                  # Express.js backend server
+│   ├── client/                 # React frontend (components, styles)
+│   ├── config/                 # Azure & Supabase configuration
+│   ├── services/               # Backend services (auth, graph, supabase)
+│   ├── static/                 # Static assets and scripts
+│   └── utils/                  # Utility functions
+├── appPackage/                 # Teams app manifest files
+├── infra/                      # Azure infrastructure (Bicep templates)
+├── env/                        # Environment configuration files
+├── dist/                       # Production build output (generated)
+├── public/                     # Public static files
+├── .vscode/                    # VS Code settings and launch configs
+├── package.json                # Node.js dependencies and scripts
+├── vite.config.js              # Vite bundler configuration
+├── index.html                  # Vite entry point
+├── m365agents.yml              # Teams Toolkit configuration
+└── m365agents.local.yml        # Teams Toolkit local dev config
+```
+
 ## Prerequisites
 
 Before running the app, ensure you have:
@@ -52,7 +83,7 @@ Before running the app, ensure you have:
 
 ```batch
 cd attendease_tab
-setup_dev.bat
+scripts\setup_dev.bat
 ```
 
 After setup completes, activate the virtual environment:
@@ -65,8 +96,8 @@ venv\Scripts\activate
 
 ```bash
 cd attendease_tab
-chmod +x setup_dev.sh
-./setup_dev.sh
+chmod +x scripts/setup_dev.sh
+scripts/setup_dev.sh
 ```
 
 After setup completes, activate the virtual environment:
@@ -74,7 +105,7 @@ After setup completes, activate the virtual environment:
 ```bash
 source venv/bin/activate
 ```
-
+ 
 ### Step 2: Start the Application
 
 With the virtual environment activated, run:
@@ -84,7 +115,7 @@ npm run dev
 ```
 
 This single command starts all three services concurrently:
-- **Python** - Facial recognition service (`facial_recognition_service.py`) on port 5000
+- **Python** - Facial recognition service (`python/facial_recognition_service.py`) on port 5000
 - **Backend** - Express.js server (`src/app.js`) on port 3333
 - **Frontend** - Vite dev server (React app) on port 5173
 
@@ -224,7 +255,7 @@ Or update the `start:python` script in `package.json` to use `python3`.
 ### Issue: Facial recognition not working
 
 **Solution:**
-1. Ensure Python service is running: `python facial_recognition_service.py`
+1. Ensure Python service is running: `python python/facial_recognition_service.py`
 2. Check camera permissions in browser
 3. Verify camera is not in use by another app
 4. Check Python service logs for errors
