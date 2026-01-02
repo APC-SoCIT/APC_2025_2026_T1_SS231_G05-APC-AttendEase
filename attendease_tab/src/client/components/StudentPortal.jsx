@@ -140,10 +140,40 @@ const HARDCODED_USERS = {
     name: 'Moises Sy',
     firstName: 'Moises',
     lastName: 'Sy',
-    studentId: '2024-00002',
+    studentId: '2023-140180',
     section: 'SS231',
-    course: 'Bachelor of Science in Information Technology',
+    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
     photoPath: '/photos/moises_sy.jpg',
+    isHardcoded: true
+  },
+  'mmbalidio@student.apc.edu.ph': {
+    name: 'Maria Sophea Balidio',
+    firstName: 'Maria Sophea',
+    lastName: 'Balidio',
+    studentId: '2023-140262',
+    section: 'SS231',
+    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
+    photoPath: '/photos/maria_sophea_balidio.jpg',
+    isHardcoded: true
+  },
+  'sdrosco@student.apc.edu.ph': {
+    name: 'Suzanne Marie Rosco',
+    firstName: 'Suzanne Marie',
+    lastName: 'Rosco',
+    studentId: '2023-140425',
+    section: 'SS231',
+    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
+    photoPath: '/photos/suzanne_rosco.jpg',
+    isHardcoded: true
+  },
+  'ciesguerra2@student.apc.edu.ph': {
+    name: 'Christian Luis Esguerra',
+    firstName: 'Christian Luis',
+    lastName: 'Esguerra',
+    studentId: '2023-140118',
+    section: 'SS231',
+    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
+    photoPath: '/photos/christian_esguerra.jpg', 
     isHardcoded: true
   }
 };
@@ -177,13 +207,13 @@ function StudentPortal() {
     // Initialize user profiles object if it doesn't exist
     let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
 
-    // Check if hardcoded user
-    if (HARDCODED_USERS[email]) {
-      setUserData(HARDCODED_USERS[email]);
-    } 
-    // Check if user has saved profile
-    else if (userProfiles[email]) {
+    // Priority: Check if user has saved profile FIRST (user edits override hardcoded)
+    if (userProfiles[email]) {
       setUserData(userProfiles[email]);
+    }
+    // Then check if hardcoded user
+    else if (HARDCODED_USERS[email]) {
+      setUserData(HARDCODED_USERS[email]);
     }
     // New user - no profile yet
     else {
