@@ -9,11 +9,22 @@ import {
   Text,
   Divider
 } from '@fluentui/react-components';
-import { Settings48Regular, ChevronDown20Regular, ChevronUp20Regular } from '@fluentui/react-icons';
+import { Settings48Regular, ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import ExportPanel from './ExportPanel';
 import AdminLoginModal from './modals/AdminLoginModal';
+import ScheduleModal from './modals/ScheduleModal';
+import DeleteConfirmDialog from './modals/DeleteConfirmDialog';
 import { setAdminSession } from '../utils/auth';
+import {
+  getAllSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  getCurrentClass,
+  getUpcomingClasses
+} from '../services/scheduleService';
+import '../services/testSchedule'; // Enable browser console testing
 
 const useStyles = makeStyles({
   root: {
@@ -137,6 +148,68 @@ const useStyles = makeStyles({
     borderRadius: '8px',
     maxHeight: '200px',
     overflowY: 'auto'
+  },
+  scheduleCard: {
+    ...shorthands.padding('20px'),
+    backgroundColor: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('16px')
+  },
+  scheduleHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  scheduleList: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('12px'),
+    maxHeight: '300px',
+    overflowY: 'auto'
+  },
+  scheduleItem: {
+    ...shorthands.padding('12px'),
+    ...shorthands.border('1px', 'solid', '#e0e0e0'),
+    borderRadius: '6px',
+    backgroundColor: '#fafafa',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('6px'),
+    position: 'relative',
+    '&:hover': {
+      backgroundColor: '#f0f0f0'
+    }
+  },
+  scheduleItemActive: {
+    ...shorthands.border('2px', 'solid', '#107c10'),
+    backgroundColor: '#e8f5e9'
+  },
+  scheduleColorBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '4px',
+    borderTopLeftRadius: '6px',
+    borderBottomLeftRadius: '6px'
+  },
+  scheduleItemContent: {
+    marginLeft: '12px'
+  },
+  scheduleItemRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  scheduleDays: {
+    display: 'flex',
+    ...shorthands.gap('4px'),
+    flexWrap: 'wrap'
+  },
+  dayBadge: {
+    fontSize: '11px',
+    padding: '2px 6px'
   }
 });
 
@@ -151,11 +224,144 @@ function ProfessorDashboard({ userContext }) {
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
 
+  // Schedule state
+  const [schedules, setSchedules] = useState([]);
+  const [currentClass, setCurrentClass] = useState(null);
+  const [upcomingClasses, setUpcomingClasses] = useState([]);
+
+  // Modal state
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleModalMode, setScheduleModalMode] = useState('create'); // 'create' or 'edit'
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingSchedule, setDeletingSchedule] = useState(null);
+  const [showInactiveSchedules, setShowInactiveSchedules] = useState(false);
+
   useEffect(() => {
     if (userContext?.meeting?.id) {
       console.log('Meeting context detected:', userContext.meeting.id);
     }
   }, [userContext]);
+
+  // Load schedules and check for current class
+  useEffect(() => {
+    // Load all schedules
+    const loadedSchedules = getAllSchedules();
+    setSchedules(loadedSchedules);
+
+    // Get current and upcoming classes
+    const current = getCurrentClass();
+    const upcoming = getUpcomingClasses();
+    setCurrentClass(current);
+    setUpcomingClasses(upcoming);
+
+    // Update every minute
+    const intervalId = setInterval(() => {
+      const current = getCurrentClass();
+      const upcoming = getUpcomingClasses();
+      setCurrentClass(current);
+      setUpcomingClasses(upcoming);
+    }, 60000); // Check every minute
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // CRUD handlers for schedules
+  const handleCreateSchedule = (scheduleData) => {
+    try {
+      const newSchedule = createSchedule(scheduleData);
+      setSchedules(getAllSchedules());
+      setSystemMessages(prev => [...prev, {
+        type: 'success',
+        message: `Created class: ${newSchedule.name}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      return newSchedule;
+    } catch (error) {
+      setSystemMessages(prev => [...prev, {
+        type: 'error',
+        message: `Error creating class: ${error.message}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      throw error;
+    }
+  };
+
+  const handleUpdateSchedule = (id, updates) => {
+    try {
+      const updated = updateSchedule(id, updates);
+      setSchedules(getAllSchedules());
+      setSystemMessages(prev => [...prev, {
+        type: 'success',
+        message: `Updated class: ${updated.name}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      return updated;
+    } catch (error) {
+      setSystemMessages(prev => [...prev, {
+        type: 'error',
+        message: `Error updating class: ${error.message}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      throw error;
+    }
+  };
+
+  const handleDeleteSchedule = (id) => {
+    try {
+      const success = deleteSchedule(id);
+      if (success) {
+        setSchedules(getAllSchedules());
+        setSystemMessages(prev => [...prev, {
+          type: 'success',
+          message: 'Class deleted successfully',
+          timestamp: new Date().toLocaleTimeString()
+        }]);
+      }
+      return success;
+    } catch (error) {
+      setSystemMessages(prev => [...prev, {
+        type: 'error',
+        message: `Error deleting class: ${error.message}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      return false;
+    }
+  };
+
+  // Modal handlers
+  const handleOpenCreateModal = () => {
+    setScheduleModalMode('create');
+    setEditingSchedule(null);
+    setScheduleModalOpen(true);
+  };
+
+  const handleOpenEditModal = (schedule) => {
+    setScheduleModalMode('edit');
+    setEditingSchedule(schedule);
+    setScheduleModalOpen(true);
+  };
+
+  const handleSaveSchedule = async (formData) => {
+    if (scheduleModalMode === 'create') {
+      return handleCreateSchedule(formData);
+    } else {
+      return handleUpdateSchedule(editingSchedule.id, formData);
+    }
+  };
+
+  const handleOpenDeleteDialog = (schedule) => {
+    setDeletingSchedule(schedule);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deletingSchedule) {
+      handleDeleteSchedule(deletingSchedule.id);
+      setDeleteDialogOpen(false);
+      setDeletingSchedule(null);
+    }
+  };
 
   const handleMessagesUpdate = (messages) => {
     setSystemMessages(messages);
@@ -257,16 +463,158 @@ function ProfessorDashboard({ userContext }) {
             </div>
           </Card>
 
+          {/* Class Schedule */}
+          <Card className={styles.scheduleCard}>
+            <div className={styles.scheduleHeader}>
+              <Text weight="semibold" size={400}>Class Schedule</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {currentClass && (
+                  <Badge appearance="filled" color="success">
+                    In Session
+                  </Badge>
+                )}
+                <Button
+                  appearance="subtle"
+                  icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
+                  onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
+                  size="small"
+                  title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
+                >
+                  {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
+                </Button>
+                <Button
+                  appearance="primary"
+                  icon={<Add20Regular />}
+                  onClick={handleOpenCreateModal}
+                  size="small"
+                >
+                  Add Class
+                </Button>
+              </div>
+            </div>
+
+            {currentClass && (
+              <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
+                <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
+                  🎓 Currently Teaching:
+                </Text>
+                <Text size={400} weight="bold" style={{ display: 'block' }}>
+                  {currentClass.name}
+                </Text>
+                <Text size={200} style={{ color: '#666' }}>
+                  {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
+                </Text>
+              </div>
+            )}
+
+            <div className={styles.scheduleList}>
+              {schedules.length === 0 ? (
+                <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+                  No classes scheduled. Use the schedule service to add classes!
+                </Text>
+              ) : (
+                schedules
+                  .filter(schedule => showInactiveSchedules ? true : schedule.isActive) // Toggle: show all or active only
+                  .map((schedule) => {
+                    const isActive = currentClass?.id === schedule.id;
+                    const isInactive = !schedule.isActive;
+                    return (
+                      <div
+                        key={schedule.id}
+                        className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
+                        style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
+                      >
+                        <div
+                          className={styles.scheduleColorBar}
+                          style={{ backgroundColor: schedule.color }}
+                        />
+                        <div className={styles.scheduleItemContent}>
+                          <div className={styles.scheduleItemRow}>
+                            <Text weight="semibold" size={300}>
+                              {schedule.name}
+                            </Text>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              {isActive && (
+                                <Badge appearance="filled" color="success" size="small">
+                                  Active
+                                </Badge>
+                              )}
+                              {isInactive && (
+                                <Badge appearance="tint" color="warning" size="small">
+                                  Inactive
+                                </Badge>
+                              )}
+                              <Button
+                                appearance="subtle"
+                                icon={<Edit20Regular />}
+                                size="small"
+                                onClick={() => handleOpenEditModal(schedule)}
+                                title="Edit class"
+                              />
+                              <Button
+                                appearance="subtle"
+                                icon={<Delete20Regular />}
+                                size="small"
+                                onClick={() => handleOpenDeleteDialog(schedule)}
+                                title="Delete class"
+                                style={{ color: '#d32f2f' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className={styles.scheduleDays}>
+                            {schedule.days.map((day, idx) => (
+                              <Badge
+                                key={idx}
+                                appearance="tint"
+                                color="informative"
+                                className={styles.dayBadge}
+                              >
+                                {day}
+                              </Badge>
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                            <Text size={200} style={{ color: '#666' }}>
+                              📍 {schedule.room}
+                            </Text>
+                            <Text size={200} style={{ color: '#666' }}>
+                              🕐 {schedule.startTime} - {schedule.endTime}
+                            </Text>
+                          </div>
+
+                          {schedule.description && (
+                            <Text size={200} style={{ color: '#888', fontStyle: 'italic', marginTop: '4px' }}>
+                              {schedule.description}
+                            </Text>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {upcomingClasses.length > 0 && (
+              <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                <Text size={200} weight="semibold" style={{ color: '#856404' }}>
+                  ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
+                </Text>
+              </div>
+            )}
+          </Card>
+
           {/* Participant Dropdown */}
           <Card className={styles.participantDropdown}>
-            <div 
+            <div
               className={styles.participantHeader}
               onClick={() => setParticipantsExpanded(!participantsExpanded)}
             >
               <Text weight="semibold">View Participants</Text>
               {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
             </div>
-            
+
             {participantsExpanded && (
               <div className={styles.participantContent}>
                 <div className={styles.participantSection}>
@@ -340,9 +688,9 @@ function ProfessorDashboard({ userContext }) {
               <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
             ) : (
               systemMessages.slice(-5).map((msg, idx) => (
-                <div 
+                <div
                   key={idx}
-                  style={{ 
+                  style={{
                     color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
                     fontSize: '12px',
                     marginBottom: '4px'
@@ -363,6 +711,21 @@ function ProfessorDashboard({ userContext }) {
         open={isAdminModalOpen}
         onCancel={() => setIsAdminModalOpen(false)}
         onSuccess={handleAdminLoginSuccess}
+      />
+
+      <ScheduleModal
+        open={scheduleModalOpen}
+        onClose={() => setScheduleModalOpen(false)}
+        onSave={handleSaveSchedule}
+        initialData={editingSchedule}
+        mode={scheduleModalMode}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+        scheduleName={deletingSchedule?.name || ''}
       />
     </div>
   );
