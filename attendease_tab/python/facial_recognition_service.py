@@ -1,4 +1,4 @@
-import face_recognition
+from deepface import DeepFace
 import cv2
 import numpy as np
 import base64
@@ -13,27 +13,27 @@ CORS(app)
 # Global variables
 video_capture = None
 camera_on = False
-known_face_encodings = []
-known_face_names = []
 face_tracker = {}
 next_face_id = 0
+frame_count = 0
+process_frame_count = 0
 
-# Configuration
-TRACKING_THRESHOLD = 0.6  # Increased from 0.5 to 0.6 for better matching
+# Configuration - DeepFace
+PHOTOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'photos')
+DEEPFACE_MODEL = "ArcFace"  # Best accuracy
+DISTANCE_THRESHOLD = 0.50   # Stricter threshold for ArcFace (default is 0.68, lower = stricter)
+MIN_CONFIDENCE = 0.35       # Minimum confidence to accept a match (below this = Unknown)
+
+# Tracking Configuration
 TRACKING_FRAMES = 12
-FACE_DISTANCE_THRESHOLD = 360  # Prevent duplicate trackers during fast motion while keeping tight matching
+FACE_DISTANCE_THRESHOLD = 360  # Prevent duplicate trackers during fast motion
 TRACKER_MERGE_THRESHOLD = 180  # Merge trackers within this distance with same name
-UNKNOWN_TRACKER_MERGE_THRESHOLD = 100
-ENCODING_MATCH_THRESHOLD = 0.45
-DETECTION_DEDUP_THRESHOLD = 25
-UPSAMPLE_TIMES = 0
 LOCATION_SMOOTHING_FACTOR = 0.45
 SMOOTHING_DISTANCE_THRESHOLD = 90
 MAX_TRACKING_VELOCITY = 50
 PREDICTION_DECAY = 0.65
 RAPID_MOVEMENT_THRESHOLD = 60
-frame_count = 0
-process_frame_count = 0  # For /api/process-frame endpoint
+
 
 class FaceTracker:
     def __init__(self, face_id, name, location, encoding=None):
@@ -48,6 +48,7 @@ class FaceTracker:
         self.missed_frames = 0
         self.is_confirmed = False
         self.velocity = (0.0, 0.0)
+        self.identification_count = 0  # Track how many times we've identified this face
 
     @staticmethod
     def _center(location):
@@ -114,67 +115,107 @@ class FaceTracker:
     def is_expired(self):
         return self.missed_frames > TRACKING_FRAMES
 
+
 def load_reference_data():
-    """Load reference images and extract face encodings."""
-    global known_face_encodings, known_face_names
+    """Verify photos directory exists and pre-build DeepFace representations."""
+    global PHOTOS_DIR
     
-    known_face_encodings = []
-    known_face_names = []
+    print("📸 Initializing DeepFace with ArcFace model...")
+    print(f"   Photos directory: {PHOTOS_DIR}")
     
-    # Get the path to the photos directory (now local to this folder)
-    photos_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'photos')
+    if not os.path.exists(PHOTOS_DIR):
+        print(f"   ⚠️ Warning: Photos directory not found at {PHOTOS_DIR}")
+        return False
     
-    print("📸 Loading reference images...")
-    print(f"   Photos directory: {photos_dir}")
-    print(f"   Directory exists: {os.path.exists(photos_dir)}")
+    # List available reference photos
+    photo_files = [f for f in os.listdir(PHOTOS_DIR) 
+                   if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    print(f"   Found {len(photo_files)} reference photo(s): {photo_files}")
     
-    # Dynamically scan the photos directory for all image files
-    reference_people = []
-    if os.path.exists(photos_dir):
-        for filename in os.listdir(photos_dir):
-            # Check if file is an image
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                # Convert filename to readable name
-                # e.g., "christian_esguerra.jpg" -> "Christian Esguerra"
-                name_without_ext = os.path.splitext(filename)[0]
-                readable_name = name_without_ext.replace('_', ' ').title()
-                file_path = os.path.join(photos_dir, filename)
-                reference_people.append((readable_name, file_path))
+    if len(photo_files) == 0:
+        print("   ⚠️ Warning: No reference photos found!")
+        return False
     
-    print(f"   Found {len(reference_people)} image file(s) in {photos_dir}")
+    # Pre-build representations (creates .pkl cache in photos folder)
+    # This runs on first call and caches for subsequent calls
+    try:
+        print("   Pre-building face representations (first run may take 30-60 seconds)...")
+        # Create a dummy search to trigger indexing
+        test_img = os.path.join(PHOTOS_DIR, photo_files[0])
+        DeepFace.find(
+            img_path=test_img,
+            db_path=PHOTOS_DIR,
+            model_name=DEEPFACE_MODEL,
+            enforce_detection=False,
+            silent=True
+        )
+        print("   ✅ DeepFace representations built successfully!")
+    except Exception as e:
+        print(f"   ⚠️ Warning: Could not pre-build representations: {e}")
     
-    for name, path in reference_people:
-        print(f"   - Loading {name} from {path}...")
-        print(f"     Full path: {os.path.abspath(path)}")
-        print(f"     File exists: {os.path.exists(path)}")
+    return True
+
+
+def identify_face_deepface(face_image_bgr):
+    """
+    Identify a face using DeepFace.find().
+    
+    Args:
+        face_image_bgr: OpenCV BGR image (numpy array) containing a face
         
-        try:
-            if os.path.exists(path):
-                image = face_recognition.load_image_file(path)
-                face_encodings_list = face_recognition.face_encodings(image)
-                
-                if face_encodings_list:
-                    encoding = face_encodings_list[0]
-                    known_face_encodings.append(encoding)
-                    known_face_names.append(name)
-                    print(f"     ✓ Face encoding extracted for {name}.")
-                else:
-                    print(f"     ⚠️ Warning: No faces found in {path}. The image might not contain a clear face.")
-            else:
-                print(f"     ❌ Error: Reference image not found at '{path}'.")
-                # List what files are actually in the photos directory
-                if os.path.exists(photos_dir):
-                    files = os.listdir(photos_dir)
-                    print(f"     Available files in {photos_dir}: {files}")
-        except Exception as e:
-            print(f"     ❌ Error processing {path}: {e}")
-    
-    print(f"✅ Loaded {len(known_face_encodings)} face encodings: {', '.join(known_face_names)}")
-    
-    if len(known_face_encodings) == 0:
-        print("⚠️ Warning: No face encodings loaded. Face recognition will only detect unknown faces.")
-    
-    return True  # Return True even if no encodings to allow detection of unknown faces
+    Returns:
+        tuple: (name, confidence) or ("Unknown", 0.0)
+    """
+    try:
+        # Check if image is valid
+        if face_image_bgr is None or face_image_bgr.size == 0:
+            return "Unknown", 0.0
+        
+        # Minimum face size check
+        if face_image_bgr.shape[0] < 20 or face_image_bgr.shape[1] < 20:
+            return "Unknown", 0.0
+        
+        # Using numpy array directly
+        results = DeepFace.find(
+            img_path=face_image_bgr,
+            db_path=PHOTOS_DIR,
+            model_name=DEEPFACE_MODEL,
+            enforce_detection=False,  # Don't fail if no face detected
+            silent=True,
+            threshold=DISTANCE_THRESHOLD
+        )
+        
+        # DeepFace.find returns a list of DataFrames (one per face in image)
+        if results and len(results) > 0 and not results[0].empty:
+            best_match = results[0].iloc[0]
+            identity_path = best_match['identity']
+            distance = best_match['distance']
+            
+            # Extract name from filename (e.g., "photos/john_doe.jpg" -> "John Doe")
+            filename = os.path.basename(identity_path)
+            name_without_ext = os.path.splitext(filename)[0]
+            readable_name = name_without_ext.replace('_', ' ').title()
+            
+            # Convert distance to confidence (lower distance = higher confidence)
+            # For ArcFace with threshold 0.50: distance 0 = 100% confidence, distance 0.50 = 0% confidence
+            confidence = max(0, 1 - (distance / DISTANCE_THRESHOLD))
+            
+            # CRITICAL: Reject low-confidence matches as Unknown
+            # This prevents misidentification of unknown people
+            if confidence < MIN_CONFIDENCE:
+                print(f"      DeepFace REJECTED: {readable_name} (distance: {distance:.3f}, confidence: {confidence:.3f} < {MIN_CONFIDENCE})")
+                return "Unknown", 0.0
+            
+            print(f"      DeepFace MATCH: {readable_name} (distance: {distance:.3f}, confidence: {confidence:.3f})")
+            return readable_name, confidence
+        
+        print(f"      DeepFace: No match found in database")
+        return "Unknown", 0.0
+        
+    except Exception as e:
+        print(f"      DeepFace error: {e}")
+        return "Unknown", 0.0
+
 
 def calculate_distance(loc1, loc2):
     """Calculate Euclidean distance between two face locations."""
@@ -182,32 +223,6 @@ def calculate_distance(loc1, loc2):
     center2 = ((loc2[1] + loc2[3]) // 2, (loc2[0] + loc2[2]) // 2)
     return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
 
-def deduplicate_face_locations(face_locations, threshold=DETECTION_DEDUP_THRESHOLD):
-    """Remove duplicate face detections within threshold distance."""
-    deduplicated = []
-    for loc in face_locations:
-        is_duplicate = False
-        for existing in deduplicated:
-            c1 = ((loc[1] + loc[3]) // 2, (loc[0] + loc[2]) // 2)
-            c2 = ((existing[1] + existing[3]) // 2, (existing[0] + existing[2]) // 2)
-            dist = np.sqrt((c1[0] - c2[0])**2 + (c1[1] - c2[1])**2)
-            if dist < threshold:
-                is_duplicate = True
-                break
-        if not is_duplicate:
-            deduplicated.append(loc)
-    return deduplicated
-
-def smooth_face_locations(face_locations):
-    """Smooth raw face detections to reduce jitter before tracking."""
-    if not face_locations:
-        return face_locations
-
-    smoothed = []
-    for loc in face_locations:
-        smoothed.append(tuple(int(v) for v in loc))
-
-    return smoothed
 
 def merge_duplicate_trackers():
     """Merge duplicate trackers with the same name that are close to each other."""
@@ -251,10 +266,12 @@ def merge_duplicate_trackers():
                         merged_ids.add(tracker_id_1)
                         break
 
-def match_faces_to_trackers(face_locations, face_encodings):
+
+def match_faces_to_trackers(face_locations, frame_bgr):
     """Match detected faces to existing trackers or create new ones."""
-    global face_tracker, next_face_id, known_face_encodings, known_face_names
+    global face_tracker, next_face_id
     
+    # Scale locations back to full resolution (from 1/4 scale)
     scaled_locations = []
     for (top, right, bottom, left) in face_locations:
         scaled_locations.append((top * 4, right * 4, bottom * 4, left * 4))
@@ -266,6 +283,7 @@ def match_faces_to_trackers(face_locations, face_encodings):
         best_tracker = None
         min_distance = float('inf')
         
+        # Try to match with existing tracker by location
         for tracker_id, tracker in face_tracker.items():
             if tracker_id in matched_trackers:
                 continue
@@ -275,53 +293,74 @@ def match_faces_to_trackers(face_locations, face_encodings):
                 best_tracker = tracker_id
         
         if best_tracker is not None:
-            name = "Unknown"
-            confidence = None
+            # Update existing tracker
+            top, right, bottom, left = location
             
-            if i < len(face_encodings) and known_face_encodings:
-                matches = face_recognition.compare_faces(known_face_encodings, face_encodings[i], tolerance=TRACKING_THRESHOLD)
-                face_distances = face_recognition.face_distance(known_face_encodings, face_encodings[i])
-                
-                if len(face_distances) > 0:
-                    best_match_index = np.argmin(face_distances)
-                    if matches[best_match_index]:
-                        name = known_face_names[best_match_index]
-                        confidence = 1 - face_distances[best_match_index]
+            # Extract face region for identification
+            # Make sure we don't go out of bounds
+            h, w = frame_bgr.shape[:2]
+            top_safe = max(0, min(top, h-1))
+            bottom_safe = max(0, min(bottom, h))
+            left_safe = max(0, min(left, w-1))
+            right_safe = max(0, min(right, w))
             
-            face_tracker[best_tracker].update_location(location, confidence)
-            face_tracker[best_tracker].name = name
+            face_crop = frame_bgr[top_safe:bottom_safe, left_safe:right_safe]
+            
+            # Only re-identify periodically to save processing
+            tracker = face_tracker[best_tracker]
+            tracker.identification_count += 1
+            
+            # Re-identify known faces every 10 frames, Unknown faces every 5 frames
+            # This balances accuracy with performance
+            if tracker.name == "Unknown":
+                should_identify = (tracker.identification_count % 5 == 0)
+            else:
+                should_identify = (tracker.identification_count % 10 == 0)
+            
+            if should_identify:
+                name, confidence = identify_face_deepface(face_crop)
+                if name != "Unknown":
+                    tracker.name = name
+                    tracker.update_location(location, confidence)
+                else:
+                    tracker.update_location(location)
+            else:
+                tracker.update_location(location)
+            
             matched_trackers.add(best_tracker)
         else:
-            new_detections.append((location, face_encodings[i] if i < len(face_encodings) else None))
+            new_detections.append((location, i))
     
-    for location, encoding in new_detections:
-        name = "Unknown"
-        confidence = None
+    # Create new trackers for unmatched faces
+    for location, idx in new_detections:
+        top, right, bottom, left = location
         
-        if encoding is not None and known_face_encodings:
-            matches = face_recognition.compare_faces(known_face_encodings, encoding, tolerance=TRACKING_THRESHOLD)
-            face_distances = face_recognition.face_distance(known_face_encodings, encoding)
-            
-            if len(face_distances) > 0:
-                best_match_index = np.argmin(face_distances)
-                if matches[best_match_index]:
-                    name = known_face_names[best_match_index]
-                    confidence = 1 - face_distances[best_match_index]
+        # Make sure we don't go out of bounds
+        h, w = frame_bgr.shape[:2]
+        top_safe = max(0, min(top, h-1))
+        bottom_safe = max(0, min(bottom, h))
+        left_safe = max(0, min(left, w-1))
+        right_safe = max(0, min(right, w))
         
-        tracker = FaceTracker(next_face_id, name, location, encoding)
-        if confidence is not None:
+        face_crop = frame_bgr[top_safe:bottom_safe, left_safe:right_safe]
+        
+        name, confidence = identify_face_deepface(face_crop)
+        
+        tracker = FaceTracker(next_face_id, name, location)
+        if confidence > 0:
             tracker.update_location(location, confidence)
         face_tracker[next_face_id] = tracker
         next_face_id += 1
     
+    # Handle missed trackers
     for tracker_id in list(face_tracker.keys()):
         if tracker_id not in matched_trackers:
             face_tracker[tracker_id].increment_missed_frames()
             if face_tracker[tracker_id].is_expired():
                 del face_tracker[tracker_id]
     
-    # After matching, merge any duplicate trackers
     merge_duplicate_trackers()
+
 
 @app.route('/api/camera/list', methods=['GET'])
 def list_cameras():
@@ -351,6 +390,7 @@ def list_cameras():
         "message": f"Found {len(available_cameras)} camera(s)" if available_cameras else "No cameras detected"
     })
 
+
 @app.route('/api/camera/status', methods=['GET'])
 def camera_status():
     """Check if camera is available."""
@@ -365,6 +405,7 @@ def camera_status():
             return jsonify({"status": "unavailable", "message": "No cameras detected"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
@@ -406,6 +447,7 @@ def start_camera():
             video_capture.release()
         return jsonify({"status": "error", "message": str(e)})
 
+
 @app.route('/api/camera/stop', methods=['POST'])
 def stop_camera():
     """Stop camera."""
@@ -418,6 +460,7 @@ def stop_camera():
     face_tracker.clear()
     
     return jsonify({"status": "stopped", "message": "Camera stopped successfully"})
+
 
 @app.route('/api/camera/frame', methods=['GET'])
 def get_frame():
@@ -436,13 +479,28 @@ def get_frame():
     # Process face detection every 3rd frame
     if frame_count % 3 == 0:
         try:
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            # Use DeepFace to detect faces
+            detected_faces_df = DeepFace.extract_faces(
+                img_path=frame,
+                detector_backend='opencv',
+                enforce_detection=False,
+                align=False
+            )
             
-            face_locations = face_recognition.face_locations(rgb_small_frame)
-            current_face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+            # Convert DeepFace detections to our format
+            face_locations = []
+            for face_obj in detected_faces_df:
+                if face_obj['confidence'] > 0.5:
+                    region = face_obj['facial_area']
+                    x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                    # Convert to top, right, bottom, left (1/4 scale for tracking)
+                    top = y // 4
+                    right = (x + w) // 4
+                    bottom = (y + h) // 4
+                    left = x // 4
+                    face_locations.append((top, right, bottom, left))
             
-            match_faces_to_trackers(face_locations, current_face_encodings)
+            match_faces_to_trackers(face_locations, frame)
         except Exception as e:
             print(f"Error during face recognition: {e}")
     else:
@@ -508,6 +566,7 @@ def get_frame():
         "total_faces": len(detected_faces)
     })
 
+
 @app.route('/api/clear-trackers', methods=['POST'])
 def clear_trackers():
     """Clear all face trackers (called when camera stops)."""
@@ -520,10 +579,11 @@ def clear_trackers():
     
     return jsonify({"status": "success", "message": "Face trackers cleared"})
 
+
 @app.route('/api/process-frame', methods=['POST'])
 def process_frame():
     """Process a single frame sent from the browser with face tracking."""
-    global known_face_encodings, known_face_names, face_tracker, next_face_id, process_frame_count
+    global face_tracker, next_face_id, process_frame_count
     
     try:
         data = request.get_json()
@@ -543,40 +603,42 @@ def process_frame():
         
         print(f"   Frame size: {frame.shape}")
         
-        # Process face detection with tracking
         try:
-            # Detect on every frame for smooth tracking
-            print(f"   DETECTING faces on frame #{process_frame_count}")
-
-            # Resize frame to 1/4 resolution for faster processing (face_recognition recommendation)
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-
-            print(f"   Processing frame size: {small_frame.shape}")
-
-            # Find faces using HOG model and deduplicate overlapping detections
-            face_locations = face_recognition.face_locations(rgb_small_frame, model="hog")
-            print(f"   Raw HOG detections: {len(face_locations)}")
-            face_locations = smooth_face_locations(face_locations)
-            face_locations = deduplicate_face_locations(face_locations)
-            print(f"   After smoothing & deduplication: {len(face_locations)}")
-
-            current_face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
-            print(f"   Generated {len(current_face_encodings)} face encoding(s)")
-
-            # Use the existing FaceTracker system for persistent tracking
-            match_faces_to_trackers(face_locations, current_face_encodings)
+            # Use DeepFace to detect faces
+            detected_faces_df = DeepFace.extract_faces(
+                img_path=frame,
+                detector_backend='opencv',  # Fast detector
+                enforce_detection=False,
+                align=False
+            )
             
-            # Build response from tracked faces (always return tracked faces, even on non-detection frames)
+            # Convert DeepFace detections to our format
+            face_locations = []
+            for face_obj in detected_faces_df:
+                if face_obj['confidence'] > 0.5:  # Filter low-confidence detections
+                    region = face_obj['facial_area']
+                    # DeepFace returns x, y, w, h
+                    x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                    # Convert to top, right, bottom, left (1/4 scale for tracking)
+                    top = y // 4
+                    right = (x + w) // 4
+                    bottom = (y + h) // 4
+                    left = x // 4
+                    face_locations.append((top, right, bottom, left))
+            
+            print(f"   Detected {len(face_locations)} face(s)")
+            
+            # Match faces to trackers (pass full frame for identification)
+            match_faces_to_trackers(face_locations, frame)
+            
+            # Build response from tracked faces
             detected_faces = []
             for tracker_id, tracker in list(face_tracker.items()):
                 if tracker.is_expired():
-                    print(f"   ❌ Tracker {tracker_id} expired, removing")
                     del face_tracker[tracker_id]
                     continue
-                    
-                top, right, bottom, left = tracker.location
                 
+                top, right, bottom, left = tracker.location
                 avg_confidence = np.mean(tracker.confidence_history) if tracker.confidence_history else 0.0
                 
                 detected_faces.append({
@@ -584,7 +646,12 @@ def process_frame():
                     "name": tracker.name,
                     "confidence": float(avg_confidence),
                     "is_confirmed": tracker.is_confirmed,
-                    "location": {"top": int(top), "right": int(right), "bottom": int(bottom), "left": int(left)}
+                    "location": {
+                        "top": int(top), 
+                        "right": int(right), 
+                        "bottom": int(bottom), 
+                        "left": int(left)
+                    }
                 })
                 
                 print(f"   ✓ Tracker {tracker_id}: {tracker.name} (confirmed: {tracker.is_confirmed}, confidence: {avg_confidence:.3f}, missed: {tracker.missed_frames})")
@@ -595,7 +662,7 @@ def process_frame():
                 "status": "success",
                 "detected_faces": detected_faces,
                 "total_faces": len(detected_faces),
-                "message": f"Frame #{process_frame_count} processed with {len(detected_faces)} tracked face(s)"
+                "message": f"Frame #{process_frame_count} processed"
             })
             
         except Exception as e:
@@ -610,11 +677,12 @@ def process_frame():
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
 
+
 if __name__ == '__main__':
-    print("Initializing Facial Recognition Service...")
+    print("Initializing Facial Recognition Service with DeepFace...")
     
     if not load_reference_data():
-        print("❌ Warning: Could not load reference data. Face recognition will not work properly.")
+        print("⚠️ Warning: Could not load reference data. Face recognition will only detect unknown faces.")
     
     print("Starting Flask service on port 5000...")
     app.run(host='0.0.0.0', port=5000, debug=True)
