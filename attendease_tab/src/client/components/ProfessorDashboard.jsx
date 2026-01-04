@@ -23,8 +23,8 @@ import {
   deleteSchedule,
   getCurrentClass,
   getUpcomingClasses
-} from '../services/scheduleService';
-import '../services/testSchedule'; // Enable browser console testing
+} from '../../services/scheduleServices/scheduleService';
+import '../../services/scheduleServices/testSchedule'; // Enable browser console testing
 
 const useStyles = makeStyles({
   root: {
