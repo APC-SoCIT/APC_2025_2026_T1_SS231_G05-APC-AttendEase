@@ -66,29 +66,34 @@ const useStyles = makeStyles({
 
 const adminActions = [
   {
-    title: 'Update Courses',
-    description: 'Manage course details, sections, and scheduling.',
-    icon: <BookOpen24Regular />
+    title: 'Manage Courses',
+    description: 'View and manage course offerings, schedules, and assignments.',
+    icon: <BookOpen24Regular />,
+    path: '/admin/courses'
   },
   {
     title: 'Check Logs',
     description: 'Review attendance logs and system activity.',
-    icon: <ClipboardTaskListLtr24Regular />
+    icon: <ClipboardTaskListLtr24Regular />,
+    path: '/admin/logs'
   },
   {
     title: 'Manage Users',
-    description: 'Administer user roles and enrollment status.',
-    icon: <Settings48Regular />
+    description: 'Administer user roles.',
+    icon: <Settings48Regular />,
+    path: '/admin/users'
   },
   {
     title: 'System Settings',
     description: 'Configure integration settings and environment toggles.',
-    icon: <Settings48Regular />
+    icon: <Settings48Regular />,
+    path: '/admin/settings'
   },
   {
     title: 'View Reports',
     description: 'Access attendance analytics and export history.',
-    icon: <DocumentBulletList24Regular />
+    icon: <DocumentBulletList24Regular />,
+    path: '/admin/reports'
   }
 ];
 
@@ -132,7 +137,12 @@ function AdminPage() {
             <div className={styles.iconWrapper}>{action.icon}</div>
             <Text weight="semibold" size={400}>{action.title}</Text>
             <Text size={200}>{action.description}</Text>
-            <Button appearance="secondary">Open</Button>
+            <Button
+              appearance="secondary"
+              onClick={() => navigate(action.path)}
+            >
+              Open
+            </Button>
           </Card>
         ))}
       </div>
@@ -141,5 +151,3 @@ function AdminPage() {
 }
 
 export default AdminPage;
-
-
