@@ -6,6 +6,9 @@ import Landing from './components/Landing';
 import StudentPortal from './components/StudentPortal';
 import ProfessorDashboard from './components/ProfessorDashboard';
 import AdminPage from './components/AdminPage';
+import AdminCourses from './components/AdminCourses';
+import AdminLogs from './components/AdminLogs';
+import AdminUsers from './components/AdminUsers';
 import { isAdminSessionActive } from './utils/auth';
 
 const useStyles = makeStyles({
@@ -63,6 +66,30 @@ function App() {
             element={
               adminActive
                 ? <AdminPage />
+                : <Navigate to="/professor" replace />
+            }
+          />
+          <Route
+            path="/admin/courses"
+            element={
+              adminActive
+                ? <AdminCourses />
+                : <Navigate to="/professor" replace />
+            }
+          />
+          <Route
+            path="/admin/logs"
+            element={
+              adminActive
+                ? <AdminLogs />
+                : <Navigate to="/professor" replace />
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              adminActive
+                ? <AdminUsers />
                 : <Navigate to="/professor" replace />
             }
           />
