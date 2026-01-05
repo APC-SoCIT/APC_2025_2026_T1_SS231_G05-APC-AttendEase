@@ -86,11 +86,68 @@ cd attendease_tab
 scripts\setup_dev.bat
 ```
 
+```batch
+npm install recharts jspdf jspdf-autotable
+```
+
 After setup completes, activate the virtual environment:
 
 ```batch
 venv\Scripts\activate
 ```
+
+This single command starts all three services concurrently:
+- **Python** - Facial recognition service (`python/facial_recognition_service.py`) on port 5000
+- **Backend** - Express.js server (`src/app.js`) on port 3333
+- **Frontend** - Vite dev server (React app) on port 5173
+
+### Alternative Windows Setup
+
+#### Dlib Installation
+```batch
+https://github.com/z-mahmud22/Dlib_Windows_Python3.x
+```
+
+#### Python Setup
+```batch
+cd attendease_tab
+pip install -r requirements.txt
+```
+
+#### Node.js Setup
+```batch
+cd attendease_tab
+npm install
+```
+After Node.js Setup, install additional dependencies:
+```batch
+npm install recharts jspdf jspdf-autotable
+```
+
+#### Quick Start
+
+On Terminal 1, run:
+```bash
+cd attendease_tab
+npm start
+```
+
+On Terminal 2, run:
+```bash
+cd attendease_tab
+npx vite
+```
+
+On Terminal 3, run:
+```bash
+cd attendease_tab
+python facial_recognition_service.py
+```
+
+with this, all three services are running concurrently. Open your browser and go to:
+- **Main App:** `http://localhost:5173/` (Landing page with Student/Professor options)
+- **Student Portal:** `http://localhost:5173/student`
+- **Professor Dashboard:** `http://localhost:5173/professor`
 
 #### Linux/Mac Setup
 
