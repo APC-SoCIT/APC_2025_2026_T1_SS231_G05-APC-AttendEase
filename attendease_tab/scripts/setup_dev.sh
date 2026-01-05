@@ -14,12 +14,19 @@ echo "============================================"
 echo
 
 # Check for Python
-if ! command -v python &> /dev/null; then
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
     echo "[ERROR] Python is not installed or not in PATH."
-    echo "Please install Python 3.11 or 3.12."
+    echo "Please install Python 3.11 or higher."
     exit 1
 fi
-echo "[OK] Python found: $(python --version)"
+
+# Use python3 if available, otherwise python
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    PYTHON_CMD="python"
+fi
+echo "[OK] Python found: $($PYTHON_CMD --version)"
 
 # Check for Node.js
 if ! command -v node &> /dev/null; then
@@ -28,22 +35,6 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 echo "[OK] Node.js found: $(node --version)"
-
-# Check for cmake (required for building dlib on Linux)
-if ! command -v cmake &> /dev/null; then
-    echo
-    echo "[ERROR] cmake is not installed."
-    echo "cmake is required to compile dlib on Linux/Mac."
-    echo
-    echo "Please install cmake:"
-    echo "  Ubuntu/Debian: sudo apt install cmake"
-    echo "  Fedora:        sudo dnf install cmake"
-    echo "  Arch:          sudo pacman -S cmake"
-    echo "  macOS:         brew install cmake"
-    echo
-    exit 1
-fi
-echo "[OK] cmake found: $(cmake --version | head -n1)"
 echo
 
 # Create virtual environment
@@ -51,7 +42,7 @@ echo "Creating Python virtual environment..."
 if [ -d "venv" ]; then
     echo "[INFO] Virtual environment already exists, skipping creation."
 else
-    python -m venv venv
+    $PYTHON_CMD -m venv venv
     echo "[OK] Virtual environment created."
 fi
 
@@ -69,7 +60,8 @@ echo
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-echo "(This may take a few minutes as dlib needs to compile...)"
+echo "(First run will download DeepFace models, which may take a few minutes...)"
+pip install --upgrade pip
 pip install -r python/requirements.txt
 echo "[OK] Python dependencies installed."
 echo

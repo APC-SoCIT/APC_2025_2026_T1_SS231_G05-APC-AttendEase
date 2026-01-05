@@ -30,8 +30,26 @@ AttendEase is an **automated hybrid attendance system** designed for Asia Pacifi
 | **Frontend** | React 18 + Fluent UI + Vite |
 | **Backend API** | Express.js (Node.js) |
 | **Online Tracking** | Microsoft Graph API (post-meeting reports) |
-| **Onsite Tracking** | Python + dlib + face_recognition |
+| **Onsite Tracking** | Python + DeepFace (ArcFace model) |
 | **Database** | Supabase  |
+
+### Scalability & Future Deployment
+
+> **Note:** The current facial recognition system runs on **CPU** and is optimized for small-scale demos (up to ~30 students per class). For school-wide production deployment, consider the following architecture:
+
+| Deployment Scale | Recommended Setup |
+|------------------|-------------------|
+| **Demo/Prototype** (current) | CPU-based, local Python service |
+| **Single Classroom** | CPU-based, works well with 10-30 students |
+| **School-Wide** | Centralized GPU server or cloud deployment |
+
+**Future Production Architecture:**
+- Deploy a single **centralized server with GPU** to handle all classrooms
+- Professors only need a **browser + camera** (no Python/dependencies required)
+- Student face embeddings stored in a **vector database** (e.g., Supabase pgvector)
+- This eliminates the need for NVIDIA drivers on every professor's laptop
+
+See the [Technology Stack Documentation](./docs/SSYADD1/02%20Technology%20Stack%20Definition%20%26%20Implementation/) for more details.
 
 ## Project Structure
 
@@ -69,11 +87,10 @@ attendease_tab/
 Before running the app, ensure you have:
 
 1. **Node.js** (v18, v20, or v22) - [Download](https://nodejs.org/)
-2. **Python 3.11 or 3.12** - For facial recognition service
-3. **cmake** (Linux/Mac only) - Required to compile dlib
-4. **Microsoft 365 Account** - With Teams access
-5. **Microsoft 365 Agents Toolkit** - VS Code extension installed
-6. **Classroom Camera** - Logitech or compatible camera
+2. **Python 3.11+** - For facial recognition service (DeepFace)
+3. **Microsoft 365 Account** - With Teams access
+4. **Microsoft 365 Agents Toolkit** - VS Code extension installed
+5. **Classroom Camera** - Logitech or compatible camera
 
 ## Quick Start - Local Development
 
@@ -268,19 +285,19 @@ Open your browser and go to:
 
 ##  Troubleshooting
 
-### Windows: dlib installation fails
+### First-time DeepFace model download
 
-The setup script automatically installs a pre-compiled dlib wheel for Python 3.11 or 3.12. If you're using a different Python version, you may need to:
-1. Install Visual Studio Build Tools
-2. Or switch to Python 3.11/3.12
+On first run, DeepFace will download the ArcFace model (~250MB). This is automatic and only happens once. The models are cached in `~/.deepface/weights/`.
 
-### Linux/Mac: dlib compilation fails
+### Facial recognition is slow on CPU
 
-Make sure cmake is installed:
-- **Ubuntu/Debian:** `sudo apt install cmake`
-- **Fedora:** `sudo dnf install cmake`
-- **Arch:** `sudo pacman -S cmake`
-- **macOS:** `brew install cmake`
+For faster CPU performance, you can switch to a lighter model by editing `python/facial_recognition_service.py`:
+
+```python
+DEEPFACE_MODEL = "VGG-Face"  # Faster on CPU (instead of "ArcFace")
+```
+
+Note: ArcFace is more accurate but slower. VGG-Face offers a good balance for CPU usage.
 
 ### 'python' command not found
 

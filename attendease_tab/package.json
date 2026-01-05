@@ -2,7 +2,7 @@
     "name": "attendeasebasictab",
     "version": "0.1.0",
     "engines": {
-        "node": "18 || 20 || 22"
+        "node": ">=18"
     },
     "type": "module",
     "private": true,
@@ -39,7 +39,7 @@
         "dev:backend": "env-cmd --silent -f .localConfigs nodemon --inspect=9239 --signal SIGINT src/app.js",
         "dev:frontend": "env-cmd --silent -f .localConfigs vite",
         "start": "nodemon --inspect=9239 --signal SIGINT src/app.js",
-        "start:python": "python python/facial_recognition_service.py",
+        "start:python": "./venv/bin/python python/facial_recognition_service.py",
         "build": "vite build",
         "test": "echo \"Error: no test specified\" && exit 1",
         "upload-photos": "node src/utils/uploadPhotos.js"
