@@ -1,7 +1,6 @@
 import React from 'react';
 import {
     Dialog,
-    DialogTrigger,
     DialogSurface,
     DialogBody,
     DialogTitle,
