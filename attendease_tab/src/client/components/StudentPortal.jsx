@@ -173,7 +173,7 @@ const HARDCODED_USERS = {
     studentId: '2023-140118',
     section: 'SS231',
     course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
-    photoPath: '/photos/christian_esguerra.jpg', 
+    photoPath: null,
     isHardcoded: true
   }
 };
