@@ -120,11 +120,11 @@ def load_reference_data():
     """Verify photos directory exists and pre-build DeepFace representations."""
     global PHOTOS_DIR
     
-    print("📸 Initializing DeepFace with ArcFace model...")
+    print("[CAMERA] Initializing DeepFace with ArcFace model...")
     print(f"   Photos directory: {PHOTOS_DIR}")
     
     if not os.path.exists(PHOTOS_DIR):
-        print(f"   ⚠️ Warning: Photos directory not found at {PHOTOS_DIR}")
+        print(f"   [WARNING] Photos directory not found at {PHOTOS_DIR}")
         return False
     
     # List available reference photos
@@ -133,7 +133,7 @@ def load_reference_data():
     print(f"   Found {len(photo_files)} reference photo(s): {photo_files}")
     
     if len(photo_files) == 0:
-        print("   ⚠️ Warning: No reference photos found!")
+        print("   [WARNING] No reference photos found!")
         return False
     
     # Pre-build representations (creates .pkl cache in photos folder)
@@ -149,9 +149,11 @@ def load_reference_data():
             enforce_detection=False,
             silent=True
         )
-        print("   ✅ DeepFace representations built successfully!")
+        print("   [OK] DeepFace representations built successfully!")
     except Exception as e:
-        print(f"   ⚠️ Warning: Could not pre-build representations: {e}")
+        # Encode error message safely for Windows console
+        error_msg = str(e).encode('ascii', 'replace').decode('ascii')
+        print(f"   [WARNING] Could not pre-build representations: {error_msg}")
     
     return True
 
@@ -654,9 +656,9 @@ def process_frame():
                     }
                 })
                 
-                print(f"   ✓ Tracker {tracker_id}: {tracker.name} (confirmed: {tracker.is_confirmed}, confidence: {avg_confidence:.3f}, missed: {tracker.missed_frames})")
+                print(f"   [v] Tracker {tracker_id}: {tracker.name} (confirmed: {tracker.is_confirmed}, confidence: {avg_confidence:.3f}, missed: {tracker.missed_frames})")
             
-            print(f"✅ Returning {len(detected_faces)} tracked faces (total active trackers: {len(face_tracker)})")
+            print(f"[OK] Returning {len(detected_faces)} tracked faces (total active trackers: {len(face_tracker)})")
             
             return jsonify({
                 "status": "success",
@@ -666,13 +668,13 @@ def process_frame():
             })
             
         except Exception as e:
-            print(f"❌ Face processing error: {e}")
+            print(f"[ERROR] Face processing error: {e}")
             import traceback
             traceback.print_exc()
             return jsonify({"status": "error", "message": f"Face processing error: {str(e)}"})
             
     except Exception as e:
-        print(f"❌ Frame processing error: {e}")
+        print(f"[ERROR] Frame processing error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
@@ -682,7 +684,7 @@ if __name__ == '__main__':
     print("Initializing Facial Recognition Service with DeepFace...")
     
     if not load_reference_data():
-        print("⚠️ Warning: Could not load reference data. Face recognition will only detect unknown faces.")
+        print("[WARNING] Could not load reference data. Face recognition will only detect unknown faces.")
     
     print("Starting Flask service on port 5000...")
     app.run(host='0.0.0.0', port=5000, debug=True)
