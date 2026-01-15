@@ -68,7 +68,7 @@ function App() {
             element={
               adminActive
                 ? <AdminPage />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
           <Route
@@ -76,7 +76,7 @@ function App() {
             element={
               adminActive
                 ? <AdminCourses />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
           <Route
@@ -84,7 +84,7 @@ function App() {
             element={
               adminActive
                 ? <AdminLogs />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
           <Route
@@ -92,7 +92,7 @@ function App() {
             element={
               adminActive
                 ? <AdminUsers />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
           <Route
@@ -100,7 +100,7 @@ function App() {
             element={
               adminActive
                 ? <AdminSettings />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
           <Route
@@ -108,7 +108,7 @@ function App() {
             element={
               adminActive
                 ? <AdminReports />
-                : <Navigate to="/professor" replace />
+                : <Navigate to="/" replace />
             }
           />
         </Routes>
