@@ -12,10 +12,8 @@ import {
 import { Settings48Regular, ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import ExportPanel from './ExportPanel';
-import AdminLoginModal from './modals/AdminLoginModal';
 import ScheduleModal from './modals/ScheduleModal';
 import DeleteConfirmDialog from './modals/DeleteConfirmDialog';
-import { setAdminSession } from '../utils/auth';
 import {
   getAllSchedules,
   createSchedule,
@@ -49,13 +47,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     ...shorthands.gap('4px'),
     color: '#ffffff'
-  },
-  adminButton: {
-    backgroundColor: '#d32f2f',
-    color: '#fff',
-    '&:hover': {
-      backgroundColor: '#b71c1c'
-    }
   },
   layout: {
     display: 'grid',
@@ -220,7 +211,6 @@ function ProfessorDashboard({ userContext }) {
   const navigate = useNavigate();
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
-  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
 
@@ -391,26 +381,12 @@ function ProfessorDashboard({ userContext }) {
 
   const totalPresent = onsiteAttendance.length;
 
-  const handleAdminLoginSuccess = () => {
-    setAdminSession(true);
-    setIsAdminModalOpen(false);
-    navigate('/admin');
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <div className={styles.headerTitle}>
           <Text size={600} weight="bold">Professor Dashboard</Text>
         </div>
-        <Button
-          onClick={() => setIsAdminModalOpen(true)}
-          appearance="primary"
-          className={styles.adminButton}
-          icon={<Settings48Regular />}
-        >
-          Admin
-        </Button>
       </div>
 
       <div className={styles.layout}>
@@ -706,12 +682,6 @@ function ProfessorDashboard({ userContext }) {
           <ExportPanel onExport={handleExportReport} />
         </div>
       </div>
-
-      <AdminLoginModal
-        open={isAdminModalOpen}
-        onCancel={() => setIsAdminModalOpen(false)}
-        onSuccess={handleAdminLoginSuccess}
-      />
 
       <ScheduleModal
         open={scheduleModalOpen}

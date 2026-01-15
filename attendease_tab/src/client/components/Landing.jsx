@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   Card,
   Button,
   makeStyles,
@@ -19,6 +19,9 @@ import {
   DialogActions,
   DialogContent
 } from '@fluentui/react-components';
+import { Settings48Regular } from '@fluentui/react-icons';
+import AdminLoginModal from './modals/AdminLoginModal';
+import { setAdminSession } from '../utils/auth';
 
 const useStyles = makeStyles({
   container: {
@@ -78,6 +81,14 @@ const useStyles = makeStyles({
   termsCheckbox: {
     marginBottom: '20px'
   },
+  adminButton: {
+    marginTop: '20px',
+    backgroundColor: '#d32f2f',
+    color: '#fff',
+    '&:hover': {
+      backgroundColor: '#b71c1c'
+    }
+  },
   dialogContent: {
     maxHeight: '400px',
     overflowY: 'auto',
@@ -88,11 +99,12 @@ const useStyles = makeStyles({
 function Landing() {
   const styles = useStyles();
   const navigate = useNavigate();
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  const [acceptedTerms, setAcceptedTerms] = React.useState(false);
-  const [isTermsDialogOpen, setIsTermsDialogOpen] = React.useState(false);
-  const [messageBar, setMessageBar] = React.useState({ visible: false, message: '' });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [isTermsDialogOpen, setIsTermsDialogOpen] = useState(false);
+  const [messageBar, setMessageBar] = useState({ visible: false, message: '' });
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   const handleLogin = () => {
     if (!acceptedTerms) {
@@ -137,36 +149,42 @@ function Landing() {
     setMessageBar({ visible: true, message: 'Invalid email or password.' });
   };
 
+  const handleAdminLoginSuccess = () => {
+    setAdminSession(true);
+    setIsAdminModalOpen(false);
+    navigate('/admin');
+  };
+
   return (
     <div className={styles.container}>
       <Card className={styles.card}>
         <div className={styles.title}>AttendEase</div>
         <Text className={styles.subtitle}>
-          
+
         </Text>
-        
+
         <div className={styles.loginSection}>
           <Label htmlFor="email-input">Email</Label>
-          <Input 
-            id="email-input" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            placeholder="Enter your email" 
+          <Input
+            id="email-input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
             className={styles.inputField}
           />
-          
+
           <Label htmlFor="password-input">Password</Label>
-          <Input 
-            id="password-input" 
-            type="password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            placeholder="Enter your password" 
+          <Input
+            id="password-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
             className={styles.inputField}
           />
-          
-          <Button 
-            appearance="primary" 
+
+          <Button
+            appearance="primary"
             size="large"
             className={styles.loginButton}
             onClick={handleLogin}
@@ -174,14 +192,14 @@ function Landing() {
             Login
           </Button>
         </div>
-        
+
         {messageBar.visible && (
           <MessageBar intent="error">
             <MessageBarBody>{messageBar.message}</MessageBarBody>
           </MessageBar>
         )}
-        
-        <Checkbox 
+
+        <Checkbox
           label={(
             <Text>
               I accept the <a href="#" onClick={(e) => { e.preventDefault(); setIsTermsDialogOpen(true); }}>Terms of Service</a>
@@ -191,8 +209,17 @@ function Landing() {
           onChange={(e) => setAcceptedTerms(e.target.checked)}
           className={styles.termsCheckbox}
         />
+
+        <Button
+          onClick={() => setIsAdminModalOpen(true)}
+          appearance="primary"
+          className={styles.adminButton}
+          icon={<Settings48Regular />}
+        >
+          Admin
+        </Button>
       </Card>
-      
+
       <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => setIsTermsDialogOpen(data.open)}>
         <DialogSurface>
           <DialogBody>
@@ -210,8 +237,8 @@ function Landing() {
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setIsTermsDialogOpen(false)}>Close</Button>
-              <Button 
-                appearance="primary" 
+              <Button
+                appearance="primary"
                 onClick={() => {
                   setAcceptedTerms(true);
                   setIsTermsDialogOpen(false);
@@ -223,6 +250,12 @@ function Landing() {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+
+      <AdminLoginModal
+        open={isAdminModalOpen}
+        onCancel={() => setIsAdminModalOpen(false)}
+        onSuccess={handleAdminLoginSuccess}
+      />
     </div>
   );
 }

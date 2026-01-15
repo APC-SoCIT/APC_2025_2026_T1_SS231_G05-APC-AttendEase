@@ -103,11 +103,11 @@ function AdminPage() {
 
   const handleExit = () => {
     setAdminSession(false);
-    navigate('/professor');
+    navigate('/');
   };
 
   const handleBack = () => {
-    navigate('/professor');
+    navigate('/');
   };
 
   return (
