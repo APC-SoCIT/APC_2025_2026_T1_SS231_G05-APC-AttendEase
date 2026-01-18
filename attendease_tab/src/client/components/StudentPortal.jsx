@@ -67,7 +67,11 @@ const useStyles = makeStyles({
     ...shorthands.gap('30px'),
     marginBottom: '30px',
     width: '100%',
-    alignItems: 'flex-start'
+    alignItems: 'flex-start',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      alignItems: 'center'
+    }
   },
   facialProfileSection: {
     display: 'flex',
@@ -79,7 +83,11 @@ const useStyles = makeStyles({
     backgroundColor: '#ffffff',
     ...shorthands.border('1px', 'solid', '#e1e4e8'),
     borderRadius: '6px',
-    flexShrink: 0
+    flexShrink: 0,
+    '@media (max-width: 768px)': {
+      minWidth: '100%',
+      width: '100%'
+    }
   },
   facialProfileBox: {
     width: '250px',
@@ -104,7 +112,11 @@ const useStyles = makeStyles({
     display: 'flex',
     ...shorthands.gap('15px'),
     flexWrap: 'wrap',
-    marginTop: '20px'
+    marginTop: '20px',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      width: '100%'
+    }
   },
   updateProfileButton: {
     backgroundColor: '#244670',
@@ -121,6 +133,22 @@ const useStyles = makeStyles({
     '&:focus': {
       backgroundColor: '#1a3350',
     }
+  },
+  successHeader: {
+    marginBottom: '30px',
+    width: '100%',
+    textAlign: 'center'
+  },
+  successTitle: {
+    fontSize: '28px',
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: '10px'
+  },
+  successMessage: {
+    fontSize: '14px',
+    color: '#7f8c8d',
+    lineHeight: '1.4'
   },
   formLabel: {
     fontWeight: '600',
@@ -183,15 +211,15 @@ function StudentPortal() {
   const [userEmail, setUserEmail] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [showPhotoInput, setShowPhotoInput] = useState(false);
+  const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
   
-  // Form state for new users
+  // Form state for new users only
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [studentId, setStudentId] = useState('');
   const [section, setSection] = useState('');
   const [course, setCourse] = useState('');
-  const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
@@ -226,7 +254,6 @@ function StudentPortal() {
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPhotoFile(file);
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -261,27 +288,45 @@ function StudentPortal() {
 
     // Update state
     setUserData(newProfile);
-    setIsEditMode(false);
     // Clear form state
-    setPhotoFile(null);
     setPhotoPreview(null);
   };
 
-  const handleEditProfile = () => {
-    // Populate form fields with current data
-    setFirstName(userData.firstName || userData.name?.split(' ')[0] || '');
-    setLastName(userData.lastName || userData.name?.split(' ').slice(1).join(' ') || '');
-    setStudentId(userData.studentId || '');
-    setSection(userData.section || '');
-    setCourse(userData.course || '');
+  const handleEditProfilePhoto = () => {
+    setShowPhotoInput(!showPhotoInput);
+  };
+
+  const handleSavePhoto = () => {
+    if (photoPreview && photoPreview !== userData.photoPath) {
+      const updatedProfile = {
+        ...userData,
+        photoPath: photoPreview
+      };
+
+      // Save to localStorage
+      let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
+      userProfiles[userEmail] = updatedProfile;
+      localStorage.setItem('userProfiles', JSON.stringify(userProfiles));
+
+      // Update state
+      setUserData(updatedProfile);
+      setShowPhotoInput(false);
+    } else {
+      setShowPhotoInput(false);
+    }
+  };
+
+  const handleCancelPhoto = () => {
+    setShowPhotoInput(false);
     setPhotoPreview(userData.photoPath);
-    setIsEditMode(true);
   };
 
-  const handleCancelEdit = () => {
-    setIsEditMode(false);
-    setPhotoFile(null);
-    setPhotoPreview(null);
+  const handleCompleteRegistration = () => {
+    setIsRegistrationComplete(true);
+  };
+
+  const handleBackToProfile = () => {
+    setIsRegistrationComplete(false);
   };
 
   if (isLoading) {
@@ -392,15 +437,17 @@ function StudentPortal() {
     );
   }
 
-  // Logged-in User Profile View - Read Mode
-  if (!isEditMode) {
+  // Registration Success View
+  if (userData && isRegistrationComplete) {
     return (
       <div className={styles.container}>
         <Card className={styles.card}>
-          <h1 className={styles.header}>Hello, {userData.firstName}!</h1>
-          <Text className={styles.subtitle}>
-            Manage your attendance profile and settings
-          </Text>
+          <div className={styles.successHeader}>
+            <h1 className={styles.successTitle}>Registration Completed!</h1>
+            <Text className={styles.successMessage}>
+              Registration Details Saved Successfully.
+            </Text>
+          </div>
 
           <Divider style={{ marginBottom: '25px' }} />
 
@@ -449,27 +496,27 @@ function StudentPortal() {
             <Button 
               appearance="primary"
               className={styles.updateProfileButton}
-              onClick={handleEditProfile}
+              onClick={handleBackToProfile}
             >
-              Edit Profile
+              Back to Profile
             </Button>
           </div>
 
           <Text size={200} style={{ marginTop: '15px', color: '#7f8c8d' }}>
-            Note: You can update your profile information at any time.
+            Note: If you want changes in your Personal Information, contact Admin for changes.
           </Text>
         </Card>
       </div>
     );
   }
 
-  // Logged-in User Profile View - Edit Mode
+  // Logged-in User Profile View - Static Display
   return (
     <div className={styles.container}>
       <Card className={styles.card}>
-        <h1 className={styles.header}>Hello, {firstName}!</h1>
+        <h1 className={styles.header}>Hello, {userData.firstName}!</h1>
         <Text className={styles.subtitle}>
-          Update your attendance profile information
+          Manage your attendance profile and settings
         </Text>
 
         <Divider style={{ marginBottom: '25px' }} />
@@ -477,69 +524,53 @@ function StudentPortal() {
         <div className={styles.profileLayout}>
           <div className={styles.facialProfileSection}>
             <div className={styles.facialProfileBox}>
-              {photoPreview ? (
-                <img src={photoPreview} alt="Profile Preview" className={styles.facialProfileImage} />
+              {showPhotoInput ? (
+                <>
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Profile Preview" className={styles.facialProfileImage} />
+                  ) : (
+                    'Upload Your Photo'
+                  )}
+                </>
               ) : (
-                'Upload Your Photo'
+                <>
+                  {userData.photoPath ? (
+                    <img src={userData.photoPath} alt={userData.name} className={styles.facialProfileImage} />
+                  ) : (
+                    'No Photo'
+                  )}
+                </>
               )}
             </div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoChange}
-              style={{ cursor: 'pointer' }}
-            />
+            {showPhotoInput && (
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                style={{ cursor: 'pointer' }}
+              />
+            )}
           </div>
 
           <div className={styles.infoSection}>
             <div className={styles.infoRow}>
-              <Text className={styles.label}>First Name:</Text>
-              <Input 
-                value={firstName} 
-                onChange={(e) => setFirstName(e.target.value)} 
-                placeholder="Enter first name"
-                style={{ flex: 1, marginLeft: '10px' }}
-              />
-            </div>
-
-            <div className={styles.infoRow}>
-              <Text className={styles.label}>Last Name:</Text>
-              <Input 
-                value={lastName} 
-                onChange={(e) => setLastName(e.target.value)} 
-                placeholder="Enter last name"
-                style={{ flex: 1, marginLeft: '10px' }}
-              />
+              <Text className={styles.label}>Full Name:</Text>
+              <Text className={styles.value}>{userData.name}</Text>
             </div>
 
             <div className={styles.infoRow}>
               <Text className={styles.label}>Student ID:</Text>
-              <Input 
-                value={studentId} 
-                onChange={(e) => setStudentId(e.target.value)} 
-                placeholder="Enter student ID"
-                style={{ flex: 1, marginLeft: '10px' }}
-              />
+              <Text className={styles.value}>{userData.studentId}</Text>
             </div>
 
             <div className={styles.infoRow}>
               <Text className={styles.label}>Section:</Text>
-              <Input 
-                value={section} 
-                onChange={(e) => setSection(e.target.value)} 
-                placeholder="Enter section"
-                style={{ flex: 1, marginLeft: '10px' }}
-              />
+              <Text className={styles.value}>{userData.section}</Text>
             </div>
 
             <div className={styles.infoRow}>
               <Text className={styles.label}>Course:</Text>
-              <Input 
-                value={course} 
-                onChange={(e) => setCourse(e.target.value)} 
-                placeholder="Enter course"
-                style={{ flex: 1, marginLeft: '10px' }}
-              />
+              <Text className={styles.value}>{userData.course}</Text>
             </div>
 
             <div className={styles.infoRow}>
@@ -551,24 +582,45 @@ function StudentPortal() {
 
         <Divider style={{ marginBottom: '25px' }} />
 
-        <div className={styles.buttonSection}>
-          <Button 
-            appearance="primary"
-            className={styles.updateProfileButton}
-            onClick={handleCompleteProfile}
-          >
-            Save Changes
-          </Button>
-          <Button 
-            appearance="secondary"
-            onClick={handleCancelEdit}
-          >
-            Cancel
-          </Button>
+        <div className={styles.buttonSection} style={{ justifyContent: 'space-between' }}>
+          {showPhotoInput ? (
+            <>
+              <Button 
+                appearance="primary"
+                className={styles.updateProfileButton}
+                onClick={handleSavePhoto}
+              >
+                Save Photo
+              </Button>
+              <Button 
+                appearance="secondary"
+                onClick={handleCancelPhoto}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                appearance="primary"
+                className={styles.updateProfileButton}
+                onClick={handleEditProfilePhoto}
+              >
+                Edit Profile
+              </Button>
+              <Button 
+                appearance="primary"
+                className={styles.updateProfileButton}
+                onClick={handleCompleteRegistration}
+              >
+                Complete Registration
+              </Button>
+            </>
+          )}
         </div>
 
         <Text size={200} style={{ marginTop: '15px', color: '#7f8c8d' }}>
-          Note: Changes will be saved when you click "Save Changes".
+          Note: If you want changes in your Personal Information, contact Admin for changes.
         </Text>
       </Card>
     </div>
