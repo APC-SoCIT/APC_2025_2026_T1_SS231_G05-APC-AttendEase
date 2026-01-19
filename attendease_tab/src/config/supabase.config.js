@@ -3,21 +3,21 @@ import { createClient } from '@supabase/supabase-js';
 // Supabase configuration
 // Add these to your .env.local file:
 // SUPABASE_URL=your-project-url
-// SUPABASE_ANON_KEY=your-anon-key
+// SUPABASE_SECRET_KEY=your-secret-key (was known as anon key prior)
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || '';
 
 let supabase = null;
 
-if (supabaseUrl && supabaseAnonKey) {
+if (supabaseUrl && supabaseSecretKey) {
   // Create Supabase client only if credentials are provided
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
+  supabase = createClient(supabaseUrl, supabaseSecretKey);
   console.log('✅ Supabase client initialized');
 } else {
   console.warn('⚠️ Supabase credentials not found in environment variables.');
   console.warn('   Database features (courses, sessions, attendance) will not work.');
-  console.warn('   Add SUPABASE_URL and SUPABASE_ANON_KEY to your environment to enable.');
+  console.warn('   Add SUPABASE_URL and SUPABASE_SECRET_KEY to your environment to enable.');
 }
 
 export { supabase };
