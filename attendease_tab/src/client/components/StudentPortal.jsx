@@ -159,52 +159,16 @@ const useStyles = makeStyles({
   formInput: {
     width: '100%',
     marginBottom: '15px'
+  },
+  errorContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+    ...shorthands.padding('40px')
   }
 });
-
-// Hardcoded users data
-const HARDCODED_USERS = {
-  'mqsy2@student.apc.edu.ph': {
-    name: 'Moises Sy',
-    firstName: 'Moises',
-    lastName: 'Sy',
-    studentId: '2023-140180',
-    section: 'SS231',
-    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
-    photoPath: '/photos/moises_sy.jpg',
-    isHardcoded: true
-  },
-  'mmbalidio@student.apc.edu.ph': {
-    name: 'Maria Sophea Balidio',
-    firstName: 'Maria Sophea',
-    lastName: 'Balidio',
-    studentId: '2023-140262',
-    section: 'SS231',
-    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
-    photoPath: '/photos/maria_sophea_balidio.jpg',
-    isHardcoded: true
-  },
-  'sdrosco@student.apc.edu.ph': {
-    name: 'Suzanne Marie Rosco',
-    firstName: 'Suzanne Marie',
-    lastName: 'Rosco',
-    studentId: '2023-140425',
-    section: 'SS231',
-    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
-    photoPath: '/photos/suzanne_rosco.jpg',
-    isHardcoded: true
-  },
-  'ciesguerra2@student.apc.edu.ph': {
-    name: 'Christian Luis Esguerra',
-    firstName: 'Christian Luis',
-    lastName: 'Esguerra',
-    studentId: '2023-140118',
-    section: 'SS231',
-    course: 'Bachelor of Science in Computer Science with specialization in Software Systems',
-    photoPath: null,
-    isHardcoded: true
-  }
-};
 
 function StudentPortal() {
   const styles = useStyles();
@@ -213,18 +177,15 @@ function StudentPortal() {
   const [isLoading, setIsLoading] = useState(true);
   const [showPhotoInput, setShowPhotoInput] = useState(false);
   const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   
-  // Form state for new users only
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [studentId, setStudentId] = useState('');
-  const [section, setSection] = useState('');
-  const [course, setCourse] = useState('');
+  // Photo state only (no editable profile fields)
   const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
     // Get logged-in user email from localStorage
-    const email = localStorage.getItem('userEmail');
+    const storedEmail = localStorage.getItem('userEmail');
+    const email = storedEmail ? storedEmail.trim() : null;
     setUserEmail(email);
 
     if (!email) {
@@ -232,23 +193,46 @@ function StudentPortal() {
       return;
     }
 
-    // Initialize user profiles object if it doesn't exist
-    let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
-
-    // Priority: Check if user has saved profile FIRST (user edits override hardcoded)
-    if (userProfiles[email]) {
-      setUserData(userProfiles[email]);
-    }
-    // Then check if hardcoded user
-    else if (HARDCODED_USERS[email]) {
-      setUserData(HARDCODED_USERS[email]);
-    }
-    // New user - no profile yet
-    else {
-      setUserData(null);
-    }
-
-    setIsLoading(false);
+    // Fetch user from API
+    const encodedEmail = encodeURIComponent(email);
+    fetch(`/api/students/email/${encodedEmail}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && data.student) {
+          // Transform DB fields to frontend format
+          const s = data.student;
+          const transformedData = {
+            ...s,
+            name: `${s.first_name} ${s.last_name}`,
+            firstName: s.first_name,
+            lastName: s.last_name,
+            studentId: s.student_number,
+            section: s.section,
+            course: s.program,
+            photoPath: s.photo_url,
+            isHardcoded: false
+          };
+          
+          setUserData(transformedData);
+          
+          // Logic: If photo exists, show profile. If not, show "Upload Photo" screen.
+          if (s.photo_url) {
+            setIsRegistrationComplete(true);
+          } else {
+            setIsRegistrationComplete(false); // Will show the read-only info + photo upload
+          }
+        } else {
+          // User not found in DB
+          setAccessDenied(true);
+        }
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching student:', err);
+        setIsLoading(false);
+        // On error, safest to deny access or show retry
+        setAccessDenied(true); 
+      });
   }, []);
 
   const handlePhotoChange = (e) => {
@@ -263,33 +247,40 @@ function StudentPortal() {
     }
   };
 
-  const handleCompleteProfile = () => {
-    if (!firstName || !lastName || !studentId || !section || !course) {
-      alert('Please fill in all required fields');
+  const handleUploadPhoto = () => {
+    if (!photoPreview) {
+      alert('Please select a photo to upload');
       return;
     }
 
-    const fullName = `${firstName}${lastName ? ' ' + lastName : ''}`;
-    const newProfile = {
-      name: fullName,
-      firstName,
-      lastName,
-      studentId,
-      section,
-      course,
-      photoPath: photoPreview || userData?.photoPath || null,
-      isHardcoded: false
+    // Only update the photo
+    const updates = {
+      photoUrl: photoPreview
     };
 
-    // Save to localStorage
-    let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
-    userProfiles[userEmail] = newProfile;
-    localStorage.setItem('userProfiles', JSON.stringify(userProfiles));
-
-    // Update state
-    setUserData(newProfile);
-    // Clear form state
-    setPhotoPreview(null);
+    fetch(`/api/students/${userData.user_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        const s = data.student;
+        setUserData(prev => ({
+          ...prev,
+          photoPath: s.photo_url
+        }));
+        setIsRegistrationComplete(true);
+        setPhotoPreview(null);
+      } else {
+        alert('Failed to save photo: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error('Error uploading photo:', err);
+      alert('Error uploading photo');
+    });
   };
 
   const handleEditProfilePhoto = () => {
@@ -298,19 +289,29 @@ function StudentPortal() {
 
   const handleSavePhoto = () => {
     if (photoPreview && photoPreview !== userData.photoPath) {
-      const updatedProfile = {
-        ...userData,
-        photoPath: photoPreview
+      const updates = {
+        photoUrl: photoPreview
       };
 
-      // Save to localStorage
-      let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
-      userProfiles[userEmail] = updatedProfile;
-      localStorage.setItem('userProfiles', JSON.stringify(userProfiles));
-
-      // Update state
-      setUserData(updatedProfile);
-      setShowPhotoInput(false);
+      fetch(`/api/students/${userData.user_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+           const s = data.student;
+           setUserData(prev => ({
+             ...prev,
+             photoPath: s.photo_url
+           }));
+           setShowPhotoInput(false);
+        } else {
+          alert('Failed to update photo: ' + data.message);
+        }
+      })
+      .catch(err => console.error('Error updating photo:', err));
     } else {
       setShowPhotoInput(false);
     }
@@ -319,14 +320,6 @@ function StudentPortal() {
   const handleCancelPhoto = () => {
     setShowPhotoInput(false);
     setPhotoPreview(userData.photoPath);
-  };
-
-  const handleCompleteRegistration = () => {
-    setIsRegistrationComplete(true);
-  };
-
-  const handleBackToProfile = () => {
-    setIsRegistrationComplete(false);
   };
 
   if (isLoading) {
@@ -339,14 +332,38 @@ function StudentPortal() {
     );
   }
 
-  // New User Registration View
-  if (!userData) {
+  // Access Denied View (User not in DB)
+  if (accessDenied) {
     return (
       <div className={styles.container}>
         <Card className={styles.card}>
-          <h1 className={styles.header}>Complete Your Profile</h1>
+          <div className={styles.errorContainer}>
+            <Text size={500} weight="bold" style={{ color: '#c0392b', marginBottom: '15px' }}>
+              Access Denied
+            </Text>
+            <Text size={300}>
+              We couldn't find your student record. Please contact your professor or administrator to have your account added to the system.
+            </Text>
+            <div style={{ marginTop: '20px' }}>
+              <Text size={200} style={{ color: '#7f8c8d' }}>
+                Email: {userEmail}
+              </Text>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Upload Photo View (For existing users with no photo)
+  // This replaces the old "Complete Profile" form
+  if (!isRegistrationComplete && userData) {
+    return (
+      <div className={styles.container}>
+        <Card className={styles.card}>
+          <h1 className={styles.header}>Welcome, {userData.firstName}!</h1>
           <Text className={styles.subtitle}>
-            Welcome! Please complete your student profile to get started.
+            Please upload your photo to complete your attendance profile.
           </Text>
 
           <Divider style={{ marginBottom: '25px' }} />
@@ -369,100 +386,7 @@ function StudentPortal() {
             </div>
 
             <div className={styles.infoSection}>
-              <div>
-                <label className={styles.formLabel}>First Name *</label>
-                <Input 
-                  value={firstName} 
-                  onChange={(e) => setFirstName(e.target.value)} 
-                  placeholder="Enter first name"
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div>
-                <label className={styles.formLabel}>Last Name *</label>
-                <Input 
-                  value={lastName} 
-                  onChange={(e) => setLastName(e.target.value)} 
-                  placeholder="Enter last name"
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div>
-                <label className={styles.formLabel}>Student ID *</label>
-                <Input 
-                  value={studentId} 
-                  onChange={(e) => setStudentId(e.target.value)} 
-                  placeholder="Enter student ID"
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div>
-                <label className={styles.formLabel}>Section *</label>
-                <Input 
-                  value={section} 
-                  onChange={(e) => setSection(e.target.value)} 
-                  placeholder="Enter section"
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div>
-                <label className={styles.formLabel}>Course *</label>
-                <Input 
-                  value={course} 
-                  onChange={(e) => setCourse(e.target.value)} 
-                  placeholder="Enter course"
-                  className={styles.formInput}
-                />
-              </div>
-            </div>
-          </div>
-
-          <Divider style={{ marginBottom: '25px' }} />
-
-          <div className={styles.buttonSection}>
-            <Button 
-              appearance="primary"
-              className={styles.updateProfileButton}
-              onClick={handleCompleteProfile}
-            >
-              Complete Profile
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  // Registration Success View
-  if (userData && isRegistrationComplete) {
-    return (
-      <div className={styles.container}>
-        <Card className={styles.card}>
-          <div className={styles.successHeader}>
-            <h1 className={styles.successTitle}>Registration Completed!</h1>
-            <Text className={styles.successMessage}>
-              Registration Details Saved Successfully.
-            </Text>
-          </div>
-
-          <Divider style={{ marginBottom: '25px' }} />
-
-          <div className={styles.profileLayout}>
-            <div className={styles.facialProfileSection}>
-              <div className={styles.facialProfileBox}>
-                {userData.photoPath ? (
-                  <img src={userData.photoPath} alt={userData.name} className={styles.facialProfileImage} />
-                ) : (
-                  'No Photo'
-                )}
-              </div>
-            </div>
-
-            <div className={styles.infoSection}>
+              {/* Read-only info display */}
               <div className={styles.infoRow}>
                 <Text className={styles.label}>Full Name:</Text>
                 <Text className={styles.value}>{userData.name}</Text>
@@ -482,7 +406,7 @@ function StudentPortal() {
                 <Text className={styles.label}>Course:</Text>
                 <Text className={styles.value}>{userData.course}</Text>
               </div>
-
+              
               <div className={styles.infoRow}>
                 <Text className={styles.label}>Email:</Text>
                 <Text className={styles.value}>{userEmail}</Text>
@@ -496,21 +420,17 @@ function StudentPortal() {
             <Button 
               appearance="primary"
               className={styles.updateProfileButton}
-              onClick={handleBackToProfile}
+              onClick={handleUploadPhoto}
             >
-              Back to Profile
+              Save Photo & Continue
             </Button>
           </div>
-
-          <Text size={200} style={{ marginTop: '15px', color: '#7f8c8d' }}>
-            Note: If you want changes in your Personal Information, contact Admin for changes.
-          </Text>
         </Card>
       </div>
     );
   }
 
-  // Logged-in User Profile View - Static Display
+  // Logged-in User Profile View (Photo exists)
   return (
     <div className={styles.container}>
       <Card className={styles.card}>
@@ -608,13 +528,6 @@ function StudentPortal() {
               >
                 Edit Profile
               </Button>
-              <Button 
-                appearance="primary"
-                className={styles.updateProfileButton}
-                onClick={handleCompleteRegistration}
-              >
-                Complete Registration
-              </Button>
             </>
           )}
         </div>
@@ -628,4 +541,3 @@ function StudentPortal() {
 }
 
 export default StudentPortal;
-
