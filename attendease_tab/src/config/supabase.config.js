@@ -2,11 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration
 // Add these to your .env.local file:
-// SUPABASE_URL=your-project-url
-// SUPABASE_ANON_KEY=your-anon-key
+// VITE_SUPABASE_URL=your-project-url
+// VITE_SUPABASE_ANON_KEY=your-anon-key
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 let supabase = null;
 

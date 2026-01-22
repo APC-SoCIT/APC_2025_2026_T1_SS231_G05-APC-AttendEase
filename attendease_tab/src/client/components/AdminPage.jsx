@@ -72,6 +72,12 @@ const adminActions = [
     path: '/admin/courses'
   },
   {
+    title: 'Manage Sections',
+    description: 'Manage block sections for course organization.',
+    icon: <BookOpen24Regular />,
+    path: '/admin/sections'
+  },
+  {
     title: 'Check Logs',
     description: 'Review attendance logs and system activity.',
     icon: <ClipboardTaskListLtr24Regular />,
