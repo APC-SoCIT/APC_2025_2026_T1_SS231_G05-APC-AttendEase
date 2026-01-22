@@ -224,6 +224,10 @@ function ProfessorDashboard({ userContext }) {
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
 
+  // Track camera session start/stop times
+  const [cameraStartTime, setCameraStartTime] = useState(null);
+  const [cameraStopTime, setCameraStopTime] = useState(null);
+
   // Schedule state
   const [schedules, setSchedules] = useState([]);
   const [currentClass, setCurrentClass] = useState(null);
@@ -373,19 +377,52 @@ function ProfessorDashboard({ userContext }) {
       ...unknownFaces.map(s => ({ ...s, mode: 'Unknown' }))
     ];
 
-    const headers = ['Name', 'Mode', 'Status', 'Time'];
+    // Enhanced headers to match AttendanceRecords table schema
+    const headers = [
+      'Attendance_ID',
+      'Student_ID',
+      'Student Name',
+      'Course_ID',
+      'Course Name',
+      'Date',
+      'Time In',
+      'Time Out',
+      'SetUp',
+      'Status',
+      'Check-in Time',
+      'Confidence Score'
+    ];
+
     const csvContent = [
       headers.join(','),
-      ...combinedData.map(student =>
-        `"${student.name}","${student.mode}","${student.status || 'Present'}","${student.joinTime || student.detectedTime || '-'}"`
-      )
+      ...combinedData.map((student, index) => {
+        // Generate attendance record data matching database schema
+        const attendanceId = student.id || index + 1;
+        const studentId = student.studentId || student.id || 'N/A';
+        const studentName = student.name || 'Unknown';
+        const courseId = currentClass?.id || 'N/A';
+        const courseName = currentClass?.name || 'N/A';
+
+        // Session start/stop times (same for all students)
+        const sessionDate = new Date();
+        const date = sessionDate.toLocaleDateString();
+        const timeIn = cameraStartTime || 'N/A';
+        const timeOut = cameraStopTime || 'N/A';
+
+        const setUp = student.mode || 'Onsite';
+        const status = student.status || 'Present';
+        const scheduledTime = currentClass ? `${currentClass.startTime} - ${currentClass.endTime}` : 'N/A';
+        const confidenceScore = student.confidence || student.confidenceScore || 'N/A';
+
+        return `"${attendanceId}","${studentId}","${studentName}","${courseId}","${courseName}","${date}","${timeIn}","${timeOut}","${setUp}","${status}","${scheduledTime}","${confidenceScore}"`;
+      })
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -421,12 +458,30 @@ function ProfessorDashboard({ userContext }) {
           </div>
           <FacialRecognition
             onAttendanceUpdate={(records) => {
-              const confirmed = records.filter(r => r.isConfirmed && r.name !== 'Unknown');
-              const unknown = records.filter(r => r.name === 'Unknown' || !r.isConfirmed);
+              // Merge with existing attendance to preserve checkout times
+              const mergedRecords = records.map(newRecord => {
+                const existing = onsiteAttendance.find(r => r.name === newRecord.name);
+                return {
+                  ...newRecord,
+                  // Preserve checkout time if it was already set
+                  checkOutTime: newRecord.checkOutTime || existing?.checkOutTime || null
+                };
+              });
+
+              const confirmed = mergedRecords.filter(r => r.isConfirmed && r.name !== 'Unknown');
+              const unknown = mergedRecords.filter(r => r.name === 'Unknown' || !r.isConfirmed);
               setOnsiteAttendance(confirmed);
               setUnknownFaces(unknown);
             }}
             onMessagesUpdate={handleMessagesUpdate}
+            onStatusChange={(status) => {
+              if (status.isActive) {
+                setCameraStartTime(status.startTime);
+                setCameraStopTime(null); // Reset stop time on new session
+              } else {
+                setCameraStopTime(status.stopTime);
+              }
+            }}
           />
         </Card>
 
