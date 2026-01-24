@@ -6,77 +6,111 @@ import {
   makeStyles,
   shorthands,
   Text,
-  Input,
-  Label,
-  Checkbox,
-  MessageBar,
-  MessageBarBody,
   Dialog,
-  DialogTrigger,
   DialogSurface,
   DialogTitle,
   DialogBody,
   DialogActions,
-  DialogContent
+  DialogContent,
+  MessageBar,
+  MessageBarBody,
 } from '@fluentui/react-components';
+
+import backgroundUrl from '../../assets/bg_img.jpg'; 
 
 const useStyles = makeStyles({
   container: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
-    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
-    ...shorthands.padding('20px')
+    height: '100vh',
+    width: '100vw',
+    backgroundImage: `url(${backgroundUrl})`, 
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    overflow: 'hidden',
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(90deg, rgba(0,0,0,0.1) 0%, rgba(255, 204, 0, 0.5) 100%)',
+    zIndex: 1,
   },
   card: {
-    maxWidth: '600px',
+    maxWidth: '450px',
     width: '100%',
     ...shorthands.padding('40px'),
-    textAlign: 'center'
-  },
-  title: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: '10px'
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#7f8c8d',
-    marginBottom: '40px'
-  },
-  loginSection: {
+    textAlign: 'center',
+    zIndex: 10,
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('10px'),
-    marginBottom: '40px',
-    width: '100%'
+    alignItems: 'center',
   },
-  inputField: {
-    width: '100%',
-    height: '50px',
-    fontSize: '16px'
+  logoSection: {
+    marginBottom: '30px',
   },
-  loginButton: {
+  title: {
+    fontSize: '36px',
+    fontWeight: '800',
+    color: '#244670', // Deep Blue
+    lineHeight: '1',
+    marginBottom: '5px',
+  },
+  titleHighlight: {
+    color: '#FFB900', // Gold/Yellow
+  },
+  subtitle: {
+    fontSize: '14px',
+    color: '#666',
+    marginTop: '5px',
+    textAlign: 'center',
+    display: 'block'
+  },
+  buttonGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('15px'),
+    width: '60%',
+  },
+  customBtn: {
     width: '100%',
-    height: '50px',
+    height: '60px',
     fontSize: '16px',
-    backgroundColor: '#244670',
+    fontWeight: '400',
+    backgroundColor: '#2E3A6E', // Deep Blue
     color: '#ffffff',
+    justifyContent: 'flex-start',
+    paddingLeft: '20px',
+    borderRadius: '10px',
+    border: 'none',
     '&:hover': {
-      backgroundColor: '#1a3350',
+      backgroundColor: '#1a264a',
     },
-    '&:active': {
-      backgroundColor: '#1a3350',
-    },
-    '&:focus': {
-      backgroundColor: '#1a3350',
-    }
   },
-  termsCheckbox: {
-    marginBottom: '20px'
+  btnIcon: {
+    marginRight: '15px',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: '20px',
+    color: 'white',
+    zIndex: 10,
+    fontSize: '12px',
+    opacity: 0.8,
   },
   dialogContent: {
     maxHeight: '400px',
@@ -88,111 +122,112 @@ const useStyles = makeStyles({
 function Landing() {
   const styles = useStyles();
   const navigate = useNavigate();
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
+  
   const [acceptedTerms, setAcceptedTerms] = React.useState(false);
   const [isTermsDialogOpen, setIsTermsDialogOpen] = React.useState(false);
   const [messageBar, setMessageBar] = React.useState({ visible: false, message: '' });
 
+  // Custom Icons
+  const MicrosoftIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0H10.5V10.5H0V0Z" fill="#F25022"/>
+      <path d="M12.5 0H23V10.5H12.5V0Z" fill="#7FBA00"/>
+      <path d="M0 12.5H10.5V23H0V12.5Z" fill="#00A4EF"/>
+      <path d="M12.5 12.5H23V23H12.5V12.5Z" fill="#FFB900"/>
+    </svg>
+  );
+
+  const CheckboxIcon = ({ checked }) => (
+    <div style={{
+      width: '18px',
+      height: '18px',
+      backgroundColor: checked ? '#FFB900' : 'white',
+      borderRadius: '3px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'black',
+      fontSize: '14px'
+    }}>
+      {checked && '✓'}
+    </div>
+  );
+
   const handleLogin = () => {
+    // 1. Validation: Terms must be accepted
     if (!acceptedTerms) {
       setMessageBar({ visible: true, message: 'Please accept the terms of service.' });
       return;
     }
 
-    // Simple credential validation
-    const validCredentials = [
-      { email: 'test@student.apc.edu.ph', password: 'test123', route: '/student' },
-      { email: 'test@apc.edu.ph', password: 'test123', route: '/professor' }
-    ];
+    // 2. Simulate Microsoft OAuth Login
+    const simulatedRole = 'student'; 
+    const simulatedEmail = 'test@student.apc.edu.ph';
 
-    // Check if credentials match
-    const matchedCredential = validCredentials.find(
-      cred => cred.email === email && cred.password === password
-    );
+    localStorage.setItem('userEmail', simulatedEmail);
+    setMessageBar({ visible: false, message: '' });
 
-    if (matchedCredential) {
-      setMessageBar({ visible: false, message: '' });
-      localStorage.setItem('userEmail', email);
-      navigate(matchedCredential.route);
-      return;
-    }
-
-    // Check email domain and password for general pattern matching
-    if (password === 'test123') {
-      if (email.endsWith('@student.apc.edu.ph')) {
-        setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email);
+    if (simulatedRole === 'student') {
         navigate('/student');
-        return;
-      } else if (email.endsWith('@apc.edu.ph')) {
-        setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email);
+    } else {
         navigate('/professor');
-        return;
-      }
     }
-
-    // Invalid credentials
-    setMessageBar({ visible: true, message: 'Invalid email or password.' });
   };
 
   return (
     <div className={styles.container}>
+      {/* Background Overlay */}
+      <div className={styles.overlay}></div>
+
+      {/* REMOVED: The Corner Logo Image */}
+
       <Card className={styles.card}>
-        <div className={styles.title}>AttendEase</div>
-        <Text className={styles.subtitle}>
-          
-        </Text>
-        
-        <div className={styles.loginSection}>
-          <Label htmlFor="email-input">Email</Label>
-          <Input 
-            id="email-input" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            placeholder="Enter your email" 
-            className={styles.inputField}
-          />
-          
-          <Label htmlFor="password-input">Password</Label>
-          <Input 
-            id="password-input" 
-            type="password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            placeholder="Enter your password" 
-            className={styles.inputField}
-          />
-          
-          <Button 
-            appearance="primary" 
-            size="large"
-            className={styles.loginButton}
-            onClick={handleLogin}
-          >
-            Login
-          </Button>
+        <div className={styles.logoSection}>
+          <div className={styles.title}>
+            Attend<span className={styles.titleHighlight}>Ease</span>
+          </div>
+          <Text className={styles.subtitle}>
+            Effortless Attendance, Enhanced Focus
+          </Text>
         </div>
         
-        {messageBar.visible && (
-          <MessageBar intent="error">
-            <MessageBarBody>{messageBar.message}</MessageBarBody>
-          </MessageBar>
-        )}
+        <div className={styles.buttonGroup}>
+          
+          {/* Button 1: Terms and Conditions */}
+          <Button 
+            className={styles.customBtn}
+            onClick={() => setIsTermsDialogOpen(true)}
+            icon={<div className={styles.btnIcon}><CheckboxIcon checked={acceptedTerms} /></div>}
+          >
+            Terms and Conditions
+          </Button>
+
+          {/* Button 2: Sign In (Text updated) */}
+          <Button 
+            className={styles.customBtn}
+            onClick={handleLogin}
+            icon={<div className={styles.btnIcon}><MicrosoftIcon /></div>}
+          >
+            Sign in with Microsoft
+          </Button>
+
+        </div>
         
-        <Checkbox 
-          label={(
-            <Text>
-              I accept the <a href="#" onClick={(e) => { e.preventDefault(); setIsTermsDialogOpen(true); }}>Terms of Service</a>
-            </Text>
-          )}
-          checked={acceptedTerms}
-          onChange={(e) => setAcceptedTerms(e.target.checked)}
-          className={styles.termsCheckbox}
-        />
+        {/* Error Message Bar */}
+        {messageBar.visible && (
+          <div style={{ marginTop: '15px' }}>
+             <MessageBar intent="error">
+                <MessageBarBody>{messageBar.message}</MessageBarBody>
+             </MessageBar>
+          </div>
+        )}
       </Card>
-      
+
+      <div className={styles.footer}>
+        © 2025 AttendEase. All Rights Reserved.
+      </div>
+
+      {/* Terms Dialog */}
       <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => setIsTermsDialogOpen(data.open)}>
         <DialogSurface>
           <DialogBody>
@@ -302,6 +337,7 @@ function Landing() {
                 onClick={() => {
                   setAcceptedTerms(true);
                   setIsTermsDialogOpen(false);
+                  setMessageBar({ visible: false, message: '' });
                 }}
               >
                 Accept
@@ -315,4 +351,3 @@ function Landing() {
 }
 
 export default Landing;
-
