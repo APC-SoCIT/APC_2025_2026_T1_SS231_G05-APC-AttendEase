@@ -223,6 +223,14 @@ function ProfessorDashboard({ userContext }) {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
+  
+  // Engagement tracking state
+  const [classEngagement, setClassEngagement] = useState({
+    average_score: 0,
+    engaged_count: 0,
+    present_count: 0,
+    disengaged_count: 0
+  });
 
   // Schedule state
   const [schedules, setSchedules] = useState([]);
@@ -367,6 +375,11 @@ function ProfessorDashboard({ userContext }) {
     setSystemMessages(messages);
   };
 
+  // Handle engagement updates from facial recognition
+  const handleEngagementUpdate = (engagementData) => {
+    setClassEngagement(engagementData);
+  };
+
   const handleExportReport = () => {
     const combinedData = [
       ...onsiteAttendance.map(s => ({ ...s, mode: 'Onsite' })),
@@ -427,6 +440,7 @@ function ProfessorDashboard({ userContext }) {
               setUnknownFaces(unknown);
             }}
             onMessagesUpdate={handleMessagesUpdate}
+            onEngagementUpdate={handleEngagementUpdate}
           />
         </Card>
 
@@ -460,6 +474,55 @@ function ProfessorDashboard({ userContext }) {
                   N/A
                 </Badge>
               </div>
+            </div>
+          </Card>
+
+          {/* Engagement Stats Card */}
+          <Card className={styles.statsCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text weight="semibold" size={400}>Class Engagement</Text>
+              <Badge 
+                appearance="filled" 
+                color={
+                  classEngagement.average_score >= 70 ? 'success' : 
+                  classEngagement.average_score >= 40 ? 'warning' : 
+                  'danger'
+                }
+                size="large"
+              >
+                {classEngagement.average_score?.toFixed(0) || 0}% Average
+              </Badge>
+            </div>
+            <div className={styles.statsGrid}>
+              <div className={styles.statItem} style={{ backgroundColor: '#dcfce7' }}>
+                <Text size={300} style={{ color: '#166534' }}>Engaged</Text>
+                <Badge appearance="filled" color="success" size="extra-large">
+                  {classEngagement.engaged_count}
+                </Badge>
+              </div>
+              <div className={styles.statItem} style={{ backgroundColor: '#fef3c7' }}>
+                <Text size={300} style={{ color: '#92400e' }}>Present</Text>
+                <Badge appearance="filled" color="warning" size="extra-large">
+                  {classEngagement.present_count}
+                </Badge>
+              </div>
+              <div className={styles.statItem} style={{ backgroundColor: '#fee2e2', gridColumn: 'span 2' }}>
+                <Text size={300} style={{ color: '#991b1b' }}>Disengaged</Text>
+                <Badge appearance="filled" color="danger" size="extra-large">
+                  {classEngagement.disengaged_count}
+                </Badge>
+              </div>
+            </div>
+            {onsiteAttendance.length === 0 && (
+              <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                Start the camera to track engagement
+              </Text>
+            )}
+            <Divider style={{ margin: '12px 0 8px 0' }} />
+            <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
+              <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
+              <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
+              <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed)</div>
             </div>
           </Card>
 
@@ -628,12 +691,32 @@ function ProfessorDashboard({ userContext }) {
                       </Text>
                     ) : (
                       onsiteAttendance.map((p, idx) => (
-                        <div key={idx} className={styles.participantItem}>
-                          <Text size={300} weight="semibold">{p.name}</Text>
-                          {p.detectedTime && (
-                            <Text size={200} style={{ color: '#666' }}>
-                              {p.detectedTime}
-                            </Text>
+                        <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <Text size={300} weight="semibold">{p.name}</Text>
+                            {p.detectedTime && (
+                              <Text size={200} style={{ color: '#666', display: 'block' }}>
+                                {p.detectedTime}
+                              </Text>
+                            )}
+                            {p.dominantEmotion && (
+                              <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
+                                {p.dominantEmotion}
+                              </Text>
+                            )}
+                          </div>
+                          {p.engagementLevel && (
+                            <Badge 
+                              appearance="filled"
+                              color={
+                                p.engagementLevel === 'engaged' ? 'success' : 
+                                p.engagementLevel === 'present' ? 'warning' : 
+                                'danger'
+                              }
+                              size="small"
+                            >
+                              {p.engagementScore?.toFixed(0) || 0}%
+                            </Badge>
                           )}
                         </div>
                       ))
