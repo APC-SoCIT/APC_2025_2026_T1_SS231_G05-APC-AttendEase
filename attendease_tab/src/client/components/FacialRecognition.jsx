@@ -74,10 +74,28 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center'
+  },
+  faceItemContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('4px')
+  },
+  badgeGroup: {
+    display: 'flex',
+    ...shorthands.gap('6px'),
+    alignItems: 'center'
+  },
+  engagementBadge: {
+    fontSize: '11px'
+  },
+  emotionText: {
+    fontSize: '11px',
+    color: '#666',
+    fontStyle: 'italic'
   }
 });
 
-function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
+function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementUpdate }) {
   const styles = useStyles();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -92,6 +110,12 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
   const [messages, setMessages] = useState([]);
   const [mediaStream, setMediaStream] = useState(null);
   const [serviceStatus, setServiceStatus] = useState('Checking...');
+  const [classEngagement, setClassEngagement] = useState({
+    average_score: 0,
+    engaged_count: 0,
+    partial_count: 0,
+    disengaged_count: 0
+  });
   
   const frameIntervalRef = useRef(null);
 
@@ -300,14 +324,29 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
         const faces = data.detected_faces || [];
         setDetectedFaces(faces);
         
-        // Update parent component with attendance data
+        // Update class engagement stats
+        if (data.class_engagement) {
+          setClassEngagement(data.class_engagement);
+          // Notify parent component of engagement changes
+          if (onEngagementUpdate) {
+            onEngagementUpdate(data.class_engagement);
+          }
+        }
+        
+        // Update parent component with attendance data (including engagement)
         const now = new Date().toLocaleTimeString();
         const attendanceData = faces.map(face => ({
           name: face.name,
           confidence: face.confidence,
           detectedTime: now,
           status: face.is_confirmed ? 'Present' : 'Tentative',
-          isConfirmed: face.is_confirmed
+          isConfirmed: face.is_confirmed,
+          // Engagement data
+          engagementScore: face.engagement_score,
+          engagementLevel: face.engagement_level,
+          isSleeping: face.is_sleeping,
+          isSpeaking: face.is_speaking,
+          handRaised: face.hand_raised
         }));
 
         onAttendanceUpdate(attendanceData);
@@ -322,6 +361,16 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
     }
   };
 
+  // Helper function to get engagement color
+  const getEngagementColor = (level) => {
+    switch (level) {
+      case 'engaged': return '#22c55e'; // Green
+      case 'present': return '#f59e0b'; // Amber/Orange (attentive)
+      case 'disengaged': return '#ef4444'; // Red
+      default: return '#6b7280'; // Gray
+    }
+  };
+
   const drawBoundingBoxes = (faces) => {
     if (!overlayRef.current || !cameraActiveRef.current) return;
     
@@ -332,22 +381,50 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
       if (face.location) {
         const { top, right, bottom, left } = face.location;
         
-        let color = face.name !== 'Unknown' ? 
-          (face.is_confirmed ? '#00ff00' : '#ffff00') : '#ff0000';
+        // Use engagement color for the bounding box
+        const engagementColor = getEngagementColor(face.engagement_level);
+        let borderColor = face.name !== 'Unknown' ? 
+          (face.is_confirmed ? engagementColor : '#ffff00') : '#ff0000';
         
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = face.is_confirmed ? 3 : 2;
         ctx.strokeRect(left, top, right - left, bottom - top);
         
-        const label = `${face.name}${face.confidence ? ` (${face.confidence.toFixed(2)})` : ''}`;
-        ctx.font = '16px Arial';
-        const textWidth = ctx.measureText(label).width;
+        // Draw name label at top
+        const nameLabel = `${face.name}${face.confidence ? ` (${face.confidence.toFixed(2)})` : ''}`;
+        ctx.font = '14px Arial';
+        const nameLabelWidth = ctx.measureText(nameLabel).width;
         
-        ctx.fillStyle = color;
-        ctx.fillRect(left, top - 20, textWidth + 10, 20);
+        ctx.fillStyle = borderColor;
+        ctx.fillRect(left, top - 20, nameLabelWidth + 10, 20);
         
-        ctx.fillStyle = '#000';
-        ctx.fillText(label, left + 5, top - 5);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(nameLabel, left + 5, top - 5);
+        
+        // Draw engagement indicator at bottom (only for confirmed faces)
+        if (face.is_confirmed) {
+          let engagementLabel;
+          if (face.is_sleeping) {
+            engagementLabel = 'Disengaged (Sleeping)';
+          } else if (face.is_speaking && face.hand_raised) {
+            engagementLabel = 'Engaged (Speaking + Hand)';
+          } else if (face.is_speaking) {
+            engagementLabel = 'Engaged (Speaking)';
+          } else if (face.hand_raised) {
+            engagementLabel = 'Engaged (Hand Raised)';
+          } else {
+            engagementLabel = 'Present';
+          }
+          
+          ctx.font = '12px Arial';
+          const engagementLabelWidth = ctx.measureText(engagementLabel).width;
+          
+          ctx.fillStyle = engagementColor;
+          ctx.fillRect(left, bottom, engagementLabelWidth + 10, 18);
+          
+          ctx.fillStyle = '#fff';
+          ctx.fillText(engagementLabel, left + 5, bottom + 13);
+        }
       }
     });
   };
@@ -407,8 +484,26 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
       </div>
 
       <div>
-        <Text weight="semibold">Detected Faces: </Text>
-        <Badge appearance="filled" color="brand">{detectedFaces.length}</Badge>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+          <div>
+            <Text weight="semibold">Detected Faces: </Text>
+            <Badge appearance="filled" color="brand">{detectedFaces.length}</Badge>
+          </div>
+          {detectedFaces.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Text weight="semibold" size={200}>Class Engagement: </Text>
+              <Badge 
+                appearance="filled" 
+                color={classEngagement.average_score >= 70 ? 'success' : classEngagement.average_score >= 40 ? 'warning' : 'danger'}
+              >
+                {classEngagement.average_score?.toFixed(0) || 0}%
+              </Badge>
+              <Text size={100} style={{ color: '#666' }}>
+                ({classEngagement.engaged_count} engaged, {classEngagement.present_count} present, {classEngagement.disengaged_count} disengaged)
+              </Text>
+            </div>
+          )}
+        </div>
         
         <div className={styles.facesList}>
           {detectedFaces.length === 0 ? (
@@ -416,13 +511,36 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate }) {
           ) : (
             detectedFaces.map((face, index) => (
               <div key={index} className={styles.faceItem}>
-                <div>
-                  <Text weight="semibold">{face.name}</Text>
-                  <Text size={200}> (Confidence: {face.confidence?.toFixed(3)})</Text>
+                <div className={styles.faceItemContent}>
+                  <div>
+                    <Text weight="semibold">{face.name}</Text>
+                    <Text size={200}> (Confidence: {face.confidence?.toFixed(3)})</Text>
+                  </div>
+                  <div style={{ display: 'flex', gap: '5px', fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
+                    {face.is_sleeping && <span>Disengaged (Sleeping)</span>}
+                    {!face.is_sleeping && face.is_speaking && <span>Engaged (Speaking)</span>}
+                    {!face.is_sleeping && face.hand_raised && <span>Engaged (Hand Raised)</span>}
+                    {!face.is_sleeping && !face.is_speaking && !face.hand_raised && <span>Present</span>}
+                  </div>
                 </div>
-                <Badge color={face.is_confirmed ? 'success' : 'warning'}>
-                  {face.is_confirmed ? 'Confirmed' : 'Tentative'}
-                </Badge>
+                <div className={styles.badgeGroup}>
+                  {/* Engagement Badge */}
+                  <Badge 
+                    appearance="filled"
+                    color={
+                      face.engagement_level === 'engaged' ? 'success' : 
+                      face.engagement_level === 'present' ? 'warning' : 
+                      'danger'
+                    }
+                    className={styles.engagementBadge}
+                  >
+                    {face.engagement_score?.toFixed(0) || 0}%
+                  </Badge>
+                  {/* Confirmation Badge */}
+                  <Badge color={face.is_confirmed ? 'success' : 'warning'}>
+                    {face.is_confirmed ? 'Confirmed' : 'Tentative'}
+                  </Badge>
+                </div>
               </div>
             ))
           )}
