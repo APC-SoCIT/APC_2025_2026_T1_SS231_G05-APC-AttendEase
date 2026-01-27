@@ -143,47 +143,53 @@ const HARDCODED_USERS = {
 
 function StudentPortal() {
   const styles = useStyles();
-  const [userEmail, setUserEmail] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   
-  // Form state for new users
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  // Form state
+  const [name, setName] = useState('');
   const [studentId, setStudentId] = useState('');
   const [section, setSection] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
-    // Get logged-in user email from localStorage
-    const email = localStorage.getItem('userEmail');
-    setUserEmail(email);
+    loadUserProfile();
+  }, []);
 
+  const loadUserProfile = () => {
+    setIsLoading(true);
+    
+    // Get email from URL params or session
+    const urlParams = new URLSearchParams(window.location.search);
+    const email = urlParams.get('email') || localStorage.getItem('userEmail');
+    
     if (!email) {
+      setError('No user email found');
       setIsLoading(false);
       return;
     }
 
-    // Initialize user profiles object if it doesn't exist
-    let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
+    setUserEmail(email);
 
-    // Check if hardcoded user
+    // Check if user is hardcoded
     if (HARDCODED_USERS[email]) {
       setUserData(HARDCODED_USERS[email]);
-    } 
-    // Check if user has saved profile
-    else if (userProfiles[email]) {
-      setUserData(userProfiles[email]);
-    }
-    // New user - no profile yet
-    else {
-      setUserData(null);
+      setIsLoading(false);
+      return;
     }
 
+    // Load from localStorage
+    const storedData = localStorage.getItem(`userProfile_${email}`);
+    if (storedData) {
+      setUserData(JSON.parse(storedData));
+    }
+    
     setIsLoading(false);
-  }, []);
+  };
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -199,30 +205,23 @@ function StudentPortal() {
   };
 
   const handleCompleteProfile = () => {
-    if (!firstName || !lastName || !studentId || !section) {
+    if (!name || !studentId) {
       alert('Please fill in all required fields');
       return;
     }
 
-    const fullName = `${firstName}${lastName ? ' ' + lastName : ''}`;
-    const newProfile = {
-      name: fullName,
-      firstName,
-      lastName,
+    const profileData = {
+      name,
       studentId,
       section,
-      photoPath: photoPreview || null,
-      isHardcoded: false
+      photoPath: photoPreview
     };
 
     // Save to localStorage
-    let userProfiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
-    userProfiles[userEmail] = newProfile;
-    localStorage.setItem('userProfiles', JSON.stringify(userProfiles));
-
-    // Update state
-    setUserData(newProfile);
+    localStorage.setItem(`userProfile_${userEmail}`, JSON.stringify(profileData));
+    setUserData(profileData);
     setIsEditMode(false);
+    alert('Profile updated successfully!');
   };
 
   if (isLoading) {
@@ -266,21 +265,11 @@ function StudentPortal() {
 
             <div className={styles.infoSection}>
               <div>
-                <label className={styles.formLabel}>First Name *</label>
+                <label className={styles.formLabel}>Full Name *</label>
                 <Input 
-                  value={firstName} 
-                  onChange={(e) => setFirstName(e.target.value)} 
-                  placeholder="Enter first name"
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div>
-                <label className={styles.formLabel}>Last Name *</label>
-                <Input 
-                  value={lastName} 
-                  onChange={(e) => setLastName(e.target.value)} 
-                  placeholder="Enter last name"
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
+                  placeholder="Enter full name"
                   className={styles.formInput}
                 />
               </div>
@@ -296,7 +285,7 @@ function StudentPortal() {
               </div>
 
               <div>
-                <label className={styles.formLabel}>Section *</label>
+                <label className={styles.formLabel}>Section</label>
                 <Input 
                   value={section} 
                   onChange={(e) => setSection(e.target.value)} 
@@ -389,19 +378,10 @@ function StudentPortal() {
         {isEditMode && (
           <div className={styles.infoSection} style={{ marginTop: '20px' }}>
             <div className={styles.infoRow}>
-              <Text className={styles.label}>First Name:</Text>
+              <Text className={styles.label}>Full Name:</Text>
               <Input 
-                value={firstName || userData.firstName || ''} 
-                onChange={(e) => setFirstName(e.target.value)} 
-                className={styles.value} 
-              />
-            </div>
-
-            <div className={styles.infoRow}>
-              <Text className={styles.label}>Last Name:</Text>
-              <Input 
-                value={lastName || userData.lastName || ''} 
-                onChange={(e) => setLastName(e.target.value)} 
+                value={name || userData.name || ''} 
+                onChange={(e) => setName(e.target.value)} 
                 className={styles.value} 
               />
             </div>

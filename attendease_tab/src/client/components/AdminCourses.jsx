@@ -94,19 +94,11 @@ const useStyles = makeStyles({
   }
 });
 
-const MOCK_COURSES = [
-  { id: 1, code: 'SS231', name: 'Software Engineering 1', section: 'SS231', schedule: 'MW 10:00-12:00', room: 'R405', professor: 'Christian Luis Esguerra', department: 'Engineering' },
-  { id: 2, code: 'CS101', name: 'Introduction to Computing', section: 'CS101-A', schedule: 'TTh 08:00-10:00', room: 'LAB1', professor: 'Jane Doe', department: 'Engineering' },
-  { id: 3, code: 'IT101', name: 'Information Technology Fundamentals', section: 'IT101-B', schedule: 'Fri 13:00-16:00', room: 'R302', professor: 'John Smith', department: 'Engineering' },
-  { id: 4, code: 'PHY101', name: 'General Physics', section: 'PHY101-A', schedule: 'TTh 08:00-10:00', room: 'LAB2', professor: 'Albert Einstein', department: 'Physics' },
-  { id: 5, code: 'BUS101', name: 'Business Management', section: 'BUS101-B', schedule: 'Fri 13:00-16:00', room: 'R305', professor: 'Warren Buffet', department: 'Business' },
-];
-
 export default function AdminCourses() {
   const styles = useStyles();
   const navigate = useNavigate();
   
-  const [courses, setCourses] = React.useState(MOCK_COURSES);
+  const [courses, setCourses] = React.useState([]);
   const [searchText, setSearchText] = React.useState('');
   const [filterDepartment, setFilterDepartment] = React.useState('All');
   const [filterSection, setFilterSection] = React.useState('All');
