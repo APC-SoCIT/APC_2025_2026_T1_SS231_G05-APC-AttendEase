@@ -14,6 +14,9 @@ import {
   DialogContent,
   MessageBar,
   MessageBarBody,
+  Input,
+  Label,
+  Tooltip,
 } from '@fluentui/react-components';
 
 import backgroundUrl from '../../assets/bg_img.jpg'; 
@@ -116,6 +119,40 @@ const useStyles = makeStyles({
     maxHeight: '400px',
     overflowY: 'auto',
     ...shorthands.padding('20px')
+  },
+  loginSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('12px'),
+    width: '100%',
+    marginTop: '20px',
+    textAlign: 'left'
+  },
+  inputLabel: {
+    fontWeight: '600',
+    color: '#323130',
+    fontSize: '14px'
+  },
+  inputField: {
+    width: '100%'
+  },
+  loginButton: {
+    marginTop: '15px',
+    width: '100%',
+    height: '44px',
+    backgroundColor: '#2E3A6E', // Deep Blue
+    color: '#ffffff',
+    borderRadius: '6px',
+    fontSize: '15px',
+    fontWeight: '600',
+    '&:hover': {
+      backgroundColor: '#1a264a',
+    },
+  },
+  backButton: {
+    width: '100%',
+    marginTop: '5px',
+    color: '#605e5c'
   }
 });
 
@@ -126,6 +163,9 @@ function Landing() {
   const [acceptedTerms, setAcceptedTerms] = React.useState(false);
   const [isTermsDialogOpen, setIsTermsDialogOpen] = React.useState(false);
   const [messageBar, setMessageBar] = React.useState({ visible: false, message: '' });
+  const [showLogin, setShowLogin] = React.useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
 
   // Custom Icons
   const MicrosoftIcon = () => (
@@ -153,25 +193,56 @@ function Landing() {
     </div>
   );
 
+  const handleSignInClick = () => {
+    if (!acceptedTerms) {
+      setMessageBar({ visible: true, message: 'Please accept the terms of service.' });
+      return;
+    }
+    setMessageBar({ visible: false, message: '' });
+    setShowLogin(true);
+  };
+
   const handleLogin = () => {
-    // 1. Validation: Terms must be accepted
     if (!acceptedTerms) {
       setMessageBar({ visible: true, message: 'Please accept the terms of service.' });
       return;
     }
 
-    // 2. Simulate Microsoft OAuth Login
-    const simulatedRole = 'student'; 
-    const simulatedEmail = 'test@student.apc.edu.ph';
+    // Simple credential validation
+    const validCredentials = [
+      { email: 'test@student.apc.edu.ph', password: 'test123', route: '/student' },
+      { email: 'test@apc.edu.ph', password: 'test123', route: '/professor' }
+    ];
 
-    localStorage.setItem('userEmail', simulatedEmail);
-    setMessageBar({ visible: false, message: '' });
+    // Check if credentials match
+    const matchedCredential = validCredentials.find(
+      cred => cred.email === email && cred.password === password
+    );
 
-    if (simulatedRole === 'student') {
-        navigate('/student');
-    } else {
-        navigate('/professor');
+    if (matchedCredential) {
+      setMessageBar({ visible: false, message: '' });
+      localStorage.setItem('userEmail', email);
+      navigate(matchedCredential.route);
+      return;
     }
+
+    // Check email domain and password for general pattern matching
+    if (password === 'test123') {
+      if (email.endsWith('@student.apc.edu.ph')) {
+        setMessageBar({ visible: false, message: '' });
+        localStorage.setItem('userEmail', email);
+        navigate('/student');
+        return;
+      } else if (email.endsWith('@apc.edu.ph')) {
+        setMessageBar({ visible: false, message: '' });
+        localStorage.setItem('userEmail', email);
+        navigate('/professor');
+        return;
+      }
+    }
+
+    // Invalid credentials
+    setMessageBar({ visible: true, message: 'Invalid email or password.' });
   };
 
   return (
@@ -191,31 +262,74 @@ function Landing() {
           </Text>
         </div>
         
-        <div className={styles.buttonGroup}>
-          
-          {/* Button 1: Sign In (Text updated) */}
-          <Button 
-            className={styles.customBtn}
-            onClick={handleLogin}
-            icon={<div className={styles.btnIcon}><MicrosoftIcon /></div>}
-          >
-            Sign in with APC Email
-          </Button>
+        {!showLogin ? (
+          <div className={styles.buttonGroup}>
+            
+            {/* Button 1: Sign In (Text updated) */}
+            <Tooltip content="Please ensure you have read, understood, and agreed to the terms and conditions before signing in." relationship="description" positioning="after">
+              <Button 
+                className={styles.customBtn}
+                onClick={handleSignInClick}
+                icon={<div className={styles.btnIcon}><MicrosoftIcon /></div>}
+              >
+                Sign in with APC Email
+              </Button>
+            </Tooltip>
 
-          {/* Button 2: Terms and Conditions */}
-          <Button 
-            className={styles.customBtn}
-            onClick={() => setIsTermsDialogOpen(true)}
-            icon={<div className={styles.btnIcon}><CheckboxIcon checked={acceptedTerms} /></div>}
-          >
-            Terms and Conditions
-          </Button>
+            {/* Button 2: Terms and Conditions */}
+            <Button 
+              className={styles.customBtn}
+              onClick={() => setIsTermsDialogOpen(true)}
+              icon={<div className={styles.btnIcon}><CheckboxIcon checked={acceptedTerms} /></div>}
+            >
+              Terms and Conditions
+            </Button>
 
-        </div>
+          </div>
+        ) : (
+          <div className={styles.loginSection}>
+            <Label htmlFor="email-input" className={styles.inputLabel}>Email Address</Label>
+            <Input 
+              id="email-input" 
+              size="large"
+              value={email} 
+              onChange={(e, data) => setEmail(data.value)} 
+              placeholder="name@student.apc.edu.ph" 
+              className={styles.inputField}
+            />
+            
+            <Label htmlFor="password-input" className={styles.inputLabel}>Password</Label>
+            <Input 
+              id="password-input" 
+              size="large"
+              type="password" 
+              value={password} 
+              onChange={(e, data) => setPassword(data.value)} 
+              placeholder="Enter your password" 
+              className={styles.inputField}
+            />
+            
+            <Button 
+              appearance="primary" 
+              size="large"
+              className={styles.loginButton}
+              onClick={handleLogin}
+            >
+              Login
+            </Button>
+            <Button
+              appearance="subtle"
+              onClick={() => setShowLogin(false)}
+              className={styles.backButton}
+            >
+              Back
+            </Button>
+          </div>
+        )}
         
         {/* Error Message Bar */}
         {messageBar.visible && (
-          <div style={{ marginTop: '15px' }}>
+          <div style={{ marginTop: '15px', width: '100%' }}>
              <MessageBar intent="error">
                 <MessageBarBody>{messageBar.message}</MessageBarBody>
              </MessageBar>
