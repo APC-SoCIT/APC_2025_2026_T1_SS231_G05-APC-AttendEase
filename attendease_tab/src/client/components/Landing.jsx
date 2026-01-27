@@ -193,22 +193,22 @@ function Landing() {
         
         <div className={styles.buttonGroup}>
           
-          {/* Button 1: Terms and Conditions */}
+          {/* Button 1: Sign In (Text updated) */}
+          <Button 
+            className={styles.customBtn}
+            onClick={handleLogin}
+            icon={<div className={styles.btnIcon}><MicrosoftIcon /></div>}
+          >
+            Sign in with APC Email
+          </Button>
+
+          {/* Button 2: Terms and Conditions */}
           <Button 
             className={styles.customBtn}
             onClick={() => setIsTermsDialogOpen(true)}
             icon={<div className={styles.btnIcon}><CheckboxIcon checked={acceptedTerms} /></div>}
           >
             Terms and Conditions
-          </Button>
-
-          {/* Button 2: Sign In (Text updated) */}
-          <Button 
-            className={styles.customBtn}
-            onClick={handleLogin}
-            icon={<div className={styles.btnIcon}><MicrosoftIcon /></div>}
-          >
-            Sign in with Microsoft
           </Button>
 
         </div>
