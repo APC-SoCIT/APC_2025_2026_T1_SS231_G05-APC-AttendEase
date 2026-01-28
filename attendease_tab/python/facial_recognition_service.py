@@ -28,9 +28,11 @@ hand_model_path = os.path.join(MODEL_PATH, 'models', 'hand_landmarker.task')
 face_mesh_detector = None
 hand_detector = None
 
+ENGAGEMENT_ENABLED = True  # Will be set to False if models fail to load
+
 if os.path.exists(face_model_path) and os.path.exists(hand_model_path):
     try:
-        # Initialize detectors
+        # Initialize Face Landmarker
         face_options = FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=face_model_path),
             running_mode=VisionRunningMode.IMAGE,
@@ -40,7 +42,14 @@ if os.path.exists(face_model_path) and os.path.exists(hand_model_path):
             min_tracking_confidence=0.3
         )
         face_mesh_detector = FaceLandmarker.create_from_options(face_options)
+        print("[OK] MediaPipe Face Landmarker initialized successfully")
+    except Exception as e:
+        print(f"[ERROR] Error initializing Face Landmarker: {e}")
+        face_mesh_detector = None
+        ENGAGEMENT_ENABLED = False
 
+    try:
+        # Initialize Hand Landmarker
         hand_options = HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=hand_model_path),
             running_mode=VisionRunningMode.IMAGE,
@@ -50,10 +59,20 @@ if os.path.exists(face_model_path) and os.path.exists(hand_model_path):
             min_tracking_confidence=0.3
         )
         hand_detector = HandLandmarker.create_from_options(hand_options)
+        print("[OK] MediaPipe Hand Landmarker initialized successfully")
     except Exception as e:
-        print(f"Error initializing MediaPipe Tasks: {e}")
+        print(f"[ERROR] Error initializing Hand Landmarker: {e}")
+        hand_detector = None
+        # Don't disable engagement if only hand detection failed - face detection is more important
+    
+    if face_mesh_detector:
+        print("[OK] Engagement detection (eyes/mouth) ENABLED")
+    else:
+        ENGAGEMENT_ENABLED = False
 else:
-    print("Warning: MediaPipe models not found. Behavioral engagement disabled.")
+    print("[WARN] Warning: MediaPipe models not found. Behavioral engagement disabled.")
+    print(f"   Looking for: {face_model_path}")
+    print(f"   Looking for: {hand_model_path}")
     ENGAGEMENT_ENABLED = False
 
 app = Flask(__name__)
@@ -86,11 +105,11 @@ RAPID_MOVEMENT_THRESHOLD = 60
 # Engagement Configuration (Behavioral) - Adjusted for 10 FPS
 ENGAGEMENT_ANALYSIS_INTERVAL = 1  # Analyze every frame for smooth behavior detection
 ENGAGEMENT_HISTORY_SIZE = 30
-EAR_THRESHOLD = 0.22        # Eye Aspect Ratio threshold (closing eyes) - slightly lenient
+EAR_THRESHOLD = 0.20        # Eye Aspect Ratio threshold (closing eyes) - lowered for testing
 MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
-SLEEP_FRAMES_THRESHOLD = 15 # ~1.5 seconds at 10 FPS (was 45 for 30 FPS)
+SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 seconds)
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
-ENGAGEMENT_ENABLED = True
+# Note: ENGAGEMENT_ENABLED is set at the top during MediaPipe initialization
 
 
 def calculate_landmark_distance(p1, p2):
@@ -222,8 +241,15 @@ class FaceTracker:
                 self.sleep_counter += 1
             else:
                 self.sleep_counter = max(0, self.sleep_counter - 1)
-                
+            
+            was_sleeping = self.is_sleeping
             self.is_sleeping = self.sleep_counter > SLEEP_FRAMES_THRESHOLD
+            
+            # Log state changes
+            if self.is_sleeping and not was_sleeping:
+                print(f"[{self.name}] SLEEPING detected (eyes closed for {self.sleep_counter} frames)")
+            elif not self.is_sleeping and was_sleeping:
+                print(f"[{self.name}] AWAKE (eyes opened)")
             
         # Update MAR history
         if mar is not None:
@@ -294,10 +320,12 @@ def analyze_face_behavior(face_img):
                 
                 mar = calculate_mar(landmarks)
                 
-                # Debug logging every ~10 seconds (100 calls at 10 FPS)
+                # Debug logging every frame during testing
                 _behavior_debug_counter += 1
-                if _behavior_debug_counter % 100 == 1:
-                    print(f"[Engagement] EAR={ear:.3f} (sleeping<{EAR_THRESHOLD}), MAR={mar:.3f} (speaking>{MAR_THRESHOLD})")
+                eyes_status = "CLOSED" if ear < EAR_THRESHOLD else "open"
+                mouth_status = "OPEN" if mar > MAR_THRESHOLD else "closed"
+                if _behavior_debug_counter % 1 == 0:  # Log every frame for debugging
+                    print(f"[Engagement] EAR={ear:.3f} ({eyes_status}), MAR={mar:.3f} ({mouth_status})")
                 
                 return ear, mar
             
@@ -854,6 +882,34 @@ def process_frame():
     except Exception as e:
         print(f"Frame processing error: {e}")
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
+
+
+@app.route('/api/debug/status', methods=['GET'])
+def debug_status():
+    """Return debug information about the service."""
+    return jsonify({
+        "status": "success",
+        "engagement_enabled": ENGAGEMENT_ENABLED,
+        "face_mesh_detector": "loaded" if face_mesh_detector else "not loaded",
+        "hand_detector": "loaded" if hand_detector else "not loaded",
+        "camera_on": camera_on,
+        "total_faces_tracked": len(face_tracker),
+        "process_frame_count": process_frame_count,
+        "ear_threshold": EAR_THRESHOLD,
+        "sleep_frames_threshold": SLEEP_FRAMES_THRESHOLD,
+        "tracked_faces": {
+            str(tracker_id): {
+                "name": tracker.name,
+                "is_sleeping": tracker.is_sleeping,
+                "is_speaking": tracker.is_speaking,
+                "sleep_counter": tracker.sleep_counter,
+                "speak_counter": tracker.speak_counter,
+                "ear_history": tracker.ear_history[-5:] if tracker.ear_history else [],
+                "mar_history": tracker.mar_history[-5:] if tracker.mar_history else []
+            }
+            for tracker_id, tracker in face_tracker.items()
+        }
+    })
 
 
 if __name__ == '__main__':
