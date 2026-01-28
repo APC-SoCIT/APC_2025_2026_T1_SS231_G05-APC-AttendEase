@@ -12,7 +12,6 @@ import {
   MessageBar,
   MessageBarBody,
   Dialog,
-  DialogTrigger,
   DialogSurface,
   DialogTitle,
   DialogBody,

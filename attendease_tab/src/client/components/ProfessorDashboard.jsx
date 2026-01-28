@@ -230,6 +230,7 @@ function ProfessorDashboard({ userContext }) {
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
+  const [debugMessages, setDebugMessages] = useState([]);
   
   // Engagement tracking state
   const [classEngagement, setClassEngagement] = useState({
@@ -237,6 +238,14 @@ function ProfessorDashboard({ userContext }) {
     engaged_count: 0,
     present_count: 0,
     disengaged_count: 0
+  });
+  
+  // Debug status
+  const [debugStatus, setDebugStatus] = useState({
+    engagement_enabled: false,
+    face_mesh_detector: 'unknown',
+    hand_detector: 'unknown',
+    tracked_faces: {}
   });
 
   // Schedule state
@@ -386,6 +395,42 @@ function ProfessorDashboard({ userContext }) {
   const handleEngagementUpdate = (engagementData) => {
     setClassEngagement(engagementData);
   };
+
+  // Fetch debug status periodically
+  useEffect(() => {
+    const fetchDebugStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/debug/status');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          setDebugStatus(data);
+          
+          // Extract debug messages from tracked faces
+          const messages = [];
+          messages.push(`Engagement Enabled: ${data.engagement_enabled}`);
+          messages.push(`Face Mesh: ${data.face_mesh_detector}`);
+          messages.push(`Hand Detector: ${data.hand_detector}`);
+          messages.push(`Tracked Faces: ${data.total_faces_tracked}`);
+          
+          Object.entries(data.tracked_faces).forEach(([id, tracker]) => {
+            if (tracker.ear_history.length > 0) {
+              const lastEAR = tracker.ear_history[tracker.ear_history.length - 1];
+              messages.push(`${tracker.name} (ID:${id}): EAR=${lastEAR.toFixed(3)}, Sleeping=${tracker.is_sleeping}`);
+            }
+          });
+          
+          setDebugMessages(messages);
+        }
+      } catch (error) {
+        setDebugMessages([`Debug Error: ${error.message}`]);
+      }
+    };
+
+    const interval = setInterval(fetchDebugStatus, 1000); // Update every second
+    fetchDebugStatus(); // Initial fetch
+    return () => clearInterval(interval);
+  }, []);
 
   const handleExportReport = () => {
     const combinedData = [
@@ -554,7 +599,23 @@ function ProfessorDashboard({ userContext }) {
             <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
               <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
               <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
-              <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed)</div>
+              <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
+            </div>
+          </Card>
+
+          {/* Debug Messages Panel */}
+          <Card className={styles.statsCard}>
+            <Text weight="semibold" size={400}>Debug Information</Text>
+            <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
+              {debugMessages.length === 0 ? (
+                <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
+              ) : (
+                debugMessages.map((msg, idx) => (
+                  <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
+                    {msg}
+                  </div>
+                ))
+              )}
             </div>
           </Card>
 
