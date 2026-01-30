@@ -59,18 +59,24 @@ const useStyles = makeStyles({
   },
   layout: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 1fr',
+    gridTemplateColumns: '1fr 1fr',
     ...shorthands.gap('24px'),
     alignItems: 'flex-start',
     '@media (max-width: 1200px)': {
       gridTemplateColumns: '1fr'
     }
   },
+  leftPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('20px')
+  },
   cameraCard: {
     ...shorthands.padding('24px'),
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('12px')
+    ...shorthands.gap('12px'),
+    width: '100%'
   },
   cameraHeader: {
     display: 'flex',
@@ -222,7 +228,25 @@ function ProfessorDashboard({ userContext }) {
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
+  const [debugMessages, setDebugMessages] = useState([]);
+  
+  // Engagement tracking state
+  const [classEngagement, setClassEngagement] = useState({
+    average_score: 0,
+    engaged_count: 0,
+    present_count: 0,
+    disengaged_count: 0
+  });
+  
+  // Debug status
+  const [debugStatus, setDebugStatus] = useState({
+    engagement_enabled: false,
+    face_mesh_detector: 'unknown',
+    hand_detector: 'unknown',
+    tracked_faces: {}
+  });
 
   // Schedule state
   const [schedules, setSchedules] = useState([]);
@@ -367,6 +391,47 @@ function ProfessorDashboard({ userContext }) {
     setSystemMessages(messages);
   };
 
+  // Handle engagement updates from facial recognition
+  const handleEngagementUpdate = (engagementData) => {
+    setClassEngagement(engagementData);
+  };
+
+  // Fetch debug status periodically
+  useEffect(() => {
+    const fetchDebugStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/debug/status');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          setDebugStatus(data);
+          
+          // Extract debug messages from tracked faces
+          const messages = [];
+          messages.push(`Engagement Enabled: ${data.engagement_enabled}`);
+          messages.push(`Face Mesh: ${data.face_mesh_detector}`);
+          messages.push(`Hand Detector: ${data.hand_detector}`);
+          messages.push(`Tracked Faces: ${data.total_faces_tracked}`);
+          
+          Object.entries(data.tracked_faces).forEach(([id, tracker]) => {
+            if (tracker.ear_history.length > 0) {
+              const lastEAR = tracker.ear_history[tracker.ear_history.length - 1];
+              messages.push(`${tracker.name} (ID:${id}): EAR=${lastEAR.toFixed(3)}, Sleeping=${tracker.is_sleeping}`);
+            }
+          });
+          
+          setDebugMessages(messages);
+        }
+      } catch (error) {
+        setDebugMessages([`Debug Error: ${error.message}`]);
+      }
+    };
+
+    const interval = setInterval(fetchDebugStatus, 1000); // Update every second
+    fetchDebugStatus(); // Initial fetch
+    return () => clearInterval(interval);
+  }, []);
+
   const handleExportReport = () => {
     const combinedData = [
       ...onsiteAttendance.map(s => ({ ...s, mode: 'Onsite' })),
@@ -414,23 +479,49 @@ function ProfessorDashboard({ userContext }) {
       </div>
 
       <div className={styles.layout}>
-        {/* Left: Camera Feed */}
-        <Card className={styles.cameraCard}>
-          <div className={styles.cameraHeader}>
-            <Text weight="semibold" size={500}>Onsite Camera Feed</Text>
-          </div>
-          <FacialRecognition
-            onAttendanceUpdate={(records) => {
-              const confirmed = records.filter(r => r.isConfirmed && r.name !== 'Unknown');
-              const unknown = records.filter(r => r.name === 'Unknown' || !r.isConfirmed);
-              setOnsiteAttendance(confirmed);
-              setUnknownFaces(unknown);
-            }}
-            onMessagesUpdate={handleMessagesUpdate}
-          />
-        </Card>
+        {/* Left: Camera Feed and System Messages */}
+        <div className={styles.leftPanel}>
+          <Card className={styles.cameraCard}>
+            <div className={styles.cameraHeader}>
+              <Text weight="semibold" size={500}>Onsite Camera Feed (ENG. TEST)</Text>
+            </div>
+            <FacialRecognition
+              onAttendanceUpdate={(records) => {
+                const confirmed = records.filter(r => r.isConfirmed && r.name !== 'Unknown');
+                const unknown = records.filter(r => r.name === 'Unknown' || !r.isConfirmed);
+                setOnsiteAttendance(confirmed);
+                setUnknownFaces(unknown);
+              }}
+              onMessagesUpdate={handleMessagesUpdate}
+              onEngagementUpdate={handleEngagementUpdate}
+            />
+          </Card>
 
-        {/* Right: Stats, Participants, Messages */}
+          {/* System Messages */}
+          <div className={styles.messagesCard}>
+            <Text weight="semibold" size={300} style={{ marginBottom: '8px', display: 'block' }}>
+              System Messages
+            </Text>
+            {systemMessages.length === 0 ? (
+              <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
+            ) : (
+              systemMessages.slice(-5).map((msg, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
+                    fontSize: '12px',
+                    marginBottom: '4px'
+                  }}
+                >
+                  [{msg.timestamp}] {msg.message}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Right: Stats, Participants, Export, Schedule */}
         <div className={styles.rightPanel}>
           {/* Stats Card */}
           <Card className={styles.statsCard}>
@@ -463,146 +554,69 @@ function ProfessorDashboard({ userContext }) {
             </div>
           </Card>
 
-          {/* Class Schedule */}
-          <Card className={styles.scheduleCard}>
-            <div className={styles.scheduleHeader}>
-              <Text weight="semibold" size={400}>Class Schedule</Text>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {currentClass && (
-                  <Badge appearance="filled" color="success">
-                    In Session
-                  </Badge>
-                )}
-                <Button
-                  appearance="subtle"
-                  icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
-                  onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
-                  size="small"
-                  title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
-                >
-                  {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
-                </Button>
-                <Button
-                  appearance="primary"
-                  icon={<Add20Regular />}
-                  onClick={handleOpenCreateModal}
-                  size="small"
-                >
-                  Add Class
-                </Button>
+          {/* Engagement Stats Card */}
+          <Card className={styles.statsCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text weight="semibold" size={400}>Class Engagement</Text>
+              <Badge 
+                appearance="filled" 
+                color={
+                  classEngagement.average_score >= 70 ? 'success' : 
+                  classEngagement.average_score >= 40 ? 'warning' : 
+                  'danger'
+                }
+                size="large"
+              >
+                {classEngagement.average_score?.toFixed(0) || 0}% Average
+              </Badge>
+            </div>
+            <div className={styles.statsGrid}>
+              <div className={styles.statItem} style={{ backgroundColor: '#dcfce7' }}>
+                <Text size={300} style={{ color: '#166534' }}>Engaged</Text>
+                <Badge appearance="filled" color="success" size="extra-large">
+                  {classEngagement.engaged_count}
+                </Badge>
+              </div>
+              <div className={styles.statItem} style={{ backgroundColor: '#fef3c7' }}>
+                <Text size={300} style={{ color: '#92400e' }}>Present</Text>
+                <Badge appearance="filled" color="warning" size="extra-large">
+                  {classEngagement.present_count}
+                </Badge>
+              </div>
+              <div className={styles.statItem} style={{ backgroundColor: '#fee2e2', gridColumn: 'span 2' }}>
+                <Text size={300} style={{ color: '#991b1b' }}>Disengaged</Text>
+                <Badge appearance="filled" color="danger" size="extra-large">
+                  {classEngagement.disengaged_count}
+                </Badge>
               </div>
             </div>
-
-            {currentClass && (
-              <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
-                <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
-                  🎓 Currently Teaching:
-                </Text>
-                <Text size={400} weight="bold" style={{ display: 'block' }}>
-                  {currentClass.name}
-                </Text>
-                <Text size={200} style={{ color: '#666' }}>
-                  {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
-                </Text>
-              </div>
+            {onsiteAttendance.length === 0 && (
+              <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                Start the camera to track engagement
+              </Text>
             )}
+            <Divider style={{ margin: '12px 0 8px 0' }} />
+            <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
+              <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
+              <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
+              <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
+            </div>
+          </Card>
 
-            <div className={styles.scheduleList}>
-              {schedules.length === 0 ? (
-                <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
-                  No classes scheduled. Use the schedule service to add classes!
-                </Text>
+          {/* Debug Messages Panel */}
+          <Card className={styles.statsCard}>
+            <Text weight="semibold" size={400}>Debug Information</Text>
+            <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
+              {debugMessages.length === 0 ? (
+                <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
               ) : (
-                schedules
-                  .filter(schedule => showInactiveSchedules ? true : schedule.isActive) // Toggle: show all or active only
-                  .map((schedule) => {
-                    const isActive = currentClass?.id === schedule.id;
-                    const isInactive = !schedule.isActive;
-                    return (
-                      <div
-                        key={schedule.id}
-                        className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
-                        style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
-                      >
-                        <div
-                          className={styles.scheduleColorBar}
-                          style={{ backgroundColor: schedule.color }}
-                        />
-                        <div className={styles.scheduleItemContent}>
-                          <div className={styles.scheduleItemRow}>
-                            <Text weight="semibold" size={300}>
-                              {schedule.name}
-                            </Text>
-                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                              {isActive && (
-                                <Badge appearance="filled" color="success" size="small">
-                                  Active
-                                </Badge>
-                              )}
-                              {isInactive && (
-                                <Badge appearance="tint" color="warning" size="small">
-                                  Inactive
-                                </Badge>
-                              )}
-                              <Button
-                                appearance="subtle"
-                                icon={<Edit20Regular />}
-                                size="small"
-                                onClick={() => handleOpenEditModal(schedule)}
-                                title="Edit class"
-                              />
-                              <Button
-                                appearance="subtle"
-                                icon={<Delete20Regular />}
-                                size="small"
-                                onClick={() => handleOpenDeleteDialog(schedule)}
-                                title="Delete class"
-                                style={{ color: '#d32f2f' }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className={styles.scheduleDays}>
-                            {schedule.days.map((day, idx) => (
-                              <Badge
-                                key={idx}
-                                appearance="tint"
-                                color="informative"
-                                className={styles.dayBadge}
-                              >
-                                {day}
-                              </Badge>
-                            ))}
-                          </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                            <Text size={200} style={{ color: '#666' }}>
-                              📍 {schedule.room}
-                            </Text>
-                            <Text size={200} style={{ color: '#666' }}>
-                              🕐 {schedule.startTime} - {schedule.endTime}
-                            </Text>
-                          </div>
-
-                          {schedule.description && (
-                            <Text size={200} style={{ color: '#888', fontStyle: 'italic', marginTop: '4px' }}>
-                              {schedule.description}
-                            </Text>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
+                debugMessages.map((msg, idx) => (
+                  <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
+                    {msg}
+                  </div>
+                ))
               )}
             </div>
-
-            {upcomingClasses.length > 0 && (
-              <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
-                <Text size={200} weight="semibold" style={{ color: '#856404' }}>
-                  ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
-                </Text>
-              </div>
-            )}
           </Card>
 
           {/* Participant Dropdown */}
@@ -628,12 +642,32 @@ function ProfessorDashboard({ userContext }) {
                       </Text>
                     ) : (
                       onsiteAttendance.map((p, idx) => (
-                        <div key={idx} className={styles.participantItem}>
-                          <Text size={300} weight="semibold">{p.name}</Text>
-                          {p.detectedTime && (
-                            <Text size={200} style={{ color: '#666' }}>
-                              {p.detectedTime}
-                            </Text>
+                        <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <Text size={300} weight="semibold">{p.name}</Text>
+                            {p.detectedTime && (
+                              <Text size={200} style={{ color: '#666', display: 'block' }}>
+                                {p.detectedTime}
+                              </Text>
+                            )}
+                            {p.dominantEmotion && (
+                              <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
+                                {p.dominantEmotion}
+                              </Text>
+                            )}
+                          </div>
+                          {p.engagementLevel && (
+                            <Badge 
+                              appearance="filled"
+                              color={
+                                p.engagementLevel === 'engaged' ? 'success' : 
+                                p.engagementLevel === 'present' ? 'warning' : 
+                                'danger'
+                              }
+                              size="small"
+                            >
+                              {p.engagementScore?.toFixed(0) || 0}%
+                            </Badge>
                           )}
                         </div>
                       ))
@@ -679,31 +713,160 @@ function ProfessorDashboard({ userContext }) {
             )}
           </Card>
 
-          {/* System Messages */}
-          <div className={styles.messagesCard}>
-            <Text weight="semibold" size={300} style={{ marginBottom: '8px', display: 'block' }}>
-              System Messages
-            </Text>
-            {systemMessages.length === 0 ? (
-              <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
-            ) : (
-              systemMessages.slice(-5).map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
-                    fontSize: '12px',
-                    marginBottom: '4px'
-                  }}
-                >
-                  [{msg.timestamp}] {msg.message}
-                </div>
-              ))
-            )}
-          </div>
-
           {/* Export Panel */}
           <ExportPanel onExport={handleExportReport} />
+
+          {/* Class Schedule Accordion */}
+          <Card className={styles.scheduleCard}>
+            <div
+              className={styles.scheduleHeader}
+              onClick={() => setScheduleExpanded(!scheduleExpanded)}
+              style={{ cursor: 'pointer' }}
+            >
+              <Text weight="semibold" size={400}>Class Schedule</Text>
+              {scheduleExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
+            </div>
+
+            {scheduleExpanded && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+                  {currentClass && (
+                    <Badge appearance="filled" color="success">
+                      In Session
+                    </Badge>
+                  )}
+                  <Button
+                    appearance="subtle"
+                    icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
+                    onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
+                    size="small"
+                    title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
+                  >
+                    {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
+                  </Button>
+                  <Button
+                    appearance="primary"
+                    icon={<Add20Regular />}
+                    onClick={handleOpenCreateModal}
+                    size="small"
+                  >
+                    Add Class
+                  </Button>
+                </div>
+
+                {currentClass && (
+                  <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
+                    <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
+                      🎓 Currently Teaching:
+                    </Text>
+                    <Text size={400} weight="bold" style={{ display: 'block' }}>
+                      {currentClass.name}
+                    </Text>
+                    <Text size={200} style={{ color: '#666' }}>
+                      {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
+                    </Text>
+                  </div>
+                )}
+
+                <div className={styles.scheduleList}>
+                  {schedules.length === 0 ? (
+                    <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+                      No classes scheduled. Use the schedule service to add classes!
+                    </Text>
+                  ) : (
+                    schedules
+                      .filter(schedule => showInactiveSchedules ? true : schedule.isActive) // Toggle: show all or active only
+                      .map((schedule) => {
+                        const isActive = currentClass?.id === schedule.id;
+                        const isInactive = !schedule.isActive;
+                        return (
+                          <div
+                            key={schedule.id}
+                            className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
+                            style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
+                          >
+                            <div
+                              className={styles.scheduleColorBar}
+                              style={{ backgroundColor: schedule.color }}
+                            />
+                            <div className={styles.scheduleItemContent}>
+                              <div className={styles.scheduleItemRow}>
+                                <Text weight="semibold" size={300}>
+                                  {schedule.name}
+                                </Text>
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                  {isActive && (
+                                    <Badge appearance="filled" color="success" size="small">
+                                      Active
+                                    </Badge>
+                                  )}
+                                  {isInactive && (
+                                    <Badge appearance="tint" color="warning" size="small">
+                                      Inactive
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    appearance="subtle"
+                                    icon={<Edit20Regular />}
+                                    size="small"
+                                    onClick={() => handleOpenEditModal(schedule)}
+                                    title="Edit class"
+                                  />
+                                  <Button
+                                    appearance="subtle"
+                                    icon={<Delete20Regular />}
+                                    size="small"
+                                    onClick={() => handleOpenDeleteDialog(schedule)}
+                                    title="Delete class"
+                                    style={{ color: '#d32f2f' }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className={styles.scheduleDays}>
+                                {schedule.days.map((day, idx) => (
+                                  <Badge
+                                    key={idx}
+                                    appearance="tint"
+                                    color="informative"
+                                    className={styles.dayBadge}
+                                  >
+                                    {day}
+                                  </Badge>
+                                ))}
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                <Text size={200} style={{ color: '#666' }}>
+                                  📍 {schedule.room}
+                                </Text>
+                                <Text size={200} style={{ color: '#666' }}>
+                                  🕐 {schedule.startTime} - {schedule.endTime}
+                                </Text>
+                              </div>
+
+                              {schedule.description && (
+                                <Text size={200} style={{ color: '#888', fontStyle: 'italic', marginTop: '4px' }}>
+                                  {schedule.description}
+                                </Text>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+
+                {upcomingClasses.length > 0 && (
+                  <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                    <Text size={200} weight="semibold" style={{ color: '#856404' }}>
+                      ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
+                    </Text>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
 

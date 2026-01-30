@@ -6,6 +6,74 @@ import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import sys
+import mediapipe as mp
+from collections import Counter
+
+# MediaPipe Initialization (Tasks API)
+mp_tasks = mp.tasks
+vision = mp_tasks.vision
+
+BaseOptions = mp_tasks.BaseOptions
+FaceLandmarker = vision.FaceLandmarker
+FaceLandmarkerOptions = vision.FaceLandmarkerOptions
+HandLandmarker = vision.HandLandmarker
+HandLandmarkerOptions = vision.HandLandmarkerOptions
+VisionRunningMode = vision.RunningMode
+
+MODEL_PATH = os.path.dirname(os.path.abspath(__file__))
+face_model_path = os.path.join(MODEL_PATH, 'models', 'face_landmarker.task')
+hand_model_path = os.path.join(MODEL_PATH, 'models', 'hand_landmarker.task')
+
+face_mesh_detector = None
+hand_detector = None
+
+ENGAGEMENT_ENABLED = True  # Will be set to False if models fail to load
+
+if os.path.exists(face_model_path) and os.path.exists(hand_model_path):
+    try:
+        # Initialize Face Landmarker
+        face_options = FaceLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=face_model_path),
+            running_mode=VisionRunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.3,
+            min_face_presence_confidence=0.3,
+            min_tracking_confidence=0.3
+        )
+        face_mesh_detector = FaceLandmarker.create_from_options(face_options)
+        print("[OK] MediaPipe Face Landmarker initialized successfully")
+    except Exception as e:
+        print(f"[ERROR] Error initializing Face Landmarker: {e}")
+        face_mesh_detector = None
+        ENGAGEMENT_ENABLED = False
+
+    try:
+        # Initialize Hand Landmarker
+        hand_options = HandLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=hand_model_path),
+            running_mode=VisionRunningMode.IMAGE,
+            num_hands=20,
+            min_hand_detection_confidence=0.3,
+            min_hand_presence_confidence=0.3,
+            min_tracking_confidence=0.3
+        )
+        hand_detector = HandLandmarker.create_from_options(hand_options)
+        print("[OK] MediaPipe Hand Landmarker initialized successfully")
+    except Exception as e:
+        print(f"[ERROR] Error initializing Hand Landmarker: {e}")
+        hand_detector = None
+        # Don't disable engagement if only hand detection failed - face detection is more important
+    
+    if face_mesh_detector:
+        print("[OK] Engagement detection (eyes/mouth) ENABLED")
+    else:
+        ENGAGEMENT_ENABLED = False
+else:
+    print("[WARN] Warning: MediaPipe models not found. Behavioral engagement disabled.")
+    print(f"   Looking for: {face_model_path}")
+    print(f"   Looking for: {hand_model_path}")
+    ENGAGEMENT_ENABLED = False
 
 app = Flask(__name__)
 CORS(app)
@@ -34,6 +102,39 @@ MAX_TRACKING_VELOCITY = 50
 PREDICTION_DECAY = 0.65
 RAPID_MOVEMENT_THRESHOLD = 60
 
+# Engagement Configuration (Behavioral) - Adjusted for 10 FPS
+ENGAGEMENT_ANALYSIS_INTERVAL = 1  # Analyze every frame for smooth behavior detection
+ENGAGEMENT_HISTORY_SIZE = 30
+EAR_THRESHOLD = 0.20        # Eye Aspect Ratio threshold (closing eyes) - lowered for testing
+MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
+SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 seconds)
+SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
+# Note: ENGAGEMENT_ENABLED is set at the top during MediaPipe initialization
+
+
+def calculate_landmark_distance(p1, p2):
+    """Euclidean distance between two MediaPipe landmarks."""
+    return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
+
+def calculate_ear(landmarks, indices):
+    """Calculate Eye Aspect Ratio."""
+    # indices: [p1, p2, p3, p4, p5, p6]
+    # Vertical distances
+    A = calculate_landmark_distance(landmarks[indices[1]], landmarks[indices[5]])
+    B = calculate_landmark_distance(landmarks[indices[2]], landmarks[indices[4]])
+    # Horizontal distance
+    C = calculate_landmark_distance(landmarks[indices[0]], landmarks[indices[3]])
+    if C == 0: return 0
+    return (A + B) / (2.0 * C)
+
+def calculate_mar(landmarks):
+    """Calculate Mouth Aspect Ratio using inner lips."""
+    # 78: Left Corner, 308: Right Corner, 13: Top Lip, 14: Bottom Lip
+    A = calculate_landmark_distance(landmarks[13], landmarks[14]) # Vertical
+    B = calculate_landmark_distance(landmarks[78], landmarks[308]) # Horizontal
+    if B == 0: return 0
+    return A / B
+
 
 class FaceTracker:
     def __init__(self, face_id, name, location, encoding=None):
@@ -48,8 +149,22 @@ class FaceTracker:
         self.missed_frames = 0
         self.is_confirmed = False
         self.velocity = (0.0, 0.0)
-        self.identification_count = 0  # Track how many times we've identified this face
-
+        self.identification_count = 0
+        
+        # Behavioral attributes
+        self.is_sleeping = False
+        self.is_speaking = False
+        self.hand_raised = False
+        self.sleep_counter = 0
+        self.speak_counter = 0
+        self.ear_history = []
+        self.mar_history = []
+        
+        # Legacy/Composite Engagement
+        self.current_engagement_score = 75.0 # Start at attentive
+        self.engagement_level = 'engaged'
+        self.engagement_analysis_count = 0
+        
     @staticmethod
     def _center(location):
         return ((location[1] + location[3]) / 2.0, (location[0] + location[2]) / 2.0)
@@ -115,16 +230,120 @@ class FaceTracker:
     def is_expired(self):
         return self.missed_frames > TRACKING_FRAMES
 
+    def update_behavior(self, ear, mar, hand_raised_detected):
+        # Update EAR history
+        if ear is not None:
+            self.ear_history.append(ear)
+            if len(self.ear_history) > ENGAGEMENT_HISTORY_SIZE: self.ear_history.pop(0)
+            
+            # Sleeping Logic
+            if ear < EAR_THRESHOLD:
+                self.sleep_counter += 1
+            else:
+                self.sleep_counter = max(0, self.sleep_counter - 1)
+            
+            was_sleeping = self.is_sleeping
+            self.is_sleeping = self.sleep_counter > SLEEP_FRAMES_THRESHOLD
+            
+            # Log state changes
+            if self.is_sleeping and not was_sleeping:
+                print(f"[{self.name}] SLEEPING detected (eyes closed for {self.sleep_counter} frames)")
+            elif not self.is_sleeping and was_sleeping:
+                print(f"[{self.name}] AWAKE (eyes opened)")
+            
+        # Update MAR history
+        if mar is not None:
+            self.mar_history.append(mar)
+            if len(self.mar_history) > ENGAGEMENT_HISTORY_SIZE: self.mar_history.pop(0)
+            
+            # Speaking Logic
+            if mar > MAR_THRESHOLD:
+                self.speak_counter += 1
+            else:
+                self.speak_counter = max(0, self.speak_counter - 2)
+                
+            self.is_speaking = self.speak_counter > SPEAK_FRAMES_THRESHOLD
+
+        # Hand Raise Logic
+        self.hand_raised = hand_raised_detected
+        
+        # Calculate Composite Score and Engagement Level
+        # engaged = speaking/hand raised, present = attentive, disengaged = sleeping
+        if self.is_sleeping:
+            self.current_engagement_score = 0
+            self.engagement_level = 'disengaged'
+        elif self.is_speaking or self.hand_raised:
+            self.current_engagement_score = 100
+            self.engagement_level = 'engaged'
+        else:
+            self.current_engagement_score = 75
+            self.engagement_level = 'present'  # Attentive/neutral state
+
+    def get_engagement_data(self):
+        return {
+            "engagement_score": float(self.current_engagement_score),
+            "engagement_level": self.engagement_level,
+            "is_sleeping": self.is_sleeping,
+            "is_speaking": self.is_speaking,
+            "hand_raised": self.hand_raised
+        }
+
+
+# Debug counter for logging frequency
+_behavior_debug_counter = 0
+
+def analyze_face_behavior(face_img):
+    """Analyze engagement metrics (EAR, MAR) for a face crop using MediaPipe Face Mesh."""
+    global _behavior_debug_counter
+    if not ENGAGEMENT_ENABLED:
+        return None, None
+        
+    try:
+        h, w = face_img.shape[:2]
+        if w < 10 or h < 10: return None, None
+        
+        # Convert to RGB
+        rgb_face = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_face)
+        
+        if face_mesh_detector:
+            results = face_mesh_detector.detect(mp_image)
+            
+            if results.face_landmarks:
+                landmarks = results.face_landmarks[0]
+                
+                # Left Eye: 33, 160, 158, 133, 153, 144
+                ear_left = calculate_ear(landmarks, [33, 160, 158, 133, 153, 144])
+                # Right Eye: 362, 385, 387, 263, 373, 380
+                ear_right = calculate_ear(landmarks, [362, 385, 387, 263, 373, 380])
+                ear = (ear_left + ear_right) / 2.0
+                
+                mar = calculate_mar(landmarks)
+                
+                # Debug logging every frame during testing
+                _behavior_debug_counter += 1
+                eyes_status = "CLOSED" if ear < EAR_THRESHOLD else "open"
+                mouth_status = "OPEN" if mar > MAR_THRESHOLD else "closed"
+                if _behavior_debug_counter % 1 == 0:  # Log every frame for debugging
+                    print(f"[Engagement] EAR={ear:.3f} ({eyes_status}), MAR={mar:.3f} ({mouth_status})")
+                
+                return ear, mar
+            
+    except Exception as e:
+        pass  # Silently handle errors to avoid log spam
+    
+    return None, None
+
 
 def load_reference_data():
     """Verify photos directory exists and pre-build DeepFace representations."""
     global PHOTOS_DIR
     
-    print("[CAMERA] Initializing DeepFace with ArcFace model...")
+    print("Initializing DeepFace with ArcFace model...")
     print(f"   Photos directory: {PHOTOS_DIR}")
     
     if not os.path.exists(PHOTOS_DIR):
-        print(f"   [WARNING] Photos directory not found at {PHOTOS_DIR}")
+        print(f"   Warning: Photos directory not found at {PHOTOS_DIR}")
         return False
     
     # List available reference photos
@@ -133,14 +352,12 @@ def load_reference_data():
     print(f"   Found {len(photo_files)} reference photo(s): {photo_files}")
     
     if len(photo_files) == 0:
-        print("   [WARNING] No reference photos found!")
+        print("   Warning: No reference photos found!")
         return False
     
     # Pre-build representations (creates .pkl cache in photos folder)
-    # This runs on first call and caches for subsequent calls
     try:
-        print("   Pre-building face representations (first run may take 30-60 seconds)...")
-        # Create a dummy search to trigger indexing
+        print("   Pre-building face representations...")
         test_img = os.path.join(PHOTOS_DIR, photo_files[0])
         DeepFace.find(
             img_path=test_img,
@@ -149,73 +366,53 @@ def load_reference_data():
             enforce_detection=False,
             silent=True
         )
-        print("   [OK] DeepFace representations built successfully!")
+        print("   DeepFace representations built successfully!")
     except Exception as e:
-        # Encode error message safely for Windows console
-        error_msg = str(e).encode('ascii', 'replace').decode('ascii')
-        print(f"   [WARNING] Could not pre-build representations: {error_msg}")
+        print(f"   Warning: Could not pre-build representations: {e}")
     
     return True
 
 
 def identify_face_deepface(face_image_bgr):
-    """
-    Identify a face using DeepFace.find().
-    
-    Args:
-        face_image_bgr: OpenCV BGR image (numpy array) containing a face
-        
-    Returns:
-        tuple: (name, confidence) or ("Unknown", 0.0)
-    """
+    """Identify a face using DeepFace.find()."""
     try:
-        # Check if image is valid
         if face_image_bgr is None or face_image_bgr.size == 0:
             return "Unknown", 0.0
         
-        # Minimum face size check
         if face_image_bgr.shape[0] < 20 or face_image_bgr.shape[1] < 20:
             return "Unknown", 0.0
         
-        # Using numpy array directly
         results = DeepFace.find(
             img_path=face_image_bgr,
             db_path=PHOTOS_DIR,
             model_name=DEEPFACE_MODEL,
-            enforce_detection=False,  # Don't fail if no face detected
+            enforce_detection=False,
             silent=True,
             threshold=DISTANCE_THRESHOLD
         )
         
-        # DeepFace.find returns a list of DataFrames (one per face in image)
         if results and len(results) > 0 and not results[0].empty:
             best_match = results[0].iloc[0]
             identity_path = best_match['identity']
             distance = best_match['distance']
             
-            # Extract name from filename (e.g., "photos/john_doe.jpg" -> "John Doe")
             filename = os.path.basename(identity_path)
             name_without_ext = os.path.splitext(filename)[0]
             readable_name = name_without_ext.replace('_', ' ').title()
             
-            # Convert distance to confidence (lower distance = higher confidence)
-            # For ArcFace with threshold 0.50: distance 0 = 100% confidence, distance 0.50 = 0% confidence
             confidence = max(0, 1 - (distance / DISTANCE_THRESHOLD))
             
-            # CRITICAL: Reject low-confidence matches as Unknown
-            # This prevents misidentification of unknown people
             if confidence < MIN_CONFIDENCE:
-                print(f"      DeepFace REJECTED: {readable_name} (distance: {distance:.3f}, confidence: {confidence:.3f} < {MIN_CONFIDENCE})")
                 return "Unknown", 0.0
             
-            print(f"      DeepFace MATCH: {readable_name} (distance: {distance:.3f}, confidence: {confidence:.3f})")
             return readable_name, confidence
         
-        print(f"      DeepFace: No match found in database")
         return "Unknown", 0.0
         
     except Exception as e:
-        print(f"      DeepFace error: {e}")
+        # Use sys.stdout.buffer to avoid UnicodeEncodeError on Windows
+        msg = f"      DeepFace error: {str(e)}\n"
+        sys.stdout.buffer.write(msg.encode('utf-8'))
         return "Unknown", 0.0
 
 
@@ -249,21 +446,17 @@ def merge_duplicate_trackers():
             if not tracker_2:
                 continue
             
-            # Check if same name and close distance
             if tracker_1.name == tracker_2.name:
                 distance = calculate_distance(tracker_1.location, tracker_2.location)
                 
                 if distance < TRACKER_MERGE_THRESHOLD:
-                    # Keep the tracker with higher confidence, remove the other
                     conf_1 = np.mean(tracker_1.confidence_history) if tracker_1.confidence_history else 0
                     conf_2 = np.mean(tracker_2.confidence_history) if tracker_2.confidence_history else 0
                     
                     if conf_1 >= conf_2:
-                        print(f"   Merging duplicate tracker {tracker_id_2} into {tracker_id_1} (distance: {distance:.0f}px)")
                         del face_tracker[tracker_id_2]
                         merged_ids.add(tracker_id_2)
                     else:
-                        print(f"   Merging duplicate tracker {tracker_id_1} into {tracker_id_2} (distance: {distance:.0f}px)")
                         del face_tracker[tracker_id_1]
                         merged_ids.add(tracker_id_1)
                         break
@@ -273,19 +466,31 @@ def match_faces_to_trackers(face_locations, frame_bgr):
     """Match detected faces to existing trackers or create new ones."""
     global face_tracker, next_face_id
     
-    # Scale locations back to full resolution (from 1/4 scale)
-    scaled_locations = []
-    for (top, right, bottom, left) in face_locations:
-        scaled_locations.append((top * 4, right * 4, bottom * 4, left * 4))
+    # NOTE: face_locations are already in full scale (no downscaling in this version)
     
+    # 1. Detect Hands for "Raising Hand" behavior
+    raised_hands_locs = []
+    try:
+        if hand_detector:
+            rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+            hand_results = hand_detector.detect(mp_image)
+            if hand_results.hand_landmarks:
+                for hand_landmarks in hand_results.hand_landmarks:
+                    # Wrist is landmark 0. Tip of middle finger is 12.
+                    wrist = hand_landmarks[0]
+                    # Store normalized x, y
+                    raised_hands_locs.append((wrist.x, wrist.y))
+    except Exception as e:
+        pass  # Silently handle errors
+
     matched_trackers = set()
     new_detections = []
     
-    for i, location in enumerate(scaled_locations):
+    for i, location in enumerate(face_locations):
         best_tracker = None
         min_distance = float('inf')
         
-        # Try to match with existing tracker by location
         for tracker_id, tracker in face_tracker.items():
             if tracker_id in matched_trackers:
                 continue
@@ -298,8 +503,6 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             # Update existing tracker
             top, right, bottom, left = location
             
-            # Extract face region for identification
-            # Make sure we don't go out of bounds
             h, w = frame_bgr.shape[:2]
             top_safe = max(0, min(top, h-1))
             bottom_safe = max(0, min(bottom, h))
@@ -308,16 +511,31 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             
             face_crop = frame_bgr[top_safe:bottom_safe, left_safe:right_safe]
             
-            # Only re-identify periodically to save processing
             tracker = face_tracker[best_tracker]
             tracker.identification_count += 1
             
-            # Re-identify known faces every 10 frames, Unknown faces every 5 frames
-            # This balances accuracy with performance
+            # Engagement Analysis
+            tracker.engagement_analysis_count += 1
+            if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
+                # Check for raised hand
+                has_raised_hand = False
+                face_center_x_norm = ((left + right) / 2) / w
+                face_top_y_norm = top / h
+                
+                for hx, hy in raised_hands_locs:
+                    # Hand is at or above face level and within horizontal range (relaxed)
+                    if hy < (face_top_y_norm + 0.15) and abs(hx - face_center_x_norm) < 0.60:
+                        has_raised_hand = True
+                        break
+                
+                ear, mar = analyze_face_behavior(face_crop)
+                tracker.update_behavior(ear, mar, has_raised_hand)
+            
+            # Re-identify (reduced frequency for stability)
             if tracker.name == "Unknown":
-                should_identify = (tracker.identification_count % 5 == 0)
+                should_identify = (tracker.identification_count % 25 == 0)  # ~2.5 seconds at 10 FPS
             else:
-                should_identify = (tracker.identification_count % 10 == 0)
+                should_identify = (tracker.identification_count % 50 == 0)  # ~5 seconds at 10 FPS
             
             if should_identify:
                 name, confidence = identify_face_deepface(face_crop)
@@ -333,11 +551,10 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         else:
             new_detections.append((location, i))
     
-    # Create new trackers for unmatched faces
+    # Create new trackers
     for location, idx in new_detections:
         top, right, bottom, left = location
         
-        # Make sure we don't go out of bounds
         h, w = frame_bgr.shape[:2]
         top_safe = max(0, min(top, h-1))
         bottom_safe = max(0, min(bottom, h))
@@ -351,6 +568,19 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         tracker = FaceTracker(next_face_id, name, location)
         if confidence > 0:
             tracker.update_location(location, confidence)
+            
+        # Initial behavior analysis
+        has_raised_hand = False
+        face_center_x_norm = ((left + right) / 2) / w
+        face_top_y_norm = top / h
+        for hx, hy in raised_hands_locs:
+            if hy < (face_top_y_norm + 0.15) and abs(hx - face_center_x_norm) < 0.60:
+                has_raised_hand = True
+                break
+        
+        ear, mar = analyze_face_behavior(face_crop)
+        tracker.update_behavior(ear, mar, has_raised_hand)
+        
         face_tracker[next_face_id] = tracker
         next_face_id += 1
     
@@ -368,13 +598,10 @@ def match_faces_to_trackers(face_locations, frame_bgr):
 def list_cameras():
     """List all available cameras."""
     available_cameras = []
-    
-    # Test up to 10 camera indices
     for i in range(10):
         try:
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
-                # Try to read a frame to confirm the camera is working
                 ret, frame = cap.read()
                 if ret:
                     available_cameras.append({
@@ -395,12 +622,9 @@ def list_cameras():
 
 @app.route('/api/camera/status', methods=['GET'])
 def camera_status():
-    """Check if camera is available."""
     try:
-        # Check if any camera is available
         list_result = list_cameras()
         data = list_result.get_json()
-        
         if data["cameras"]:
             return jsonify({"status": "available", "message": f"Found {len(data['cameras'])} camera(s)"})
         else:
@@ -411,22 +635,14 @@ def camera_status():
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
-    """Start camera for facial recognition."""
     global video_capture, camera_on, face_tracker
-    
     if camera_on:
         return jsonify({"status": "already_running", "message": "Camera is already active"})
-    
     try:
-        # Get camera index from request body, default to 0
         data = request.get_json() or {}
         camera_index = data.get('camera_index', 0)
-        
-        print(f"Attempting to start camera at index {camera_index}")
-        
         video_capture = cv2.VideoCapture(camera_index)
         if video_capture.isOpened():
-            # Test if we can actually read a frame
             ret, frame = video_capture.read()
             if ret:
                 video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -434,11 +650,7 @@ def start_camera():
                 video_capture.set(cv2.CAP_PROP_FPS, 30)
                 camera_on = True
                 face_tracker.clear()
-                return jsonify({
-                    "status": "started", 
-                    "message": f"Camera {camera_index} started successfully",
-                    "camera_index": camera_index
-                })
+                return jsonify({"status": "started", "message": f"Camera {camera_index} started successfully", "camera_index": camera_index})
             else:
                 video_capture.release()
                 return jsonify({"status": "error", "message": f"Camera {camera_index} detected but cannot read frames"})
@@ -452,21 +664,17 @@ def start_camera():
 
 @app.route('/api/camera/stop', methods=['POST'])
 def stop_camera():
-    """Stop camera."""
     global video_capture, camera_on, face_tracker
-    
     camera_on = False
     if video_capture:
         video_capture.release()
         video_capture = None
     face_tracker.clear()
-    
     return jsonify({"status": "stopped", "message": "Camera stopped successfully"})
 
 
 @app.route('/api/camera/frame', methods=['GET'])
 def get_frame():
-    """Get current frame with face recognition annotations."""
     global video_capture, camera_on, frame_count
     
     if not camera_on or video_capture is None or not video_capture.isOpened():
@@ -478,10 +686,8 @@ def get_frame():
     
     frame_count += 1
     
-    # Process face detection every 3rd frame
     if frame_count % 3 == 0:
         try:
-            # Use DeepFace to detect faces
             detected_faces_df = DeepFace.extract_faces(
                 img_path=frame,
                 detector_backend='opencv',
@@ -489,18 +695,13 @@ def get_frame():
                 align=False
             )
             
-            # Convert DeepFace detections to our format
             face_locations = []
             for face_obj in detected_faces_df:
                 if face_obj['confidence'] > 0.5:
                     region = face_obj['facial_area']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
-                    # Convert to top, right, bottom, left (1/4 scale for tracking)
-                    top = y // 4
-                    right = (x + w) // 4
-                    bottom = (y + h) // 4
-                    left = x // 4
-                    face_locations.append((top, right, bottom, left))
+                    # Use full coordinates directly
+                    face_locations.append((y, x+w, y+h, x))
             
             match_faces_to_trackers(face_locations, frame)
         except Exception as e:
@@ -509,93 +710,95 @@ def get_frame():
         for tracker in face_tracker.values():
             tracker.increment_missed_frames()
     
-    # Draw face annotations
+    detected_faces = []
     for tracker_id, tracker in list(face_tracker.items()):
         if tracker.is_expired():
             continue
             
         top, right, bottom, left = tracker.location
         
-        # Choose color based on recognition status
+        # Determine color
         if tracker.name != "Unknown" and tracker.is_confirmed:
-            color = (0, 100, 0)  # Green for confirmed
+            color = (0, 100, 0)
             thickness = 3
         elif tracker.name != "Unknown":
-            color = (0, 191, 255)  # Yellow for tentative
+            color = (0, 191, 255)
             thickness = 2
         else:
-            color = (0, 0, 139)  # Red for unknown
+            color = (0, 0, 139)
             thickness = 2
-        
-        # Draw bounding box
+            
         cv2.rectangle(frame, (left, top), (right, bottom), color, thickness)
         
-        # Prepare label text
         label = tracker.name
         if tracker.confidence_history:
             avg_confidence = np.mean(tracker.confidence_history)
             label += f" ({avg_confidence:.2f})"
         
-        # Draw label background
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
-        
-        # Draw label text
         cv2.putText(frame, label, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
-    
-    # Add frame info
+        
+        engagement_data = tracker.get_engagement_data()
+        detected_faces.append({
+            "id": tracker_id,
+            "name": tracker.name,
+            "confidence": float(np.mean(tracker.confidence_history)) if tracker.confidence_history else 0.0,
+            "is_confirmed": tracker.is_confirmed,
+            "engagement_score": float(engagement_data['engagement_score']),
+            "engagement_level": str(engagement_data['engagement_level']),
+            "is_sleeping": engagement_data['is_sleeping'],
+            "is_speaking": engagement_data['is_speaking'],
+            "hand_raised": engagement_data['hand_raised']
+        })
+        
     info_text = f"Frames: {frame_count} | Active Trackers: {len(face_tracker)}"
     cv2.putText(frame, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
-    # Convert frame to base64
     _, buffer = cv2.imencode('.jpg', frame)
     frame_base64 = base64.b64encode(buffer).decode('utf-8')
     
-    # Get detected faces info
-    detected_faces = []
-    for tracker_id, tracker in face_tracker.items():
-        if not tracker.is_expired():
-            detected_faces.append({
-                "id": tracker_id,
-                "name": tracker.name,
-                "confidence": np.mean(tracker.confidence_history) if tracker.confidence_history else 0,
-                "is_confirmed": tracker.is_confirmed
-            })
+    # Class engagement
+    if detected_faces:
+        avg_engagement = float(np.mean([f['engagement_score'] for f in detected_faces]))
+        engaged_count = sum(1 for f in detected_faces if f['engagement_level'] == 'engaged')
+        present_count = sum(1 for f in detected_faces if f['engagement_level'] == 'present')
+        disengaged_count = sum(1 for f in detected_faces if f['engagement_level'] == 'disengaged')
+    else:
+        avg_engagement = 0.0
+        engaged_count = present_count = disengaged_count = 0
     
     return jsonify({
         "status": "success",
         "frame": frame_base64,
         "detected_faces": detected_faces,
-        "total_faces": len(detected_faces)
+        "total_faces": len(detected_faces),
+        "class_engagement": {
+            "average_score": round(float(avg_engagement), 1),
+            "engaged_count": int(engaged_count),
+            "present_count": int(present_count),
+            "disengaged_count": int(disengaged_count)
+        }
     })
 
 
 @app.route('/api/clear-trackers', methods=['POST'])
 def clear_trackers():
-    """Clear all face trackers (called when camera stops)."""
     global face_tracker, next_face_id, process_frame_count
-    
     face_tracker.clear()
     next_face_id = 0
     process_frame_count = 0
-    print("Cleared all face trackers and reset frame count")
-    
     return jsonify({"status": "success", "message": "Face trackers cleared"})
 
 
 @app.route('/api/process-frame', methods=['POST'])
 def process_frame():
-    """Process a single frame sent from the browser with face tracking."""
     global face_tracker, next_face_id, process_frame_count
-    
     try:
         data = request.get_json()
         if not data or 'frame' not in data:
             return jsonify({"status": "error", "message": "No frame data provided"})
         
         process_frame_count += 1
-        print(f"Received frame #{process_frame_count} for processing...")
-        
-        # Decode base64 image
         frame_data = base64.b64decode(data['frame'])
         nparr = np.frombuffer(frame_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -603,37 +806,24 @@ def process_frame():
         if frame is None:
             return jsonify({"status": "error", "message": "Invalid image data"})
         
-        print(f"   Frame size: {frame.shape}")
-        
         try:
-            # Use DeepFace to detect faces
             detected_faces_df = DeepFace.extract_faces(
                 img_path=frame,
-                detector_backend='opencv',  # Fast detector
+                detector_backend='opencv',
                 enforce_detection=False,
                 align=False
             )
             
-            # Convert DeepFace detections to our format
             face_locations = []
             for face_obj in detected_faces_df:
-                if face_obj['confidence'] > 0.5:  # Filter low-confidence detections
+                if face_obj['confidence'] > 0.5:
                     region = face_obj['facial_area']
-                    # DeepFace returns x, y, w, h
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
-                    # Convert to top, right, bottom, left (1/4 scale for tracking)
-                    top = y // 4
-                    right = (x + w) // 4
-                    bottom = (y + h) // 4
-                    left = x // 4
-                    face_locations.append((top, right, bottom, left))
+                    # Full resolution (no 1/4 scaling)
+                    face_locations.append((y, x+w, y+h, x))
             
-            print(f"   Detected {len(face_locations)} face(s)")
-            
-            # Match faces to trackers (pass full frame for identification)
             match_faces_to_trackers(face_locations, frame)
             
-            # Build response from tracked faces
             detected_faces = []
             for tracker_id, tracker in list(face_tracker.items()):
                 if tracker.is_expired():
@@ -642,6 +832,7 @@ def process_frame():
                 
                 top, right, bottom, left = tracker.location
                 avg_confidence = np.mean(tracker.confidence_history) if tracker.confidence_history else 0.0
+                engagement_data = tracker.get_engagement_data()
                 
                 detected_faces.append({
                     "id": tracker_id,
@@ -653,38 +844,77 @@ def process_frame():
                         "right": int(right), 
                         "bottom": int(bottom), 
                         "left": int(left)
-                    }
+                    },
+                    "engagement_score": float(engagement_data['engagement_score']),
+                    "engagement_level": str(engagement_data['engagement_level']),
+                    "is_sleeping": engagement_data['is_sleeping'],
+                    "is_speaking": engagement_data['is_speaking'],
+                    "hand_raised": engagement_data['hand_raised']
                 })
-                
-                print(f"   [v] Tracker {tracker_id}: {tracker.name} (confirmed: {tracker.is_confirmed}, confidence: {avg_confidence:.3f}, missed: {tracker.missed_frames})")
             
-            print(f"[OK] Returning {len(detected_faces)} tracked faces (total active trackers: {len(face_tracker)})")
+            # Class engagement
+            if detected_faces:
+                avg_engagement = float(np.mean([f['engagement_score'] for f in detected_faces]))
+                engaged_count = sum(1 for f in detected_faces if f['engagement_level'] == 'engaged')
+                present_count = sum(1 for f in detected_faces if f['engagement_level'] == 'present')
+                disengaged_count = sum(1 for f in detected_faces if f['engagement_level'] == 'disengaged')
+            else:
+                avg_engagement = 0.0
+                engaged_count = present_count = disengaged_count = 0
             
             return jsonify({
                 "status": "success",
                 "detected_faces": detected_faces,
                 "total_faces": len(detected_faces),
-                "message": f"Frame #{process_frame_count} processed"
+                "message": f"Frame #{process_frame_count} processed",
+                "class_engagement": {
+                    "average_score": round(float(avg_engagement), 1),
+                    "engaged_count": int(engaged_count),
+                    "present_count": int(present_count),
+                    "disengaged_count": int(disengaged_count)
+                }
             })
             
         except Exception as e:
-            print(f"[ERROR] Face processing error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Face processing error: {e}")
             return jsonify({"status": "error", "message": f"Face processing error: {str(e)}"})
             
     except Exception as e:
-        print(f"[ERROR] Frame processing error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Frame processing error: {e}")
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
+
+
+@app.route('/api/debug/status', methods=['GET'])
+def debug_status():
+    """Return debug information about the service."""
+    return jsonify({
+        "status": "success",
+        "engagement_enabled": ENGAGEMENT_ENABLED,
+        "face_mesh_detector": "loaded" if face_mesh_detector else "not loaded",
+        "hand_detector": "loaded" if hand_detector else "not loaded",
+        "camera_on": camera_on,
+        "total_faces_tracked": len(face_tracker),
+        "process_frame_count": process_frame_count,
+        "ear_threshold": EAR_THRESHOLD,
+        "sleep_frames_threshold": SLEEP_FRAMES_THRESHOLD,
+        "tracked_faces": {
+            str(tracker_id): {
+                "name": tracker.name,
+                "is_sleeping": tracker.is_sleeping,
+                "is_speaking": tracker.is_speaking,
+                "sleep_counter": tracker.sleep_counter,
+                "speak_counter": tracker.speak_counter,
+                "ear_history": tracker.ear_history[-5:] if tracker.ear_history else [],
+                "mar_history": tracker.mar_history[-5:] if tracker.mar_history else []
+            }
+            for tracker_id, tracker in face_tracker.items()
+        }
+    })
 
 
 if __name__ == '__main__':
     print("Initializing Facial Recognition Service with DeepFace...")
-    
     if not load_reference_data():
-        print("[WARNING] Could not load reference data. Face recognition will only detect unknown faces.")
-    
+        print("Warning: Could not load reference data. Face recognition will only detect unknown faces.")
     print("Starting Flask service on port 5000...")
     app.run(host='0.0.0.0', port=5000, debug=True)
