@@ -221,21 +221,21 @@ function Landing() {
 
     if (matchedCredential) {
       setMessageBar({ visible: false, message: '' });
-      localStorage.setItem('userEmail', email);
+      localStorage.setItem('userEmail', email.trim());
       navigate(matchedCredential.route);
       return;
     }
 
     // Check email domain and password for general pattern matching
     if (password === 'test123') {
-      if (email.endsWith('@student.apc.edu.ph')) {
+      if (email.trim().endsWith('@student.apc.edu.ph')) {
         setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userEmail', email.trim());
         navigate('/student');
         return;
-      } else if (email.endsWith('@apc.edu.ph')) {
+      } else if (email.trim().endsWith('@apc.edu.ph')) {
         setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userEmail', email.trim());
         navigate('/professor');
         return;
       }

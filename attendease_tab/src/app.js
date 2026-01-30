@@ -15,6 +15,7 @@ import { supabase, testSupabaseConnection } from './config/supabase.config.js';
 import sessionService from './services/supabase/sessionService.js';
 import attendanceService from './services/supabase/attendanceService.js';
 import courseService from './services/supabase/courseService.js';
+import studentService from './services/supabase/studentService.js';
 
 // Utilities
 import { generateAttendanceCSV, generateAttendanceSummary, generateBulkSummary } from './utils/exportHelpers.js';
@@ -407,6 +408,81 @@ initializeGraphClient();
 
 // Test Supabase connection on startup
 testSupabaseConnection();
+
+// ==================== STUDENT ENDPOINTS ====================
+
+// Get student by email
+app.get('/api/students/email/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const result = await studentService.getStudentByEmail(email);
+    if (result.success) {
+      res.json({ status: 'success', student: result.student });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get student by ID
+app.get('/api/students/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await studentService.getStudentById(id);
+    if (result.success) {
+      res.json({ status: 'success', student: result.student });
+    } else {
+      res.status(404).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Create new student
+app.post('/api/students', async (req, res) => {
+  try {
+    const result = await studentService.createStudent(req.body);
+    if (result.success) {
+      res.status(201).json({ status: 'success', student: result.student });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Update student
+app.put('/api/students/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await studentService.updateStudent(id, req.body);
+    if (result.success) {
+      res.json({ status: 'success', student: result.student });
+    } else {
+      res.status(400).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get all students
+app.get('/api/students', async (req, res) => {
+  try {
+    const result = await studentService.getAllStudents();
+    if (result.success) {
+      res.json({ status: 'success', students: result.students });
+    } else {
+      res.status(500).json({ status: 'error', message: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
 
 // ==================== COURSE ENDPOINTS ====================
 
