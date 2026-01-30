@@ -30,6 +30,7 @@ import {
   Filter24Regular
 } from '@fluentui/react-icons';
 import { useNavigate } from 'react-router-dom';
+import { fetchCourses, createCourse, updateCourse, deleteCourse } from '../../services/supabase/referenceData.js';
 
 const useStyles = makeStyles({
   container: {
@@ -93,142 +94,194 @@ const useStyles = makeStyles({
   }
 });
 
-const MOCK_COURSES = [
-  { id: 1, code: 'SS231', name: 'Software Engineering 1', section: 'SS231', schedule: 'MW 10:00-12:00', room: 'R405', professor: 'Christian Luis Esguerra', department: 'Engineering' },
-  { id: 2, code: 'CS101', name: 'Introduction to Computing', section: 'CS101-A', schedule: 'TTh 08:00-10:00', room: 'LAB1', professor: 'Jane Doe', department: 'Engineering' },
-  { id: 3, code: 'IT101', name: 'Information Technology Fundamentals', section: 'IT101-B', schedule: 'Fri 13:00-16:00', room: 'R302', professor: 'John Smith', department: 'Engineering' },
-  { id: 4, code: 'PHY101', name: 'General Physics', section: 'PHY101-A', schedule: 'TTh 08:00-10:00', room: 'LAB2', professor: 'Albert Einstein', department: 'Physics' },
-  { id: 5, code: 'BUS101', name: 'Business Management', section: 'BUS101-B', schedule: 'Fri 13:00-16:00', room: 'R305', professor: 'Warren Buffet', department: 'Business' },
-];
-
 export default function AdminCourses() {
   const styles = useStyles();
   const navigate = useNavigate();
   
-  const [courses, setCourses] = React.useState(MOCK_COURSES);
+  const [courses, setCourses] = React.useState([]);
   const [searchText, setSearchText] = React.useState('');
   const [filterDepartment, setFilterDepartment] = React.useState('All');
   const [filterSection, setFilterSection] = React.useState('All');
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [editingCourse, setEditingCourse] = React.useState(null);
   const [courseToDelete, setCourseToDelete] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
   
   const [newCourse, setNewCourse] = React.useState({
-    code: '',
-    name: '',
-    section: '',
-    schedule: '',
-    room: '',
-    professor: '',
-    department: 'Engineering'
+    course_code: '',
+    description: '',
+    units: 3,
+    is_laboratory: false
   });
 
-  const handleAddCourse = () => {
-    const id = courses.length > 0 ? Math.max(...courses.map(c => c.id)) + 1 : 1;
-    setCourses([{ ...newCourse, id }, ...courses]);
-    setIsAddDialogOpen(false);
-    setNewCourse({ code: '', name: '', section: '', schedule: '', room: '', professor: '' });
+  // Load courses on component mount
+  React.useEffect(() => {
+    loadCourses();
+  }, []);
+
+  const loadCourses = async () => {
+    setIsLoading(true);
+    setError(null);
+    const { success, data, error: fetchError } = await fetchCourses();
+    
+    if (success) {
+      setCourses(data);
+    } else {
+      setError(fetchError);
+      console.error('Failed to load courses:', fetchError);
+    }
+    setIsLoading(false);
+  };
+
+  const handleAddCourse = async () => {
+    if (!newCourse.course_code.trim()) {
+      setError('Course code is required');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    const { success, data, error: createError } = await createCourse(newCourse);
+    
+    if (success) {
+      setCourses([...courses, data]);
+      setIsAddDialogOpen(false);
+      setNewCourse({ course_code: '', description: '', units: 3, is_laboratory: false });
+      console.log('✅ Course added successfully');
+    } else {
+      setError(createError);
+      console.error('Failed to create course:', createError);
+    }
+    setIsLoading(false);
   };
 
   const handleEditClick = (course) => {
     setEditingCourse({ ...course });
   };
 
-  const handleSaveEdit = () => {
-    setCourses(courses.map(c => c.id === editingCourse.id ? editingCourse : c));
-    setEditingCourse(null);
+  const handleSaveEdit = async () => {
+    if (!editingCourse.course_code.trim()) {
+      setError('Course code is required');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    const { success, data, error: updateError } = await updateCourse(
+      editingCourse.id,
+      {
+        course_code: editingCourse.course_code,
+        description: editingCourse.description,
+        units: editingCourse.units,
+        is_laboratory: editingCourse.is_laboratory
+      }
+    );
+    
+    if (success) {
+      setCourses(courses.map(c => c.id === editingCourse.id ? data : c));
+      setEditingCourse(null);
+      console.log('✅ Course updated successfully');
+    } else {
+      setError(updateError);
+      console.error('Failed to update course:', updateError);
+    }
+    setIsLoading(false);
   };
 
   const handleDeleteClick = (course) => {
     setCourseToDelete(course);
   };
 
-  const handleConfirmDelete = () => {
-    setCourses(courses.filter(c => c.id !== courseToDelete.id));
-    setCourseToDelete(null);
+  const handleConfirmDelete = async () => {
+    setIsLoading(true);
+    setError(null);
+    const { success, error: deleteError } = await deleteCourse(courseToDelete.id);
+    
+    if (success) {
+      setCourses(courses.filter(c => c.id !== courseToDelete.id));
+      setCourseToDelete(null);
+      console.log('✅ Course deleted successfully');
+    } else {
+      setError(deleteError);
+      console.error('Failed to delete course:', deleteError);
+    }
+    setIsLoading(false);
   };
 
   return (
     <div className={styles.container}>
+      {error && (
+        <div style={{ padding: '12px', backgroundColor: '#fed7d7', borderRadius: '4px', color: '#c53030' }}>
+          <Text>Error: {error}</Text>
+        </div>
+      )}
+      
       <div className={styles.header}>
         <div className={styles.topBar}>
-          <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')}>
+          <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')} disabled={isLoading}>
             Back to Admin
           </Button>
           <div className={styles.controls}>
-            <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)}>
+            <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)} disabled={isLoading}>
               Add Course
             </Button>
-            <Menu>
-              <MenuTrigger disableButtonEnhancement>
-                <Button icon={<Filter24Regular />}>
-                  Department: {filterDepartment}
-                </Button>
-              </MenuTrigger>
-              <MenuPopover>
-                <MenuList>
-                  <MenuItem onClick={() => setFilterDepartment('All')}>All</MenuItem>
-                  <MenuItem onClick={() => setFilterDepartment('Engineering')}>Engineering</MenuItem>
-                  <MenuItem onClick={() => setFilterDepartment('General Subject')}>General Subject</MenuItem>
-                  <MenuItem onClick={() => setFilterDepartment('Business')}>Business</MenuItem>
-                  <MenuItem onClick={() => setFilterDepartment('Physics')}>Physics</MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-            <Menu>
-              <MenuTrigger disableButtonEnhancement>
-                <Button icon={<Filter24Regular />}>
-                  Section: {filterSection}
-                </Button>
-              </MenuTrigger>
-              <MenuPopover>
-                <MenuList>
-                  <MenuItem onClick={() => setFilterSection('All')}>All</MenuItem>
-                  {[...new Set(courses.map(c => c.section))].map(section => (
-                    <MenuItem key={section} onClick={() => setFilterSection(section)}>{section}</MenuItem>
-                  ))}
-                </MenuList>
-              </MenuPopover>
-            </Menu>
             <Input 
               contentBefore={<Search24Regular />} 
               placeholder="Search courses..." 
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              disabled={isLoading}
             />
           </div>
         </div>
         <Text size={600} weight="bold">Manage Courses</Text>
-        <Text>View and manage course offerings, schedules, and assignments.</Text>
+        <Text>View and manage course offerings. Courses are system reference data managed by administrators only.</Text>
       </div>
 
-      <div className={styles.courseList}>
-        {courses
-          .filter(course => {
-            if (filterDepartment !== 'All' && course.department !== filterDepartment) return false;
-            if (filterSection !== 'All' && course.section !== filterSection) return false;
-            const searchRegex = new RegExp(searchText, 'i');
-            return searchRegex.test(course.name) || searchRegex.test(course.code) || searchRegex.test(course.professor);
-          })
-          .map(course => (
-            <Card key={course.id} className={styles.courseCard}>
-              <div className={styles.courseInfo}>
-                <div style={{ padding: '8px', backgroundColor: '#eef2ff', borderRadius: '4px' }}>
-                  <BookOpen24Regular />
+      {isLoading ? (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <Text>Loading courses...</Text>
+        </div>
+      ) : (
+        <div className={styles.courseList}>
+          {courses
+            .filter(course => {
+              const searchRegex = new RegExp(searchText, 'i');
+              return searchRegex.test(course.course_code) || searchRegex.test(course.description || '');
+            })
+            .map(course => (
+              <Card key={course.id} className={styles.courseCard}>
+                <div className={styles.courseInfo}>
+                  <div style={{ padding: '8px', backgroundColor: '#eef2ff', borderRadius: '4px' }}>
+                    <BookOpen24Regular />
+                  </div>
+                  <div className={styles.courseDetails}>
+                    <Text weight="semibold">{course.course_code}</Text>
+                    <Text size={200}>{course.description}</Text>
+                    <Text size={200} style={{ color: '#666' }}>
+                      Units: {course.units} | Lab: {course.is_laboratory ? 'Yes' : 'No'}
+                    </Text>
+                  </div>
                 </div>
-                <div className={styles.courseDetails}>
-                  <Text weight="semibold">{course.code} - {course.name}</Text>
-                  <Text size={200}>Section: {course.section} | Room: {course.room} | Dept: {course.department}</Text>
-                  <Text size={200} style={{ color: '#666' }}>{course.schedule} | Prof. {course.professor}</Text>
+                <div className={styles.actions}>
+                  <Button 
+                    icon={<Edit24Regular />} 
+                    appearance="subtle" 
+                    onClick={() => handleEditClick(course)}
+                    disabled={isLoading}
+                  />
+                  <Button 
+                    icon={<Delete24Regular />} 
+                    appearance="subtle" 
+                    onClick={() => handleDeleteClick(course)}
+                    disabled={isLoading}
+                  />
                 </div>
-              </div>
-              <div className={styles.actions}>
-                <Button icon={<Edit24Regular />} appearance="subtle" onClick={() => handleEditClick(course)} />
-                <Button icon={<Delete24Regular />} appearance="subtle" onClick={() => handleDeleteClick(course)} />
-              </div>
-            </Card>
-          ))}
-      </div>
+              </Card>
+            ))}
+        </div>
+      )}
 
       {/* Add Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(event, data) => setIsAddDialogOpen(data.open)}>
@@ -236,30 +289,40 @@ export default function AdminCourses() {
           <DialogBody>
             <DialogTitle>Add New Course</DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              <Label>Course Code</Label>
-              <Input value={newCourse.code} onChange={(e, data) => setNewCourse({...newCourse, code: data.value})} />
-              <Label>Course Name</Label>
-
-              <Input value={newCourse.name} onChange={(e, data) => setNewCourse({...newCourse, name: data.value})} />
-              <Label>Section</Label>
-              <Input value={newCourse.section} onChange={(e, data) => setNewCourse({...newCourse, section: data.value})} />
-              <Label>Schedule</Label>
-              <Input value={newCourse.schedule} onChange={(e, data) => setNewCourse({...newCourse, schedule: data.value})} />
-              <Label>Room</Label>
-              <Input value={newCourse.room} onChange={(e, data) => setNewCourse({...newCourse, room: data.value})} />
-              <Label>Department</Label>
-              <Select value={newCourse.department} onChange={(e, data) => setNewCourse({...newCourse, department: data.value})}>
-                <option value="Engineering">Engineering</option>
-                <option value="General Subject">General Subject</option>
-                <option value="Business">Business</option>
-                <option value="Physics">Physics</option>
+              <Label>Course Code (Unique)</Label>
+              <Input 
+                value={newCourse.course_code} 
+                onChange={(e, data) => setNewCourse({...newCourse, course_code: data.value})} 
+                placeholder="e.g., CS101"
+                disabled={isLoading}
+              />
+              <Label>Description</Label>
+              <Input 
+                value={newCourse.description} 
+                onChange={(e, data) => setNewCourse({...newCourse, description: data.value})} 
+                placeholder="Course description"
+                disabled={isLoading}
+              />
+              <Label>Units</Label>
+              <Input 
+                type="number"
+                value={newCourse.units.toString()} 
+                onChange={(e, data) => setNewCourse({...newCourse, units: parseInt(data.value) || 3})} 
+                disabled={isLoading}
+              />
+              <Label>Is Laboratory?</Label>
+              <Select 
+                value={newCourse.is_laboratory ? 'true' : 'false'} 
+                onChange={(e, data) => setNewCourse({...newCourse, is_laboratory: data.value === 'true'})}
+                disabled={isLoading}
+              >
+                <option value="false">No</option>
+                <option value="true">Yes</option>
               </Select>
-              <Label>Professor</Label>
-              <Input value={newCourse.professor} onChange={(e, data) => setNewCourse({...newCourse, professor: data.value})} />
             </DialogContent>
             <DialogActions>
-              <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleAddCourse}>Add</Button>
+              <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" onClick={handleAddCourse} disabled={isLoading}>Add</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -272,28 +335,37 @@ export default function AdminCourses() {
             <DialogTitle>Edit Course</DialogTitle>
             <DialogContent className={styles.dialogContent}>
               <Label>Course Code</Label>
-              <Input value={editingCourse?.code || ''} onChange={(e, data) => setEditingCourse({...editingCourse, code: data.value})} />
-              <Label>Course Name</Label>
-              <Input value={editingCourse?.name || ''} onChange={(e, data) => setEditingCourse({...editingCourse, name: data.value})} />
-              <Label>Section</Label>
-              <Input value={editingCourse?.section || ''} onChange={(e, data) => setEditingCourse({...editingCourse, section: data.value})} />
-              <Label>Department</Label>
-              <Select value={editingCourse?.department || ''} onChange={(e, data) => setEditingCourse({...editingCourse, department: data.value})}>
-                <option value="Engineering">Engineering</option>
-                <option value="General Subject">General Subject</option>
-                <option value="Business">Business</option>
-                <option value="Physics">Physics</option>
+              <Input 
+                value={editingCourse?.course_code || ''} 
+                onChange={(e, data) => setEditingCourse({...editingCourse, course_code: data.value})}
+                disabled={isLoading}
+              />
+              <Label>Description</Label>
+              <Input 
+                value={editingCourse?.description || ''} 
+                onChange={(e, data) => setEditingCourse({...editingCourse, description: data.value})}
+                disabled={isLoading}
+              />
+              <Label>Units</Label>
+              <Input 
+                type="number"
+                value={(editingCourse?.units || 3).toString()} 
+                onChange={(e, data) => setEditingCourse({...editingCourse, units: parseInt(data.value) || 3})}
+                disabled={isLoading}
+              />
+              <Label>Is Laboratory?</Label>
+              <Select 
+                value={(editingCourse?.is_laboratory ? 'true' : 'false')} 
+                onChange={(e, data) => setEditingCourse({...editingCourse, is_laboratory: data.value === 'true'})}
+                disabled={isLoading}
+              >
+                <option value="false">No</option>
+                <option value="true">Yes</option>
               </Select>
-              <Label>Schedule</Label>
-              <Input value={editingCourse?.schedule || ''} onChange={(e, data) => setEditingCourse({...editingCourse, schedule: data.value})} />
-              <Label>Room</Label>
-              <Input value={editingCourse?.room || ''} onChange={(e, data) => setEditingCourse({...editingCourse, room: data.value})} />
-              <Label>Professor</Label>
-              <Input value={editingCourse?.professor || ''} onChange={(e, data) => setEditingCourse({...editingCourse, professor: data.value})} />
             </DialogContent>
             <DialogActions>
-              <Button appearance="secondary" onClick={() => setEditingCourse(null)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleSaveEdit}>Save</Button>
+              <Button appearance="secondary" onClick={() => setEditingCourse(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" onClick={handleSaveEdit} disabled={isLoading}>Save</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -305,11 +377,11 @@ export default function AdminCourses() {
           <DialogBody>
             <DialogTitle>Confirm Deletion</DialogTitle>
             <DialogContent>
-              Are you sure you want to delete {courseToDelete?.code} - {courseToDelete?.name}?
+              Are you sure you want to delete {courseToDelete?.course_code}?
             </DialogContent>
             <DialogActions>
-              <Button appearance="secondary" onClick={() => setCourseToDelete(null)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleConfirmDelete}>Delete</Button>
+              <Button appearance="secondary" onClick={() => setCourseToDelete(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" onClick={handleConfirmDelete} disabled={isLoading}>Delete</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

@@ -172,23 +172,32 @@ const useStyles = makeStyles({
 
 function StudentPortal() {
   const styles = useStyles();
-  const [userEmail, setUserEmail] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showPhotoInput, setShowPhotoInput] = useState(false);
-  const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(false);
+  const [error, setError] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   
-  // Photo state only (no editable profile fields)
+  // Form state
+  const [name, setName] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [section, setSection] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
-    // Get logged-in user email from localStorage
-    const storedEmail = localStorage.getItem('userEmail');
-    const email = storedEmail ? storedEmail.trim() : null;
-    setUserEmail(email);
+    loadUserProfile();
+  }, []);
 
+  const loadUserProfile = () => {
+    setIsLoading(true);
+    
+    // Get email from URL params or session
+    const urlParams = new URLSearchParams(window.location.search);
+    const email = urlParams.get('email') || localStorage.getItem('userEmail');
+    
     if (!email) {
+      setError('No user email found');
       setIsLoading(false);
       return;
     }

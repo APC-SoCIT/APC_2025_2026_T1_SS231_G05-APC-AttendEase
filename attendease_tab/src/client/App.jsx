@@ -7,6 +7,7 @@ import StudentPortal from './components/StudentPortal';
 import ProfessorDashboard from './components/ProfessorDashboard';
 import AdminPage from './components/AdminPage';
 import AdminCourses from './components/AdminCourses';
+import AdminSections from './components/AdminSections';
 import AdminLogs from './components/AdminLogs';
 import AdminUsers from './components/AdminUsers';
 import AdminSettings from './components/AdminSettings';
@@ -76,6 +77,14 @@ function App() {
             element={
               adminActive
                 ? <AdminCourses />
+                : <Navigate to="/professor" replace />
+            }
+          />
+          <Route
+            path="/admin/sections"
+            element={
+              adminActive
+                ? <AdminSections />
                 : <Navigate to="/professor" replace />
             }
           />
