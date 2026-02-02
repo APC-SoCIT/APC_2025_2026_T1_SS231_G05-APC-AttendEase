@@ -39,7 +39,7 @@ export async function testSupabaseConnection() {
   }
   
   try {
-    const { data, error } = await supabase.from('users').select('count').limit(1);
+    const { data, error } = await supabase.from('user_profiles').select('count').limit(1);
     if (error) throw error;
     console.log('✅ Supabase connected successfully');
     return true;
