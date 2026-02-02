@@ -95,7 +95,7 @@ const useStyles = makeStyles({
   }
 });
 
-function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementUpdate }) {
+function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementUpdate, onStatusChange }) {
   const styles = useStyles();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
