@@ -242,7 +242,7 @@ function StudentPortal() {
         // On error, safest to deny access or show retry
         setAccessDenied(true); 
       });
-  }, []);
+  };
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];

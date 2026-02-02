@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 // Supabase configuration
 // For Node.js backend: Add these to your .env file:
 // SUPABASE_URL=your-project-url
-// SUPABASE_ANON_KEY=your-anon-key
-// For Vite frontend: Use VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+// SUPABASE_SECRET_KEY=your-secret-key
+// For Vite frontend: Use VITE_SUPABASE_URL and VITE_SUPABASE_SECRET_KEY
 
 // Check if we're in a browser environment (Vite) or Node.js
 const isBrowser = typeof window !== 'undefined';
@@ -13,9 +13,9 @@ const supabaseUrl = isBrowser
   ? import.meta.env.VITE_SUPABASE_URL || ''
   : process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 
-const supabaseAnonKey = isBrowser
-  ? import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-  : process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseSecretKey = isBrowser
+  ? import.meta.env.VITE_SUPABASE_SECRET_KEY || ''
+  : process.env.SUPABASE_SECRET_KEY || process.env.VITE_SUPABASE_SECRET_KEY || '';
 
 let supabase = null;
 
