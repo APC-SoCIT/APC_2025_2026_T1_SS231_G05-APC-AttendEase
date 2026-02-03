@@ -9,7 +9,6 @@ import os
 import sys
 import mediapipe as mp
 from collections import Counter
-
 # MediaPipe Initialization (Tasks API)
 mp_tasks = mp.tasks
 vision = mp_tasks.vision
@@ -596,21 +595,51 @@ def match_faces_to_trackers(face_locations, frame_bgr):
 
 @app.route('/api/camera/list', methods=['GET'])
 def list_cameras():
-    """List all available cameras."""
+    """List all available cameras with timeout protection."""
     available_cameras = []
+    camera_timeout = 0.5  # 500ms timeout per camera
+    
     for i in range(10):
         try:
+            start_time = time.time()
             cap = cv2.VideoCapture(i)
+            
+            # Set a short timeout for camera operations
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, camera_timeout * 1000)
+            
             if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
+                # Try to read a frame with timeout
+                ret = False
+                frame = None
+                try:
+                    # Use a quick read attempt
+                    ret, frame = cap.read()
+                    elapsed = time.time() - start_time
+                    
+                    # If read took too long, skip this camera
+                    if elapsed > camera_timeout:
+                        cap.release()
+                        continue
+                        
+                except Exception as e:
+                    cap.release()
+                    continue
+                
+                if ret and frame is not None:
                     available_cameras.append({
                         "index": i,
                         "name": f"Camera {i}",
                         "description": f"Camera device at index {i}"
                     })
                 cap.release()
-        except Exception:
+            else:
+                # If camera didn't open quickly, skip it
+                elapsed = time.time() - start_time
+                if elapsed > camera_timeout:
+                    continue
+                    
+        except Exception as e:
+            # Silently continue on any error
             continue
     
     return jsonify({

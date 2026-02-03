@@ -102,6 +102,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   const overlayRef = useRef(null);
   const cameraActiveRef = useRef(false); // Use ref instead of state to avoid closure issues
   const processingRef = useRef(false);
+  const processingStartTimeRef = useRef(0); // Track when processing started for watchdog
+  const watchdogTimerRef = useRef(null); // Watchdog timer to detect stuck processing
+  const frameSkipCounterRef = useRef(0); // Counter for frame skipping/throttling
 
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
@@ -130,6 +133,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
       }
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+      }
     };
   }, []);
 
@@ -147,7 +153,15 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   const checkPythonService = async () => {
     try {
       addMessage('Checking Python facial recognition service...', 'info');
-      const response = await fetch('/api/facial-recognition/camera/status');
+      
+      // Create fetch with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const response = await fetch('/api/facial-recognition/camera/status', {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -155,15 +169,30 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
 
       const data = await response.json();
 
+      // Handle all possible status responses
       if (data.status === 'available' || data.status === 'unavailable') {
         setServiceStatus('Running ✓');
         addMessage('✅ Python service is running!', 'success');
+      } else if (data.status === 'error') {
+        setServiceStatus('Error ⚠');
+        addMessage(`⚠️ Python service error: ${data.message || 'Unknown error'}`, 'error');
       } else {
-        throw new Error('Invalid response');
+        // Unknown status, but service responded
+        setServiceStatus('Running ✓');
+        addMessage('✅ Python service is running!', 'success');
       }
     } catch (error) {
-      setServiceStatus('Not Running ✗');
-      addMessage('❌ Python service error. Start with: python facial_recognition_service.py', 'error');
+      if (error.name === 'AbortError') {
+        setServiceStatus('Timeout ⏱');
+        addMessage('Python service check timed out (may still be starting)', 'error');
+        // Retry after 5 seconds
+        setTimeout(() => checkPythonService(), 5000);
+      } else {
+        setServiceStatus('Not Running ✗');
+        addMessage('❌ Python service error. Start with: python facial_recognition_service.py', 'error');
+        // Retry after 10 seconds
+        setTimeout(() => checkPythonService(), 10000);
+      }
     }
   };
 
@@ -243,6 +272,14 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   };
 
   const stopCamera = async () => {
+    // Clean up watchdog timer
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+    processingRef.current = false;
+    processingStartTimeRef.current = 0;
+
     // Record checkout time for all currently detected faces before clearing
     if (detectedFaces.length > 0) {
       const checkoutTime = new Date().toLocaleTimeString('en-US', {
@@ -317,46 +354,94 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   };
 
   const processFrame = async () => {
-    if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current || processingRef.current) {
-      console.log('Frame processing skipped:', {
-        hasVideo: !!videoRef.current,
-        hasCanvas: !!canvasRef.current,
-        cameraActive: cameraActiveRef.current
-      });
-      return;
+    // Watchdog: If processing has been stuck for >500ms, force reset
+    if (processingRef.current && processingStartTimeRef.current > 0) {
+      const stuckTime = Date.now() - processingStartTimeRef.current;
+      if (stuckTime > 500) {
+        console.warn(`Processing stuck for ${stuckTime}ms, forcing reset`);
+        processingRef.current = false;
+        processingStartTimeRef.current = 0;
+        frameSkipCounterRef.current = 0; // Reset skip counter
+        if (watchdogTimerRef.current) {
+          clearTimeout(watchdogTimerRef.current);
+          watchdogTimerRef.current = null;
+        }
+      }
+    }
+
+    if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current) {
+      return; // Skip silently if not ready
+    }
+
+    // Frame throttling: Skip frames if processing is slow
+    // If processing is active, skip every other frame to prevent queue buildup
+    if (processingRef.current) {
+      frameSkipCounterRef.current++;
+      // Skip up to 3 frames while processing
+      if (frameSkipCounterRef.current < 3) {
+        return;
+      }
+      // After 3 skipped frames, force reset to prevent infinite skipping
+      if (frameSkipCounterRef.current >= 3) {
+        console.warn('Too many frames skipped, forcing processing reset');
+        processingRef.current = false;
+        processingStartTimeRef.current = 0;
+        frameSkipCounterRef.current = 0;
+      }
+    } else {
+      frameSkipCounterRef.current = 0; // Reset counter when not processing
     }
 
     try {
       processingRef.current = true;
+      processingStartTimeRef.current = Date.now();
+      
+      // Set watchdog timer to reset if processing takes too long
+      watchdogTimerRef.current = setTimeout(() => {
+        if (processingRef.current) {
+          console.warn('Processing timeout: forcing reset after 5 seconds');
+          processingRef.current = false;
+          processingStartTimeRef.current = 0;
+        }
+      }, 5000);
+
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
 
       // Check if video is ready
       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-        console.log('Video not ready yet');
         return;
       }
 
       // Process every frame (backend handles detection/tracking logic)
       ctx.drawImage(video, 0, 0, 640, 480);
-      const imageData = canvas.toDataURL('image/jpeg', 0.8);
+      const imageData = canvas.toDataURL('image/jpeg', 0.7); // Reduced quality for faster encoding
       const base64Data = imageData.split(',')[1];
 
-      console.log('Sending frame to Python service...');
+      // Create fetch with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
+      const startTime = Date.now();
       const response = await fetch('/api/facial-recognition/process-frame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frame: base64Data })
+        body: JSON.stringify({ frame: base64Data }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
+      const processingTime = Date.now() - startTime;
+      if (processingTime > 200) {
+        console.log(`Slow frame processing: ${processingTime}ms`);
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Python service response:', data);
 
       if (data.status === 'success') {
         const faces = data.detected_faces || [];
@@ -392,11 +477,23 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         drawBoundingBoxes(faces);
       }
     } catch (error) {
-      console.error('Frame processing error:', error);
-      addMessage(`Frame error: ${error.message}`, 'error');
+      if (error.name === 'AbortError') {
+        console.error('Frame processing timeout after 5 seconds');
+        addMessage('Frame processing timeout - camera may be too slow', 'error');
+      } else {
+        console.error('Frame processing error:', error);
+        addMessage(`Frame error: ${error.message}`, 'error');
+      }
     }
     finally {
+      // Always cleanup, even on error
       processingRef.current = false;
+      processingStartTimeRef.current = 0;
+      frameSkipCounterRef.current = 0; // Reset skip counter on completion
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
     }
   };
 
