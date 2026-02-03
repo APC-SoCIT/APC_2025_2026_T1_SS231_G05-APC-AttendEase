@@ -97,6 +97,8 @@ const useStyles = makeStyles({
     border: 'none',
     '&:hover': {
       backgroundColor: '#1a264a',
+      color: '#ffffff',
+      fontWeight: '500',
     },
   },
   btnIcon: {
@@ -147,6 +149,8 @@ const useStyles = makeStyles({
     fontWeight: '600',
     '&:hover': {
       backgroundColor: '#1a264a',
+      color: '#ffffff',
+      fontWeight: '700',
     },
   },
   backButton: {
@@ -166,6 +170,31 @@ function Landing() {
   const [showLogin, setShowLogin] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [canAcceptTerms, setCanAcceptTerms] = React.useState(false);
+  const termsContentRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (isTermsDialogOpen) {
+      // Use a timeout to allow the dialog to render and calculate dimensions
+      const timer = setTimeout(() => {
+        if (termsContentRef.current) {
+          const { scrollHeight, clientHeight } = termsContentRef.current;
+          if (scrollHeight <= clientHeight) {
+            setCanAcceptTerms(true);
+          }
+        }
+      }, 150); // A small delay for rendering
+      return () => clearTimeout(timer);
+    }
+  }, [isTermsDialogOpen]);
+
+  const handleTermsScroll = (event) => {
+    const element = event.currentTarget;
+    // Check if user has scrolled to the bottom (with a small tolerance)
+    if (element.scrollHeight - element.scrollTop <= element.clientHeight + 1) {
+      setCanAcceptTerms(true);
+    }
+  };
 
   // Custom Icons
   const MicrosoftIcon = () => (
@@ -258,7 +287,7 @@ function Landing() {
             Attend<span className={styles.titleHighlight}>Ease</span>
           </div>
           <Text className={styles.subtitle}>
-            Effortless Attendance, Enhanced Focus
+            Attendance System
           </Text>
         </div>
         
@@ -342,15 +371,21 @@ function Landing() {
       </div>
 
       {/* Terms Dialog */}
-      <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => setIsTermsDialogOpen(data.open)}>
+      <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => {
+        setIsTermsDialogOpen(data.open);
+        if (!data.open) {
+          setCanAcceptTerms(false);
+        }
+      }}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>Terms of Service</DialogTitle>
-            <DialogContent className={styles.dialogContent}>
+            <DialogTitle>Terms and Conditions</DialogTitle>
+            <DialogContent
+              ref={termsContentRef}
+              onScroll={handleTermsScroll}
+              className={styles.dialogContent}
+            >
               <Text>
-                <h3 style={{ marginTop: 0 }}>Terms and Conditions</h3>
-                <p><strong>Last Updated:</strong> January 15, 2025</p>
-
                 <h4>Introduction</h4>
                 <p>
                   Welcome to AttendEase. By accessing or using our attendance management platform (the "Service"), 
@@ -442,20 +477,24 @@ function Landing() {
                   <li><strong>Email:</strong> attendease@outlook.com</li>
                   <li><strong>Website:</strong> attendease.com</li>
                 </ul>
+
+                <p><strong>Last Updated:</strong> January 15, 2026</p>
               </Text>
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setIsTermsDialogOpen(false)}>Close</Button>
-              <Button 
-                appearance="primary" 
-                onClick={() => {
-                  setAcceptedTerms(true);
-                  setIsTermsDialogOpen(false);
-                  setMessageBar({ visible: false, message: '' });
-                }}
-              >
-                Accept
-              </Button>
+              {canAcceptTerms && (
+                <Button
+                  appearance="primary"
+                  onClick={() => {
+                    setAcceptedTerms(true);
+                    setIsTermsDialogOpen(false);
+                    setMessageBar({ visible: false, message: '' });
+                  }}
+                >
+                  Accept
+                </Button>
+              )}
             </DialogActions>
           </DialogBody>
         </DialogSurface>
