@@ -177,6 +177,9 @@ function StudentPortal() {
   const [error, setError] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [isRegistrationComplete, setIsRegistrationComplete] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [showPhotoInput, setShowPhotoInput] = useState(false);
   
   // Form state
   const [name, setName] = useState('');
@@ -201,6 +204,9 @@ function StudentPortal() {
       setIsLoading(false);
       return;
     }
+    
+    // Store email in state
+    setUserEmail(email);
 
     // Fetch user from API
     const encodedEmail = encodeURIComponent(email);
@@ -218,6 +224,7 @@ function StudentPortal() {
             studentId: s.student_number,
             section: s.section,
             course: s.program,
+            email: s.email,
             photoPath: s.photo_url,
             isHardcoded: false
           };
@@ -418,7 +425,7 @@ function StudentPortal() {
               
               <div className={styles.infoRow}>
                 <Text className={styles.label}>Email:</Text>
-                <Text className={styles.value}>{userEmail}</Text>
+                <Text className={styles.value}>{userData.email || userEmail}</Text>
               </div>
             </div>
           </div>
@@ -504,7 +511,7 @@ function StudentPortal() {
 
             <div className={styles.infoRow}>
               <Text className={styles.label}>Email:</Text>
-              <Text className={styles.value}>{userEmail}</Text>
+              <Text className={styles.value}>{userData.email || userEmail}</Text>
             </div>
           </div>
         </div>
