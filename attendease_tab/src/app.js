@@ -541,7 +541,28 @@ app.post('/api/students/:id/enroll-face', async (req, res) => {
     const fileExt = imageFormatMatch[1] === 'jpeg' ? 'jpg' : imageFormatMatch[1];
     const fileName = `${id}.${fileExt}`;
 
-    // Upload to Supabase Storage (auto-overwrites if exists)
+    // Delete any existing photos for this student (all extensions)
+    console.log(`[Enrollment] Cleaning up old photos for student ${id}...`);
+    const possibleFiles = [`${id}.jpg`, `${id}.jpeg`, `${id}.png`];
+    const { data: existingFiles } = await supabase.storage
+      .from('student-faces')
+      .list('', { search: id });
+    
+    if (existingFiles && existingFiles.length > 0) {
+      const filesToDelete = existingFiles.map(f => f.name);
+      const { error: deleteError } = await supabase.storage
+        .from('student-faces')
+        .remove(filesToDelete);
+      
+      if (deleteError) {
+        console.warn('[Enrollment] Warning: Could not delete old photos:', deleteError);
+        // Continue anyway - upsert will handle same extension
+      } else {
+        console.log(`[Enrollment] Deleted ${filesToDelete.length} old photo(s)`);
+      }
+    }
+
+    // Upload to Supabase Storage
     console.log(`[Enrollment] Uploading photo to Supabase Storage: ${fileName}`);
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('student-faces')
