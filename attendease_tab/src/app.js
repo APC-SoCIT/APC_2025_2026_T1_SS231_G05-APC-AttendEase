@@ -25,8 +25,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Add JSON parsing middleware
-app.use(express.json());
+// Add JSON parsing middleware with increased limit for image uploads
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 const sslOptions = {
   key: process.env.SSL_KEY_FILE ? fs.readFileSync(process.env.SSL_KEY_FILE) : undefined,
@@ -467,6 +468,196 @@ app.put('/api/students/:id', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Enroll student face (photo upload + vector extraction)
+app.post('/api/students/:id/enroll-face', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image, consent } = req.body;
+
+    // Validate input
+    if (!image) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'No image data provided' 
+      });
+    }
+
+    if (!consent) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Consent is required for biometric enrollment' 
+      });
+    }
+
+    // Validate file format (check base64 header)
+    const imageFormatMatch = image.match(/^data:image\/(jpeg|jpg|png);base64,/);
+    if (!imageFormatMatch) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Invalid image format. Only JPG and PNG are supported.' 
+      });
+    }
+
+    // Validate file size (approximate, base64 is ~33% larger than binary)
+    const base64Data = image.split(',')[1];
+    const sizeInBytes = (base64Data.length * 3) / 4;
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    if (sizeInBytes > maxSize) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Image size exceeds 5MB limit. Please upload a smaller image.' 
+      });
+    }
+
+    // Call Python service to extract face vector
+    console.log(`[Enrollment] Extracting face vector for student ${id}...`);
+    let vectorResponse;
+    try {
+      vectorResponse = await axios.post('http://localhost:5000/api/enroll-face', {
+        image: image
+      });
+    } catch (error) {
+      // Handle specific face validation errors from Python service
+      if (error.response && error.response.data) {
+        return res.status(error.response.status).json({
+          status: 'error',
+          message: error.response.data.message,
+          detail: error.response.data.detail
+        });
+      }
+      throw error;
+    }
+
+    const faceVector = vectorResponse.data.vector;
+    console.log(`[Enrollment] Face vector extracted successfully (length: ${faceVector.length})`);
+
+    // Convert base64 to buffer for storage
+    const base64Image = image.split(',')[1];
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+    const fileExt = imageFormatMatch[1] === 'jpeg' ? 'jpg' : imageFormatMatch[1];
+    const fileName = `${id}.${fileExt}`;
+
+    // Upload to Supabase Storage (auto-overwrites if exists)
+    console.log(`[Enrollment] Uploading photo to Supabase Storage: ${fileName}`);
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('student-faces')
+      .upload(fileName, imageBuffer, {
+        contentType: `image/${fileExt}`,
+        upsert: true // Overwrite if exists
+      });
+
+    if (uploadError) {
+      console.error('[Enrollment] Storage upload error:', uploadError);
+      return res.status(500).json({ 
+        status: 'error', 
+        message: `Failed to upload photo: ${uploadError.message}` 
+      });
+    }
+
+    // Get signed URL for private bucket (valid for 1 year)
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('student-faces')
+      .createSignedUrl(fileName, 31536000); // 1 year in seconds
+    
+    if (urlError) {
+      console.error('[Enrollment] Failed to generate signed URL:', urlError);
+      return res.status(500).json({ 
+        status: 'error', 
+        message: 'Failed to generate photo URL' 
+      });
+    }
+    
+    const photoUrl = urlData.signedUrl;
+    console.log(`[Enrollment] Photo uploaded successfully: ${photoUrl}`);
+
+    // Check if student already has biometric record
+    const { data: existingRecord, error: checkError } = await supabase
+      .from('student_biometric_data')
+      .select('biometric_id')
+      .eq('student_id', id)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('[Enrollment] Database check error:', checkError);
+      return res.status(500).json({ 
+        status: 'error', 
+        message: 'Database error while checking existing enrollment' 
+      });
+    }
+
+    // Update or insert biometric record
+    let dbResult;
+    if (existingRecord) {
+      // Update existing record
+      console.log(`[Enrollment] Updating existing biometric record for student ${id}`);
+      const { data, error } = await supabase
+        .from('student_biometric_data')
+        .update({
+          face_profile: faceVector,
+          consent_flag: true,
+          captured_at: new Date().toISOString()
+        })
+        .eq('student_id', id)
+        .select();
+      
+      dbResult = { data, error };
+    } else {
+      // Insert new record
+      console.log(`[Enrollment] Creating new biometric record for student ${id}`);
+      const { data, error } = await supabase
+        .from('student_biometric_data')
+        .insert({
+          student_id: id,
+          face_profile: faceVector,
+          consent_flag: true,
+          captured_at: new Date().toISOString()
+        })
+        .select();
+      
+      dbResult = { data, error };
+    }
+
+    if (dbResult.error) {
+      console.error('[Enrollment] Database error:', dbResult.error);
+      return res.status(500).json({ 
+        status: 'error', 
+        message: `Failed to save biometric data: ${dbResult.error.message}` 
+      });
+    }
+
+    // Update user_profiles with photo URL
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .update({ photo_url: photoUrl })
+      .eq('user_id', id);
+
+    if (profileError) {
+      console.error('[Enrollment] Profile update error:', profileError);
+      // Don't fail the request, just log the error
+    }
+
+    console.log(`[Enrollment] ✅ Student ${id} enrolled successfully`);
+    
+    res.json({ 
+      status: 'success', 
+      message: 'Face enrolled successfully',
+      data: {
+        photo_url: photoUrl,
+        enrolled_at: dbResult.data[0].captured_at,
+        biometric_id: dbResult.data[0].biometric_id
+      }
+    });
+
+  } catch (error) {
+    console.error('[Enrollment] Unexpected error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: error.message || 'Enrollment failed due to server error'
+    });
   }
 });
 

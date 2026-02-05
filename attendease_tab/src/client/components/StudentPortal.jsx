@@ -187,6 +187,12 @@ function StudentPortal() {
   const [section, setSection] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  
+  // Enrollment state
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [biometricData, setBiometricData] = useState(null);
 
   useEffect(() => {
     loadUserProfile();
@@ -253,89 +259,146 @@ function StudentPortal() {
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUploadPhoto = () => {
-    if (!photoPreview) {
-      alert('Please select a photo to upload');
+    if (!file) return;
+    
+    // Clear previous errors
+    setUploadError(null);
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      setUploadError('Invalid file type. Only JPG and PNG are supported.');
       return;
     }
-
-    // Only update the photo
-    const updates = {
-      photoUrl: photoPreview
+    
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError('Image size exceeds 5MB limit. Please upload a smaller image.');
+      return;
+    }
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result);
+      setPhotoFile(file);
     };
+    reader.readAsDataURL(file);
+  };
 
-    fetch(`/api/students/${userData.user_id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    })
-    .then(res => res.json())
-    .then(data => {
+  const handleUploadPhoto = async () => {
+    if (!photoPreview) {
+      setUploadError('Please select a photo to upload');
+      return;
+    }
+    
+    if (!consentChecked) {
+      setUploadError('Please consent to biometric data collection');
+      return;
+    }
+    
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const response = await fetch(`/api/students/${userData.user_id}/enroll-face`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: photoPreview,
+          consent: consentChecked
+        })
+      });
+      
+      const data = await response.json();
+      
       if (data.status === 'success') {
-        const s = data.student;
+        // Update user data with enrolled info
         setUserData(prev => ({
           ...prev,
-          photoPath: s.photo_url
+          photoPath: data.data.photo_url
         }));
+        setBiometricData({
+          enrolled_at: data.data.enrolled_at,
+          biometric_id: data.data.biometric_id
+        });
         setIsRegistrationComplete(true);
         setPhotoPreview(null);
+        setPhotoFile(null);
+        setConsentChecked(false);
       } else {
-        alert('Failed to save photo: ' + data.message);
+        // Show specific error message from server
+        setUploadError(data.detail || data.message || 'Failed to enroll face');
       }
-    })
-    .catch(err => {
+    } catch (err) {
       console.error('Error uploading photo:', err);
-      alert('Error uploading photo');
-    });
+      setUploadError('Network error. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleEditProfilePhoto = () => {
     setShowPhotoInput(!showPhotoInput);
+    setUploadError(null);
+    setConsentChecked(false);
   };
 
-  const handleSavePhoto = () => {
-    if (photoPreview && photoPreview !== userData.photoPath) {
-      const updates = {
-        photoUrl: photoPreview
-      };
-
-      fetch(`/api/students/${userData.user_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-           const s = data.student;
-           setUserData(prev => ({
-             ...prev,
-             photoPath: s.photo_url
-           }));
-           setShowPhotoInput(false);
-        } else {
-          alert('Failed to update photo: ' + data.message);
-        }
-      })
-      .catch(err => console.error('Error updating photo:', err));
-    } else {
+  const handleSavePhoto = async () => {
+    if (!photoPreview || photoPreview === userData.photoPath) {
       setShowPhotoInput(false);
+      return;
+    }
+    
+    if (!consentChecked) {
+      setUploadError('Please consent to biometric data collection');
+      return;
+    }
+    
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const response = await fetch(`/api/students/${userData.user_id}/enroll-face`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: photoPreview,
+          consent: consentChecked
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        setUserData(prev => ({
+          ...prev,
+          photoPath: data.data.photo_url
+        }));
+        setBiometricData({
+          enrolled_at: data.data.enrolled_at,
+          biometric_id: data.data.biometric_id
+        });
+        setShowPhotoInput(false);
+        setPhotoPreview(null);
+        setConsentChecked(false);
+      } else {
+        setUploadError(data.detail || data.message || 'Failed to update photo');
+      }
+    } catch (err) {
+      console.error('Error updating photo:', err);
+      setUploadError('Network error. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleCancelPhoto = () => {
     setShowPhotoInput(false);
     setPhotoPreview(userData.photoPath);
+    setUploadError(null);
+    setConsentChecked(false);
   };
 
   if (isLoading) {
@@ -379,10 +442,30 @@ function StudentPortal() {
         <Card className={styles.card}>
           <h1 className={styles.header}>Welcome, {userData.firstName}!</h1>
           <Text className={styles.subtitle}>
-            Please upload your photo to complete your attendance profile.
+            Please upload your photo to complete your attendance profile and enable facial recognition for attendance tracking.
           </Text>
 
           <Divider style={{ marginBottom: '25px' }} />
+
+          {/* Photo Requirements */}
+          <div style={{ 
+            padding: '15px', 
+            backgroundColor: '#e8f4f8', 
+            borderRadius: '6px', 
+            marginBottom: '20px',
+            border: '1px solid #b3d9e8'
+          }}>
+            <Text weight="semibold" style={{ display: 'block', marginBottom: '10px', color: '#2c3e50' }}>
+              📸 Photo Requirements:
+            </Text>
+            <ul style={{ margin: 0, paddingLeft: '20px', color: '#5a6c7d' }}>
+              <li>Your face only in the picture</li>
+              <li>Good lighting (avoid shadows)</li>
+              <li>Your face is shown or facing directly in the camera</li>
+              <li>Maximum file size: 5MB</li>
+              <li>Supported formats: JPG, PNG</li>
+            </ul>
+          </div>
 
           <div className={styles.profileLayout}>
             <div className={styles.facialProfileSection}>
@@ -395,10 +478,27 @@ function StudentPortal() {
               </div>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/jpg,image/png"
                 onChange={handlePhotoChange}
                 style={{ cursor: 'pointer' }}
+                disabled={isUploading}
               />
+              
+              {/* Error Display */}
+              {uploadError && (
+                <div style={{ 
+                  padding: '10px', 
+                  backgroundColor: '#ffe6e6', 
+                  border: '1px solid #ffcccc',
+                  borderRadius: '4px',
+                  marginTop: '10px',
+                  width: '100%'
+                }}>
+                  <Text style={{ color: '#c0392b', fontSize: '14px' }}>
+                    ❌ {uploadError}
+                  </Text>
+                </div>
+              )}
             </div>
 
             <div className={styles.infoSection}>
@@ -432,13 +532,38 @@ function StudentPortal() {
 
           <Divider style={{ marginBottom: '25px' }} />
 
+          {/* Consent Checkbox */}
+          <div style={{ 
+            padding: '15px', 
+            backgroundColor: '#fff9e6', 
+            border: '1px solid #ffe6b3',
+            borderRadius: '6px', 
+            marginBottom: '20px' 
+          }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                style={{ marginRight: '10px', marginTop: '3px' }}
+                disabled={isUploading}
+              />
+              <Text style={{ color: '#2c3e50', fontSize: '14px', lineHeight: '1.6' }}>
+                I consent to the collection and use of my facial biometric data for automated attendance tracking purposes. 
+                I understand that my photo and facial recognition data will be securely stored and used exclusively for 
+                attendance verification in my enrolled courses.
+              </Text>
+            </label>
+          </div>
+
           <div className={styles.buttonSection}>
             <Button 
               appearance="primary"
               className={styles.updateProfileButton}
               onClick={handleUploadPhoto}
+              disabled={!photoPreview || !consentChecked || isUploading}
             >
-              Save Photo & Continue
+              {isUploading ? 'Processing...' : 'Save Registration'}
             </Button>
           </div>
         </Card>
@@ -450,10 +575,12 @@ function StudentPortal() {
   return (
     <div className={styles.container}>
       <Card className={styles.card}>
-        <h1 className={styles.header}>Hello, {userData.firstName}!</h1>
-        <Text className={styles.subtitle}>
-          Manage your attendance profile and settings
-        </Text>
+        <div className={styles.successHeader}>
+          <Text className={styles.successTitle}>✓ Registration Complete</Text>
+          <Text className={styles.successMessage}>
+            Hello, {userData.firstName}! Your facial recognition enrollment is active.
+          </Text>
+        </div>
 
         <Divider style={{ marginBottom: '25px' }} />
 
@@ -479,12 +606,68 @@ function StudentPortal() {
               )}
             </div>
             {showPhotoInput && (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoChange}
-                style={{ cursor: 'pointer' }}
-              />
+              <>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png"
+                  onChange={handlePhotoChange}
+                  style={{ cursor: 'pointer' }}
+                  disabled={isUploading}
+                />
+                
+                {/* Photo Requirements for Update */}
+                <div style={{ 
+                  padding: '10px', 
+                  backgroundColor: '#e8f4f8', 
+                  borderRadius: '4px', 
+                  marginTop: '10px',
+                  fontSize: '12px',
+                  width: '100%'
+                }}>
+                  <Text style={{ color: '#5a6c7d', fontSize: '12px' }}>
+                    📸 Face directly at camera, good lighting, max 5MB
+                  </Text>
+                </div>
+                
+                {/* Consent for Update */}
+                <div style={{ 
+                  padding: '10px', 
+                  backgroundColor: '#fff9e6', 
+                  border: '1px solid #ffe6b3',
+                  borderRadius: '4px', 
+                  marginTop: '10px',
+                  width: '100%'
+                }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', cursor: 'pointer', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={consentChecked}
+                      onChange={(e) => setConsentChecked(e.target.checked)}
+                      style={{ marginRight: '8px', marginTop: '2px' }}
+                      disabled={isUploading}
+                    />
+                    <Text style={{ color: '#2c3e50', fontSize: '12px', lineHeight: '1.5' }}>
+                      I consent to updating my facial biometric data for attendance tracking.
+                    </Text>
+                  </label>
+                </div>
+                
+                {/* Error Display */}
+                {uploadError && (
+                  <div style={{ 
+                    padding: '10px', 
+                    backgroundColor: '#ffe6e6', 
+                    border: '1px solid #ffcccc',
+                    borderRadius: '4px',
+                    marginTop: '10px',
+                    width: '100%'
+                  }}>
+                    <Text style={{ color: '#c0392b', fontSize: '12px' }}>
+                      ❌ {uploadError}
+                    </Text>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -513,6 +696,15 @@ function StudentPortal() {
               <Text className={styles.label}>Email:</Text>
               <Text className={styles.value}>{userData.email || userEmail}</Text>
             </div>
+            
+            {biometricData && biometricData.enrolled_at && (
+              <div className={styles.infoRow}>
+                <Text className={styles.label}>Enrolled On:</Text>
+                <Text className={styles.value}>
+                  {new Date(biometricData.enrolled_at).toLocaleDateString()}
+                </Text>
+              </div>
+            )}
           </div>
         </div>
 
@@ -525,12 +717,14 @@ function StudentPortal() {
                 appearance="primary"
                 className={styles.updateProfileButton}
                 onClick={handleSavePhoto}
+                disabled={!photoPreview || !consentChecked || isUploading}
               >
-                Save Photo
+                {isUploading ? 'Processing...' : 'Save Photo'}
               </Button>
               <Button 
                 appearance="secondary"
                 onClick={handleCancelPhoto}
+                disabled={isUploading}
               >
                 Cancel
               </Button>
@@ -542,14 +736,14 @@ function StudentPortal() {
                 className={styles.updateProfileButton}
                 onClick={handleEditProfilePhoto}
               >
-                Edit Profile
+                Update Photo
               </Button>
             </>
           )}
         </div>
 
         <Text size={200} style={{ marginTop: '15px', color: '#7f8c8d' }}>
-          Note: If you want changes in your Personal Information, contact Admin for changes.
+          Note: To edit other information, please contact: admin
         </Text>
       </Card>
     </div>
