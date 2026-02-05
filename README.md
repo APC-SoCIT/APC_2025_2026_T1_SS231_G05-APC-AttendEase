@@ -172,6 +172,41 @@ These files are **NOT in Git** and must be created locally:
 
 ---
 
+## Facial Recognition Test (Standalone)
+
+To test the facial recognition system independently with your webcam:
+
+### Run the Test
+
+```powershell
+cd attendease_tab/python
+venv\Scripts\activate      # Windows
+# source venv/bin/activate # Linux/Mac
+
+python run_facial_recognition.py
+```
+
+This launches **both** the service and test client automatically.
+
+### What to Expect
+
+- A webcam window opens showing:
+  - **Face detection** with bounding boxes
+  - **"HAND DETECTED!"** indicator when you raise your hand
+  - **Engagement stats** (Avg %, Engaged, Present, Disengaged)
+  - **Display FPS** counter
+
+### Stop the Test
+
+Press **`q`** in the webcam window or **`Ctrl+C`** in the terminal.
+
+The script will:
+1. Close the webcam window
+2. Shut down the facial recognition service
+3. Display a summary of frames processed
+
+---
+
 ## Technology Stack
 
 | Component | Technology |
