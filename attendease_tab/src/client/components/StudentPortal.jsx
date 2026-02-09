@@ -25,7 +25,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
+    backgroundImage: 'linear-gradient(135deg, #294972 35%, #ffba08)',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     WebkitFontSmoothing: 'antialiased',
     MozOsxFontSmoothing: 'grayscale',
