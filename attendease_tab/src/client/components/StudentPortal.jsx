@@ -26,6 +26,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minHeight: '100vh',
     backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
   },
   
   // Top Bar Styles
@@ -48,6 +51,7 @@ const useStyles = makeStyles({
     fontWeight: '800',
     color: '#244670',
     cursor: 'default',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '@media (max-width: 768px)': {
       fontSize: '24px',
     }
@@ -114,6 +118,7 @@ const useStyles = makeStyles({
     fontSize: '18px',
     fontWeight: '600',
     color: '#244670',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
   closeButton: {
     width: '32px',
@@ -145,6 +150,7 @@ const useStyles = makeStyles({
     borderRadius: '4px',
     textAlign: 'left',
     width: '100%',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '&:hover': {
       backgroundColor: '#f3f2f1',
     }
@@ -195,6 +201,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     ...shorthands.gap('12px'),
     marginBottom: '30px',
+    '@media (max-width: 768px)': {
+      marginBottom: '24px',
+    }
   },
   dot: {
     width: '12px',
@@ -210,21 +219,36 @@ const useStyles = makeStyles({
   
   // Headers
   header: {
-    fontSize: '32px',
+    fontSize: '40px',
     fontWeight: '800',
     color: '#244670',
-    marginBottom: '10px',
+    marginBottom: '16px',
+    marginTop: '0',
     textAlign: 'center',
+    lineHeight: '1.2',
+    wordSpacing: '0.05em',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '@media (max-width: 768px)': {
-      fontSize: '26px',
+      fontSize: '28px',
+      marginBottom: '12px',
+      lineHeight: '1.3',
+      ...shorthands.padding('0', '10px'),
     }
   },
   subtitle: {
     fontSize: '15px',
     color: '#5a6c7d',
     marginBottom: '30px',
+    marginTop: '0',
     textAlign: 'center',
-    lineHeight: '1.5',
+    lineHeight: '1.6',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '@media (max-width: 768px)': {
+      fontSize: '14px',
+      marginBottom: '24px',
+      lineHeight: '1.5',
+      ...shorthands.padding('0', '10px'),
+    }
   },
   
   // Info Section (Read-only fields)
@@ -252,11 +276,13 @@ const useStyles = makeStyles({
     fontWeight: '600',
     color: '#2c3e50',
     minWidth: '140px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
   value: {
     color: '#5a6c7d',
     textAlign: 'right',
     flex: 1,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '@media (max-width: 768px)': {
       textAlign: 'left',
     }
@@ -351,6 +377,7 @@ const useStyles = makeStyles({
     color: '#ffffff',
     borderRadius: '8px',
     ...shorthands.border('none'),
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '&:hover': {
       backgroundColor: '#1a3350',
     },
@@ -372,6 +399,7 @@ const useStyles = makeStyles({
     color: '#244670',
     ...shorthands.border('2px', 'solid', '#244670'),
     borderRadius: '8px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '&:hover': {
       backgroundColor: '#f3f2f1',
     },
@@ -947,7 +975,7 @@ function StudentPortal() {
         Kindly check your information details below.
       </Text>
       
-      <Divider style={{ marginBottom: '30px' }} />
+      <Divider style={{ marginBottom: '30px', marginTop: '8px' }} />
       
       {renderStudentInfo()}
       
@@ -975,7 +1003,7 @@ function StudentPortal() {
           Please upload profile photo for facial registration
         </Text>
         
-        <Divider style={{ marginBottom: '30px' }} />
+        <Divider style={{ marginBottom: '30px', marginTop: '8px' }} />
         
         <div className={styles.photoUploadSection}>
           <div className={styles.photoBox}>
