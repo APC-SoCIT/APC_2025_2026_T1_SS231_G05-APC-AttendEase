@@ -28,21 +28,38 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100vh',
+    minHeight: '100vh',
     width: '100vw',
     backgroundImage: `url(${backgroundUrl})`, 
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
-    overflow: 'hidden',
+    overflowY: 'auto',
+    fontFamily: '"Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
+    '@media (max-width: 768px)': {
+      paddingBottom: '40px',
+    },
   },
-  overlay: {
-    position: 'absolute',
+  backgroundImage: {
+    position: 'fixed',
     top: 0,
     left: 0,
     width: '100%',
     height: '100%',
-    background: 'linear-gradient(90deg, rgba(0,0,0,0.1) 0%, rgba(255, 204, 0, 0.5) 100%)',
+    backgroundImage: `url(${backgroundUrl})`, 
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    zIndex: 0,
+  },
+  overlay: {
+    position: 'absolute',
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(135deg, rgba(32, 79, 235, 0.5) 0%, rgba(255, 204, 0, 0.54) 100%)',
     zIndex: 1,
   },
   card: {
@@ -57,9 +74,18 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    margin: '20px',
+    '@media (max-width: 768px)': {
+      maxWidth: '90%',
+      ...shorthands.padding('24px'),
+      margin: '16px',
+    },
   },
   logoSection: {
     marginBottom: '30px',
+    '@media (max-width: 768px)': {
+      marginBottom: '20px',
+    },
   },
   title: {
     fontSize: '36px',
@@ -67,6 +93,9 @@ const useStyles = makeStyles({
     color: '#244670', // Deep Blue
     lineHeight: '1',
     marginBottom: '5px',
+    '@media (max-width: 768px)': {
+      fontSize: '28px',
+    },
   },
   titleHighlight: {
     color: '#FFB900', // Gold/Yellow
@@ -76,23 +105,31 @@ const useStyles = makeStyles({
     color: '#666',
     marginTop: '5px',
     textAlign: 'center',
-    display: 'block'
+    display: 'block',
+    '@media (max-width: 768px)': {
+      fontSize: '12px',
+    },
   },
   buttonGroup: {
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'center',
     ...shorthands.gap('15px'),
-    width: '60%',
+    width: '100%',
+    maxWidth: '100%',
+    '@media (max-width: 768px)': {
+      ...shorthands.gap('12px'),
+    },
   },
   customBtn: {
-    width: '100%',
+    width: 'auto',
+    ...shorthands.padding('0', '30px'),
     height: '60px',
     fontSize: '16px',
     fontWeight: '400',
     backgroundColor: '#2E3A6E', // Deep Blue
     color: '#ffffff',
-    justifyContent: 'flex-start',
-    paddingLeft: '20px',
+    justifyContent: 'center',
     borderRadius: '10px',
     border: 'none',
     '&:hover': {
@@ -100,14 +137,23 @@ const useStyles = makeStyles({
       color: '#ffffff',
       fontWeight: '500',
     },
+    '@media (max-width: 768px)': {
+      height: '50px',
+      fontSize: '14px',
+    },
   },
   btnIcon: {
-    marginRight: '15px',
+    marginRight: '10px',
     width: '24px',
     height: '24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    '@media (max-width: 768px)': {
+      width: '20px',
+      height: '20px',
+      marginRight: '8px',
+    },
   },
   footer: {
     position: 'absolute',
@@ -116,6 +162,10 @@ const useStyles = makeStyles({
     zIndex: 10,
     fontSize: '12px',
     opacity: 0.8,
+    '@media (max-width: 768px)': {
+      fontSize: '10px',
+      bottom: '10px',
+    },
   },
   dialogContent: {
     maxHeight: '400px',
@@ -237,7 +287,7 @@ function Landing() {
       return;
     }
 
-    // Simple credential validation
+    // Test credential validation
     const validCredentials = [
       { email: 'test@student.apc.edu.ph', password: 'test123', route: '/student' },
       { email: 'test@apc.edu.ph', password: 'test123', route: '/professor' }
@@ -276,10 +326,9 @@ function Landing() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.backgroundImage}></div>
       {/* Background Overlay */}
       <div className={styles.overlay}></div>
-
-      {/* REMOVED: The Corner Logo Image */}
 
       <Card className={styles.card}>
         <div className={styles.logoSection}>
@@ -287,7 +336,7 @@ function Landing() {
             Attend<span className={styles.titleHighlight}>Ease</span>
           </div>
           <Text className={styles.subtitle}>
-            Attendance System
+            Automated Attendance System
           </Text>
         </div>
         
@@ -295,7 +344,7 @@ function Landing() {
           <div className={styles.buttonGroup}>
             
             {/* Button 1: Sign In (Text updated) */}
-            <Tooltip content="Please ensure you have read, understood, and agreed to the terms and conditions before signing in." relationship="description" positioning="after">
+            <Tooltip content="Please ensure you have read, understood, and agreed to the terms and conditions before signing in." relationship="description" positioning="above">
               <Button 
                 className={styles.customBtn}
                 onClick={handleSignInClick}
@@ -311,7 +360,7 @@ function Landing() {
               onClick={() => setIsTermsDialogOpen(true)}
               icon={<div className={styles.btnIcon}><CheckboxIcon checked={acceptedTerms} /></div>}
             >
-              Terms and Conditions
+              Terms and Conditions &nbsp;
             </Button>
 
           </div>
@@ -372,6 +421,9 @@ function Landing() {
 
       {/* Terms Dialog */}
       <Dialog open={isTermsDialogOpen} onOpenChange={(event, data) => {
+        if (data.type === 'backdropClick') {
+          return;
+        }
         setIsTermsDialogOpen(data.open);
         if (!data.open) {
           setCanAcceptTerms(false);
