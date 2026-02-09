@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
   "version": "1.0.0",
-  "id": "76f3b4e2-1234-4a5b-8c9d-123456789abc", 
+  "id": "3821e524-eacd-4a12-89bd-45be73800b86",
   "packageName": "com.apc.attendease",
   "developer": {
     "name": "AttendEase Team",
@@ -25,7 +25,7 @@
   "accentColor": "#0047AB",
   "configurableTabs": [
     {
-      "configurationUrl": "http://192.168.1.42:5173/config",
+      "configurationUrl": "https://unaccusable-barrie-absorbed.ngrok-free.dev/config",
       "canUpdateConfiguration": true,
       "scopes": ["team"]
     }
@@ -34,17 +34,22 @@
     {
       "entityId": "dashboard",
       "name": "Attendance Dashboard",
-      "contentUrl": "http://192.168.1.42:5173/dashboard",
-      "websiteUrl": "http://192.168.1.42:5173/dashboard",
+      "contentUrl": "https://unaccusable-barrie-absorbed.ngrok-free.dev/dashboard",
+      "websiteUrl": "https://unaccusable-barrie-absorbed.ngrok-free.dev/dashboard",
       "scopes": ["personal"]
     }
+  ],
+  "devicePermissions": [
+    "media",
+    "video",
+    "camera"
   ],
   "permissions": [
     "identity",
     "video"
   ],
   "validDomains": [
-    "192.168.1.42",
+    "unaccusable-barrie-absorbed.ngrok-free.dev",
     "attendease.com"
   ]
 }

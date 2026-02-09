@@ -31,8 +31,11 @@ export default defineConfig({
     global: 'globalThis',
   },
   server: {
-    // Default Vite port for HTTP development
     port: 5173,
+    // 1. Allow the ngrok domain to connect to your local server
+    allowedHosts: [
+      'unaccusable-barrie-absorbed.ngrok-free.dev', // Simplest for development, or use: '.ngrok-free.app'
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:3333',
@@ -45,7 +48,11 @@ export default defineConfig({
         secure: false
       }
     },
-    // HTTPS configuration (optional, for production/Teams deployment)
+    // 2. Fix HMR so it uses the secure ngrok tunnel instead of local websockets
+    hmr: {
+      clientPort: 443,
+    },
+    // Keep your existing HTTPS logic
     https: process.env.SSL_CRT_FILE && process.env.SSL_KEY_FILE ? {
       cert: fs.readFileSync(process.env.SSL_CRT_FILE),
       key: fs.readFileSync(process.env.SSL_KEY_FILE),
