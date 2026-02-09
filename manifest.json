@@ -1,0 +1,50 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "76f3b4e2-1234-4a5b-8c9d-123456789abc", 
+  "packageName": "com.apc.attendease",
+  "developer": {
+    "name": "AttendEase Team",
+    "websiteUrl": "https://attendease.com",
+    "privacyUrl": "https://attendease.com/privacy",
+    "termsOfUseUrl": "https://attendease.com/terms"
+  },
+  "name": {
+    "short": "AttendEase",
+    "full": "AttendEase: Automated Attendance & Engagement"
+  },
+  "description": {
+    "short": "Automated attendance and engagement tracking using facial recognition.",
+    "full": "AttendEase streamlines HyFlex classes by using facial recognition to track attendance and behavioral cues to monitor student engagement in real-time."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0047AB",
+  "configurableTabs": [
+    {
+      "configurationUrl": "http://192.168.1.42:5173/config",
+      "canUpdateConfiguration": true,
+      "scopes": ["team"]
+    }
+  ],
+  "staticTabs": [
+    {
+      "entityId": "dashboard",
+      "name": "Attendance Dashboard",
+      "contentUrl": "http://192.168.1.42:5173/dashboard",
+      "websiteUrl": "http://192.168.1.42:5173/dashboard",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "video"
+  ],
+  "validDomains": [
+    "192.168.1.42",
+    "attendease.com"
+  ]
+}
