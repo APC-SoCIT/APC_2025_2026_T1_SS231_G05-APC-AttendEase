@@ -277,7 +277,14 @@ MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - mor
 SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 seconds)
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
 HAND_RAISE_FRAMES_THRESHOLD = 2  # Need 2+ consecutive frames to confirm hand raised
+HAND_DECAY_MISS_FRAMES = 2  # Require consecutive misses before lowering hand counter
 MIN_FACE_SIZE = 40  # Minimum face width/height in pixels to filter false detections
+HAND_HORIZONTAL_FACTOR = 1.1
+HAND_HORIZONTAL_MIN = 0.12
+HAND_HORIZONTAL_MAX = 0.45
+HAND_POINTS_ABOVE_FACE_MIDLINE_RATIO = 0.35
+HAND_VERTICAL_MARGIN = 0.04
+HAND_DEBUG_LOG_INTERVAL = 20
 # Note: ENGAGEMENT_ENABLED is set at the top during MediaPipe initialization
 
 
@@ -327,6 +334,9 @@ class FaceTracker:
         self.sleep_counter = 0
         self.speak_counter = 0
         self.hand_raise_counter = 0
+        self.hand_miss_streak = 0
+        self.raw_hand_detected = False
+        self.matched_hand_points = 0
         self.ear_history = []
         self.mar_history = []
         
@@ -400,7 +410,10 @@ class FaceTracker:
     def is_expired(self):
         return self.missed_frames > TRACKING_FRAMES
 
-    def update_behavior(self, ear, mar, hand_raised_detected):
+    def update_behavior(self, ear, mar, hand_raised_detected, matched_hand_points=0):
+        self.raw_hand_detected = bool(hand_raised_detected)
+        self.matched_hand_points = int(matched_hand_points)
+
         # Update EAR history
         if ear is not None:
             self.ear_history.append(ear)
@@ -436,9 +449,13 @@ class FaceTracker:
 
         # Hand Raise Logic (smoothed with counter like sleep/speak)
         if hand_raised_detected:
-            self.hand_raise_counter += 1
+            self.hand_raise_counter = min(self.hand_raise_counter + 1, HAND_RAISE_FRAMES_THRESHOLD + 6)
+            self.hand_miss_streak = 0
         else:
-            self.hand_raise_counter = max(0, self.hand_raise_counter - 1)
+            self.hand_miss_streak += 1
+            if self.hand_miss_streak >= HAND_DECAY_MISS_FRAMES:
+                self.hand_raise_counter = max(0, self.hand_raise_counter - 1)
+                self.hand_miss_streak = 0
         self.hand_raised = self.hand_raise_counter >= HAND_RAISE_FRAMES_THRESHOLD
         
         # Calculate Composite Score and Engagement Level
@@ -459,12 +476,16 @@ class FaceTracker:
             "engagement_level": self.engagement_level,
             "is_sleeping": self.is_sleeping,
             "is_speaking": self.is_speaking,
-            "hand_raised": self.hand_raised
+            "hand_raised": self.hand_raised,
+            "hand_raise_counter": int(self.hand_raise_counter),
+            "raw_hand_detected": bool(self.raw_hand_detected),
+            "matched_hand_points": int(self.matched_hand_points)
         }
 
 
 # Debug counter for logging frequency
 _behavior_debug_counter = 0
+_hand_debug_counter = 0
 
 def analyze_face_behavior(face_img):
     """Analyze engagement metrics (EAR, MAR) for a face crop using MediaPipe Face Mesh."""
@@ -651,30 +672,93 @@ def merge_duplicate_trackers():
 
 def match_faces_to_trackers(face_locations, frame_bgr):
     """Match detected faces to existing trackers or create new ones."""
-    global face_tracker, next_face_id
+    global face_tracker, next_face_id, _hand_debug_counter
     
     # NOTE: face_locations are already in full scale (no downscaling in this version)
     
-    # 1. Detect Hands for "Raising Hand" behavior
-    raised_hands_locs = []
+    # 1. Detect hands and build robust hand regions from multiple landmarks
+    detected_hands = []
     try:
         if hand_detector:
             rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
             hand_results = hand_detector.detect(mp_image)
-            
-            # DEBUG
-            if hand_results.hand_landmarks:
-                print(f"DEBUG: Found {len(hand_results.hand_landmarks)} hands!")
-            
+
             if hand_results.hand_landmarks:
                 for hand_landmarks in hand_results.hand_landmarks:
-                    # Wrist is landmark 0. Tip of middle finger is 12.
-                    wrist = hand_landmarks[0]
-                    # Store normalized x, y
-                    raised_hands_locs.append((wrist.x, wrist.y))
+                    xs = [max(0.0, min(1.0, p.x)) for p in hand_landmarks]
+                    ys = [max(0.0, min(1.0, p.y)) for p in hand_landmarks]
+                    if not xs or not ys:
+                        continue
+
+                    detected_hands.append({
+                        "xs": xs,
+                        "ys": ys,
+                        "center_x": float(sum(xs) / len(xs)),
+                        "center_y": float(sum(ys) / len(ys)),
+                        "top_y": float(min(ys)),
+                        "left_x": float(min(xs)),
+                        "right_x": float(max(xs))
+                    })
     except Exception as e:
         print(f"[ERROR] Hand detection error: {e}")
+
+    _hand_debug_counter += 1
+    should_log_hand_debug = (_hand_debug_counter % HAND_DEBUG_LOG_INTERVAL == 0)
+    if should_log_hand_debug:
+        print(f"[HandDebug] detected_hands={len(detected_hands)}")
+
+    h, w = frame_bgr.shape[:2]
+
+    def evaluate_hand_for_face(location, face_id):
+        top, right, bottom, left = location
+
+        face_center_x_norm = ((left + right) / 2) / w
+        face_top_norm = top / h
+        face_bottom_norm = bottom / h
+        face_mid_y_norm = (face_top_norm + face_bottom_norm) / 2.0
+        face_width_norm = max(0.05, (right - left) / w)
+        horizontal_threshold = min(
+            HAND_HORIZONTAL_MAX,
+            max(HAND_HORIZONTAL_MIN, face_width_norm * HAND_HORIZONTAL_FACTOR)
+        )
+
+        best_distance = float("inf")
+        best_points_above_midline = 0
+        horizontal_rejects = 0
+        vertical_rejects = 0
+
+        for hand in detected_hands:
+            x_distance = abs(hand["center_x"] - face_center_x_norm)
+            if x_distance > horizontal_threshold:
+                horizontal_rejects += 1
+                continue
+
+            points_above_midline = sum(1 for py in hand["ys"] if py < (face_mid_y_norm + HAND_VERTICAL_MARGIN))
+            points_ratio = points_above_midline / len(hand["ys"])
+            vertical_ok = (
+                hand["top_y"] < (face_mid_y_norm + HAND_VERTICAL_MARGIN) or
+                points_ratio >= HAND_POINTS_ABOVE_FACE_MIDLINE_RATIO
+            )
+
+            if not vertical_ok:
+                vertical_rejects += 1
+                continue
+
+            if x_distance < best_distance:
+                best_distance = x_distance
+                best_points_above_midline = points_above_midline
+
+        has_raised_hand = best_distance != float("inf")
+
+        if should_log_hand_debug:
+            print(
+                f"[HandDebug][Face {face_id}] matched={has_raised_hand} "
+                f"hands={len(detected_hands)} x_rejects={horizontal_rejects} "
+                f"y_rejects={vertical_rejects} points_above_mid={best_points_above_midline}"
+            )
+
+        return has_raised_hand, best_points_above_midline
 
     matched_trackers = set()
     new_detections = []
@@ -695,7 +779,6 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             # Update existing tracker
             top, right, bottom, left = location
             
-            h, w = frame_bgr.shape[:2]
             top_safe = max(0, min(top, h-1))
             bottom_safe = max(0, min(bottom, h))
             left_safe = max(0, min(left, w-1))
@@ -709,20 +792,9 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             # Engagement Analysis
             tracker.engagement_analysis_count += 1
             if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
-                # Check for raised hand
-                has_raised_hand = False
-                face_center_x_norm = ((left + right) / 2) / w
-                face_bottom_y_norm = bottom / h
-                
-                for hx, hy in raised_hands_locs:
-                    # Allow hand if wrist is above the CHIN (face_bottom) and within horizontal range
-                    if hy < face_bottom_y_norm and abs(hx - face_center_x_norm) < 0.8:
-                        has_raised_hand = True
-                        print("DEBUG: Hand associated with face!")
-                        break
-                
+                has_raised_hand, matched_points = evaluate_hand_for_face(location, tracker.id)
                 ear, mar = analyze_face_behavior(face_crop)
-                tracker.update_behavior(ear, mar, has_raised_hand)
+                tracker.update_behavior(ear, mar, has_raised_hand, matched_points)
             
             # Re-identify (reduced frequency for stability)
             if tracker.name == "Unknown":
@@ -748,7 +820,6 @@ def match_faces_to_trackers(face_locations, frame_bgr):
     for location, idx in new_detections:
         top, right, bottom, left = location
         
-        h, w = frame_bgr.shape[:2]
         top_safe = max(0, min(top, h-1))
         bottom_safe = max(0, min(bottom, h))
         left_safe = max(0, min(left, w-1))
@@ -763,18 +834,9 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             tracker.update_location(location, confidence)
             
         # Initial behavior analysis
-        has_raised_hand = False
-        face_center_x_norm = ((left + right) / 2) / w
-        face_bottom_y_norm = bottom / h
-        for hx, hy in raised_hands_locs:
-            # Allow hand if wrist is above the CHIN (face_bottom) and within horizontal range
-            if hy < face_bottom_y_norm and abs(hx - face_center_x_norm) < 0.8:
-                has_raised_hand = True
-                print("DEBUG: Hand associated with face!")
-                break
-        
+        has_raised_hand, matched_points = evaluate_hand_for_face(location, next_face_id)
         ear, mar = analyze_face_behavior(face_crop)
-        tracker.update_behavior(ear, mar, has_raised_hand)
+        tracker.update_behavior(ear, mar, has_raised_hand, matched_points)
         
         face_tracker[next_face_id] = tracker
         next_face_id += 1
@@ -788,7 +850,7 @@ def match_faces_to_trackers(face_locations, frame_bgr):
     
     merge_duplicate_trackers()
 
-    return len(raised_hands_locs)
+    return len(detected_hands)
 
 
 @app.route('/api/camera/list', methods=['GET'])
@@ -990,7 +1052,10 @@ def get_frame():
             "engagement_level": str(engagement_data['engagement_level']),
             "is_sleeping": engagement_data['is_sleeping'],
             "is_speaking": engagement_data['is_speaking'],
-            "hand_raised": engagement_data['hand_raised']
+            "hand_raised": engagement_data['hand_raised'],
+            "hand_raise_counter": int(engagement_data['hand_raise_counter']),
+            "raw_hand_detected": bool(engagement_data['raw_hand_detected']),
+            "matched_hand_points": int(engagement_data['matched_hand_points'])
         })
         
     info_text = f"Frames: {frame_count} | Active Trackers: {len(face_tracker)}"
@@ -1100,7 +1165,10 @@ def process_frame():
                     "engagement_level": str(engagement_data['engagement_level']),
                     "is_sleeping": engagement_data['is_sleeping'],
                     "is_speaking": engagement_data['is_speaking'],
-                    "hand_raised": engagement_data['hand_raised']
+                    "hand_raised": engagement_data['hand_raised'],
+                    "hand_raise_counter": int(engagement_data['hand_raise_counter']),
+                    "raw_hand_detected": bool(engagement_data['raw_hand_detected']),
+                    "matched_hand_points": int(engagement_data['matched_hand_points'])
                 })
             
             # Class engagement
@@ -1270,6 +1338,10 @@ def debug_status():
                 "name": tracker.name,
                 "is_sleeping": tracker.is_sleeping,
                 "is_speaking": tracker.is_speaking,
+                "hand_raised": tracker.hand_raised,
+                "raw_hand_detected": tracker.raw_hand_detected,
+                "matched_hand_points": tracker.matched_hand_points,
+                "hand_raise_counter": tracker.hand_raise_counter,
                 "sleep_counter": tracker.sleep_counter,
                 "speak_counter": tracker.speak_counter,
                 "ear_history": tracker.ear_history[-5:] if tracker.ear_history else [],

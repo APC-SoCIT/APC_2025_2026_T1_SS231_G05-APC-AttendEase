@@ -125,6 +125,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     partial_count: 0,
     disengaged_count: 0
   });
+  const [handCount, setHandCount] = useState(0);
   
   const frameIntervalRef = useRef(null);
 
@@ -377,6 +378,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
 
     // Clear detected faces state
     setDetectedFaces([]);
+    setHandCount(0);
 
     // Clear the overlay canvas (wait a tiny bit for any in-flight draws to finish)
     setTimeout(() => {
@@ -547,7 +549,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
 
       if (data.status === 'success') {
         const faces = data.detected_faces || [];
+        const currentHandCount = Number.isFinite(data.hand_count) ? data.hand_count : 0;
         setDetectedFaces(faces);
+        setHandCount(currentHandCount);
         
         // Update class engagement stats
         if (data.class_engagement) {
@@ -649,6 +653,8 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
           engagementLabel = 'Engaged (Speaking)';
         } else if (face.hand_raised) {
           engagementLabel = 'Engaged (Hand Raised)';
+        } else if (face.raw_hand_detected) {
+          engagementLabel = 'Present (Hand Candidate)';
         } else {
           engagementLabel = 'Present';
         }
@@ -737,6 +743,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
               <Text size={100} style={{ color: '#666' }}>
                 ({classEngagement.engaged_count} engaged, {classEngagement.present_count} present, {classEngagement.disengaged_count} disengaged)
               </Text>
+              <Text size={100} style={{ color: '#666' }}>
+                Hands detected: {handCount}
+              </Text>
             </div>
           )}
         </div>
@@ -757,6 +766,11 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
                     {!face.is_sleeping && face.is_speaking && <span>Engaged (Speaking)</span>}
                     {!face.is_sleeping && face.hand_raised && <span>Engaged (Hand Raised)</span>}
                     {!face.is_sleeping && !face.is_speaking && !face.hand_raised && <span>Present</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#888' }}>
+                    <span>Raw hand: {face.raw_hand_detected ? 'yes' : 'no'}</span>
+                    <span>Matched points: {face.matched_hand_points ?? 0}</span>
+                    <span>Counter: {face.hand_raise_counter ?? 0}</span>
                   </div>
                 </div>
                 <div className={styles.badgeGroup}>
