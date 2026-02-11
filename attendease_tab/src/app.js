@@ -25,8 +25,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Add JSON parsing middleware
-app.use(express.json());
+// Add JSON parsing middleware with increased limit for base64 frame payloads
+app.use(express.json({ limit: '5mb' }));
 
 const sslOptions = {
   key: process.env.SSL_KEY_FILE ? fs.readFileSync(process.env.SSL_KEY_FILE) : undefined,
@@ -110,14 +110,25 @@ app.get('/api/facial-recognition/camera/list', async (req, res) => {
   }
 });
 
-// Check camera status
+// Check camera status (uses fast health check)
 app.get('/api/facial-recognition/camera/status', async (req, res) => {
   try {
-    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/status`);
+    // Use health endpoint for faster response (doesn't enumerate cameras)
+    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/health`, {
+      timeout: 3000 // 3 second timeout
+    });
     res.json(response.data);
   } catch (error) {
-    console.error('Error checking camera status:', error.message);
-    res.status(500).json({ status: 'error', message: 'Failed to check camera status' });
+    // Fallback to camera status if health check fails
+    try {
+      const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/camera/status`, {
+        timeout: 3000
+      });
+      res.json(response.data);
+    } catch (fallbackError) {
+      console.error('Error checking camera status:', error.message);
+      res.status(500).json({ status: 'error', message: 'Failed to check camera status' });
+    }
   }
 });
 

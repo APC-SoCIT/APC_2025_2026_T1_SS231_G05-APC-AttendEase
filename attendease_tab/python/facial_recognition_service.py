@@ -649,15 +649,25 @@ def list_cameras():
     })
 
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Simple health check endpoint that doesn't enumerate cameras."""
+    return jsonify({
+        "status": "available",
+        "message": "Service is running",
+        "engagement_enabled": ENGAGEMENT_ENABLED
+    })
+
 @app.route('/api/camera/status', methods=['GET'])
 def camera_status():
+    """Check camera status - uses health check for speed, optionally enumerates cameras."""
     try:
-        list_result = list_cameras()
-        data = list_result.get_json()
-        if data["cameras"]:
-            return jsonify({"status": "available", "message": f"Found {len(data['cameras'])} camera(s)"})
-        else:
-            return jsonify({"status": "unavailable", "message": "No cameras detected"})
+        # Return available immediately without enumerating cameras
+        # Camera enumeration is slow and not needed for status check
+        return jsonify({
+            "status": "available",
+            "message": "Service is running (camera enumeration skipped for speed)"
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
@@ -834,6 +844,11 @@ def process_frame():
         
         if frame is None:
             return jsonify({"status": "error", "message": "Invalid image data"})
+        
+        # Safety net: downscale if frontend somehow sends a larger-than-expected frame
+        if frame.shape[1] > 640 or frame.shape[0] > 480:
+            print(f"[WARN] Received oversized frame ({frame.shape[1]}x{frame.shape[0]}), downscaling to 640x480")
+            frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_AREA)
         
         try:
             detected_faces_df = DeepFace.extract_faces(
