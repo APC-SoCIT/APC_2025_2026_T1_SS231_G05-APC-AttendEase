@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as microsoftTeams from '@microsoft/teams-js';
 import {
   Button,
   Select,
@@ -206,12 +207,26 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     try {
       addMessage('Scanning for cameras...', 'info');
 
+      // Request device permissions through Teams SDK first (required for iframe)
+      try {
+        await microsoftTeams.app.initialize();
+        addMessage('Teams SDK initialized, requesting camera permission...', 'info');
+        // In Teams, we need to trigger the native permission prompt
+        // The Teams SDK handles the iframe permission delegation
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        addMessage('Teams camera permission granted', 'success');
+      } catch (teamsError) {
+        // Not running in Teams or Teams SDK init failed — try standard browser API
+        console.log('Not in Teams context or Teams init failed, using standard browser API:', teamsError.message);
+        addMessage('Using standard browser camera access...', 'info');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+      }
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera access not supported');
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach(track => track.stop());
 
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
