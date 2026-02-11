@@ -639,30 +639,28 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         ctx.fillStyle = '#fff';
         ctx.fillText(nameLabel, left + 5, top - 5);
         
-        // Draw engagement indicator at bottom (only for confirmed faces)
-        if (face.is_confirmed) {
-          let engagementLabel;
-          if (face.is_sleeping) {
-            engagementLabel = 'Disengaged (Sleeping)';
-          } else if (face.is_speaking && face.hand_raised) {
-            engagementLabel = 'Engaged (Speaking + Hand)';
-          } else if (face.is_speaking) {
-            engagementLabel = 'Engaged (Speaking)';
-          } else if (face.hand_raised) {
-            engagementLabel = 'Engaged (Hand Raised)';
-          } else {
-            engagementLabel = 'Present';
-          }
-          
-          ctx.font = '12px Arial';
-          const engagementLabelWidth = ctx.measureText(engagementLabel).width;
-          
-          ctx.fillStyle = engagementColor;
-          ctx.fillRect(left, bottom, engagementLabelWidth + 10, 18);
-          
-          ctx.fillStyle = '#fff';
-          ctx.fillText(engagementLabel, left + 5, bottom + 13);
+        // Draw engagement indicator at bottom (for all detected faces)
+        let engagementLabel;
+        if (face.is_sleeping) {
+          engagementLabel = 'Disengaged (Sleeping)';
+        } else if (face.is_speaking && face.hand_raised) {
+          engagementLabel = 'Engaged (Speaking + Hand)';
+        } else if (face.is_speaking) {
+          engagementLabel = 'Engaged (Speaking)';
+        } else if (face.hand_raised) {
+          engagementLabel = 'Engaged (Hand Raised)';
+        } else {
+          engagementLabel = 'Present';
         }
+        
+        ctx.font = '12px Arial';
+        const engagementLabelWidth = ctx.measureText(engagementLabel).width;
+        
+        ctx.fillStyle = engagementColor;
+        ctx.fillRect(left, bottom, engagementLabelWidth + 10, 18);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillText(engagementLabel, left + 5, bottom + 13);
       }
     });
   };

@@ -52,10 +52,10 @@ if os.path.exists(face_model_path) and os.path.exists(hand_model_path):
         hand_options = HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=hand_model_path),
             running_mode=VisionRunningMode.IMAGE,
-            num_hands=20,
-            min_hand_detection_confidence=0.3,
-            min_hand_presence_confidence=0.3,
-            min_tracking_confidence=0.3
+            num_hands=2,  # Limit to 2 hands for speed
+            min_hand_detection_confidence=0.2,  # Lower threshold for 320x240
+            min_hand_presence_confidence=0.1,  # Lower threshold to detect presence
+            min_tracking_confidence=0.2  # Lower threshold for tracking
         )
         hand_detector = HandLandmarker.create_from_options(hand_options)
         print("[OK] MediaPipe Hand Landmarker initialized successfully")
@@ -92,11 +92,11 @@ DISTANCE_THRESHOLD = 0.50   # Stricter threshold for ArcFace (default is 0.68, l
 MIN_CONFIDENCE = 0.35       # Minimum confidence to accept a match (below this = Unknown)
 
 # Tracking Configuration
-TRACKING_FRAMES = 12
+TRACKING_FRAMES = 15
 FACE_DISTANCE_THRESHOLD = 360  # Prevent duplicate trackers during fast motion
 TRACKER_MERGE_THRESHOLD = 180  # Merge trackers within this distance with same name
-LOCATION_SMOOTHING_FACTOR = 0.45
-SMOOTHING_DISTANCE_THRESHOLD = 90
+LOCATION_SMOOTHING_FACTOR = 0.4
+SMOOTHING_DISTANCE_THRESHOLD = 120
 MAX_TRACKING_VELOCITY = 50
 PREDICTION_DECAY = 0.65
 RAPID_MOVEMENT_THRESHOLD = 60
@@ -108,6 +108,8 @@ EAR_THRESHOLD = 0.20        # Eye Aspect Ratio threshold (closing eyes) - lowere
 MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
 SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 seconds)
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
+HAND_RAISE_FRAMES_THRESHOLD = 2  # Need 2+ consecutive frames to confirm hand raised
+MIN_FACE_SIZE = 40  # Minimum face width/height in pixels to filter false detections
 # Note: ENGAGEMENT_ENABLED is set at the top during MediaPipe initialization
 
 
@@ -156,6 +158,7 @@ class FaceTracker:
         self.hand_raised = False
         self.sleep_counter = 0
         self.speak_counter = 0
+        self.hand_raise_counter = 0
         self.ear_history = []
         self.mar_history = []
         
@@ -263,8 +266,12 @@ class FaceTracker:
                 
             self.is_speaking = self.speak_counter > SPEAK_FRAMES_THRESHOLD
 
-        # Hand Raise Logic
-        self.hand_raised = hand_raised_detected
+        # Hand Raise Logic (smoothed with counter like sleep/speak)
+        if hand_raised_detected:
+            self.hand_raise_counter += 1
+        else:
+            self.hand_raise_counter = max(0, self.hand_raise_counter - 1)
+        self.hand_raised = self.hand_raise_counter >= HAND_RAISE_FRAMES_THRESHOLD
         
         # Calculate Composite Score and Engagement Level
         # engaged = speaking/hand raised, present = attentive, disengaged = sleeping
@@ -338,7 +345,7 @@ def load_reference_data():
     """Verify photos directory exists and pre-build DeepFace representations."""
     global PHOTOS_DIR
     
-    print("Initializing DeepFace with ArcFace model...")
+    print(f"Initializing DeepFace with {DEEPFACE_MODEL} model...")
     print(f"   Photos directory: {PHOTOS_DIR}")
     
     if not os.path.exists(PHOTOS_DIR):
@@ -474,6 +481,11 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
             hand_results = hand_detector.detect(mp_image)
+            
+            # DEBUG
+            if hand_results.hand_landmarks:
+                print(f"DEBUG: Found {len(hand_results.hand_landmarks)} hands!")
+            
             if hand_results.hand_landmarks:
                 for hand_landmarks in hand_results.hand_landmarks:
                     # Wrist is landmark 0. Tip of middle finger is 12.
@@ -481,7 +493,7 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                     # Store normalized x, y
                     raised_hands_locs.append((wrist.x, wrist.y))
     except Exception as e:
-        pass  # Silently handle errors
+        print(f"[ERROR] Hand detection error: {e}")
 
     matched_trackers = set()
     new_detections = []
@@ -519,12 +531,13 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                 # Check for raised hand
                 has_raised_hand = False
                 face_center_x_norm = ((left + right) / 2) / w
-                face_top_y_norm = top / h
+                face_bottom_y_norm = bottom / h
                 
                 for hx, hy in raised_hands_locs:
-                    # Hand is at or above face level and within horizontal range (relaxed)
-                    if hy < (face_top_y_norm + 0.15) and abs(hx - face_center_x_norm) < 0.60:
+                    # Allow hand if wrist is above the CHIN (face_bottom) and within horizontal range
+                    if hy < face_bottom_y_norm and abs(hx - face_center_x_norm) < 0.8:
                         has_raised_hand = True
+                        print("DEBUG: Hand associated with face!")
                         break
                 
                 ear, mar = analyze_face_behavior(face_crop)
@@ -532,9 +545,9 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             
             # Re-identify (reduced frequency for stability)
             if tracker.name == "Unknown":
-                should_identify = (tracker.identification_count % 25 == 0)  # ~2.5 seconds at 10 FPS
+                should_identify = (tracker.identification_count % 10 == 0)  # ~1 second at 10 FPS - faster for unknown
             else:
-                should_identify = (tracker.identification_count % 50 == 0)  # ~5 seconds at 10 FPS
+                should_identify = (tracker.identification_count % 40 == 0)  # ~4 seconds at 10 FPS
             
             if should_identify:
                 name, confidence = identify_face_deepface(face_crop)
@@ -571,10 +584,12 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         # Initial behavior analysis
         has_raised_hand = False
         face_center_x_norm = ((left + right) / 2) / w
-        face_top_y_norm = top / h
+        face_bottom_y_norm = bottom / h
         for hx, hy in raised_hands_locs:
-            if hy < (face_top_y_norm + 0.15) and abs(hx - face_center_x_norm) < 0.60:
+            # Allow hand if wrist is above the CHIN (face_bottom) and within horizontal range
+            if hy < face_bottom_y_norm and abs(hx - face_center_x_norm) < 0.8:
                 has_raised_hand = True
+                print("DEBUG: Hand associated with face!")
                 break
         
         ear, mar = analyze_face_behavior(face_crop)
@@ -591,6 +606,8 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                 del face_tracker[tracker_id]
     
     merge_duplicate_trackers()
+
+    return len(raised_hands_locs)
 
 
 @app.route('/api/camera/list', methods=['GET'])
@@ -724,8 +741,9 @@ def get_frame():
         return jsonify({"status": "error", "message": "Could not read frame from camera"})
     
     frame_count += 1
+    hand_count = 0
     
-    if frame_count % 3 == 0:
+    if frame_count % 2 == 0:  # Process every 2nd frame for better responsiveness
         try:
             detected_faces_df = DeepFace.extract_faces(
                 img_path=frame,
@@ -739,11 +757,15 @@ def get_frame():
                 if face_obj['confidence'] > 0.5:
                     region = face_obj['facial_area']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                    # Filter out tiny false-positive detections
+                    if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
+                        continue
                     # Use full coordinates directly
                     face_locations.append((y, x+w, y+h, x))
             
-            match_faces_to_trackers(face_locations, frame)
+            hand_count = match_faces_to_trackers(face_locations, frame)
         except Exception as e:
+            hand_count = 0
             print(f"Error during face recognition: {e}")
     else:
         for tracker in face_tracker.values():
@@ -811,6 +833,7 @@ def get_frame():
         "frame": frame_base64,
         "detected_faces": detected_faces,
         "total_faces": len(detected_faces),
+        "hand_count": hand_count,
         "class_engagement": {
             "average_score": round(float(avg_engagement), 1),
             "engaged_count": int(engaged_count),
@@ -863,10 +886,13 @@ def process_frame():
                 if face_obj['confidence'] > 0.5:
                     region = face_obj['facial_area']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                    # Filter out tiny false-positive detections
+                    if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
+                        continue
                     # Full resolution (no 1/4 scaling)
                     face_locations.append((y, x+w, y+h, x))
             
-            match_faces_to_trackers(face_locations, frame)
+            hand_count = match_faces_to_trackers(face_locations, frame)
             
             detected_faces = []
             for tracker_id, tracker in list(face_tracker.items()):
@@ -910,6 +936,7 @@ def process_frame():
                 "status": "success",
                 "detected_faces": detected_faces,
                 "total_faces": len(detected_faces),
+                "hand_count": hand_count,
                 "message": f"Frame #{process_frame_count} processed",
                 "class_engagement": {
                     "average_score": round(float(avg_engagement), 1),
