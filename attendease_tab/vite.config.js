@@ -33,6 +33,7 @@ export default defineConfig({
   server: {
     // Default Vite port for HTTP development
     port: 5173,
+    allowedHosts: ['localhost', '127.0.0.1', '.ngrok-free.dev'],
     host: true, // Allow access from network (mobile devices)
     proxy: {
       '/api': {
