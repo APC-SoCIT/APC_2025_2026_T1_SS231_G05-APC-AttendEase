@@ -78,6 +78,101 @@ This starts all three services:
 
 ---
 
+## Running in Microsoft Teams (Development)
+
+To test AttendEase as a Teams app on your local machine, you need to expose your development server to the internet using **ngrok**.
+
+### Prerequisites for Teams Testing
+
+- [ngrok](https://ngrok.com) installed
+- ngrok account (free tier available)
+- Microsoft Teams installed
+
+### Setup Steps for Teams Integration
+
+1. **Install Chocolatey** (Windows package manager):
+   
+   > **Note:** Chocolatey requires PowerShell to be run as Administrator
+   
+   - Open **PowerShell as Administrator** (right-click → "Run as Administrator")
+   - Run this command:
+     ```powershell
+     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+     ```
+   - Then run:
+     ```powershell
+     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+     ```
+   - Verify installation:
+     ```powershell
+     choco --version
+     ```
+
+2. **Install ngrok** (Also requires admin privileges):
+    ```bash
+    choco install ngrok
+    ```
+
+3. **Get your ngrok authtoken**:
+   - Sign up at https://dashboard.ngrok.com/signup
+   - Go to https://dashboard.ngrok.com/get-started/your-authtoken
+   - Copy your authtoken and run:
+     ```bash
+     ngrok config add-authtoken YOUR_AUTH_TOKEN_HERE
+     ```
+
+4. **Start the app** (if not already running):
+   ```bash
+   npm run dev:win
+   ```
+
+5. **Start ngrok** in a new terminal:
+   ```bash
+   cd attendease_tab
+   ngrok http 5173
+   ```
+   ngrok will display a public HTTPS URL like: `https://xxxx-xxxx-xxxx.ngrok-free.dev`
+
+6. **Update the manifest** with your ngrok URL:
+   - Open `attendease_tab/appPackage/manifest.json`
+   - Replace all instances of the ngrok domain in:
+     - `staticTabs[0].contentUrl`
+     - `staticTabs[0].websiteUrl`
+     - `validDomains[]`
+   
+   Example:
+   ```json
+   "staticTabs": [{
+       "contentUrl": "https://xxxx-xxxx-xxxx.ngrok-free.dev/",
+       "websiteUrl": "https://xxxx-xxxx-xxxx.ngrok-free.dev/",
+       ...
+   }],
+   "validDomains": [
+       "localhost",
+       "xxxx-xxxx-xxxx.ngrok-free.dev"
+   ]
+   ```
+
+7. **Create and upload the app to Teams**:
+   - Zip the `attendease_tab/appPackage/` folder
+   - In Microsoft Teams, go to **Apps** → **Manage your apps** → **Upload a custom app**
+   - Select your zip file
+   - Click **Add** to install in Teams
+
+8. **Access the app**:
+   - Find **AttendEase** in your Teams apps
+   - Click to open and interact with it
+
+### Important Notes
+
+- **ngrok URL changes** each restart (unless you upgrade to paid plan) — update the manifest each time
+- **Both services must run**: `npm run dev` (port 5173) and `ngrok` (tunnel to 5173)
+- **Always use HTTPS** URLs in the manifest (ngrok provides this automatically)
+- If the ngrok tunnel goes offline, restart ngrok and upload a new app zip with the updated URL
+- **Icon files** (`color.png` and `outline.png`) must exist in `attendease_tab/public/`
+
+---
+
 ## Troubleshooting
 
 ### "npm run dev" doesn't work?
