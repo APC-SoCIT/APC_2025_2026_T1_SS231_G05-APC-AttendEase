@@ -8,13 +8,15 @@ from flask_cors import CORS
 import os
 import sys
 import mediapipe as mp
+import glob
+import pickle
 from collections import Counter
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import threading
 
 # Load environment variables from parent directory
-env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.localConfigs')
 load_dotenv(env_path)
 
 # Initialize Supabase client
@@ -31,7 +33,7 @@ if supabase_url and supabase_key:
     except Exception as e:
         print(f"[ERROR] Failed to initialize Supabase client: {e}")
 else:
-    print("[WARN] Supabase credentials not found in .env file")
+    print("[WARN] Supabase credentials not found in .localConfigs")
 
 
 def load_face_vectors_from_db():
@@ -104,16 +106,21 @@ def identify_face_from_vector(face_image_bgr):
     try:
         if face_image_bgr is None or face_image_bgr.size == 0:
             return "Unknown", 0.0
-        
+
         if face_image_bgr.shape[0] < 20 or face_image_bgr.shape[1] < 20:
             return "Unknown", 0.0
-        
+
+        # Fast path: if DB vectors are unavailable, use filesystem recognition directly.
+        # This avoids expensive embedding extraction that can trigger frontend timeouts.
+        if not face_vectors_cache:
+            return identify_face_deepface(face_image_bgr)
+
         # Extract face vector from the image
         try:
             embedding_objs = DeepFace.represent(
                 img_path=face_image_bgr,
                 model_name=DEEPFACE_MODEL,
-                detector_backend='opencv',
+                detector_backend='skip',  # Face is already cropped, skip redundant detection
                 enforce_detection=False,
                 align=True
             )
@@ -125,10 +132,6 @@ def identify_face_from_vector(face_image_bgr):
             
         except Exception as e:
             print(f"[ERROR] Face vector extraction failed: {e}")
-            return "Unknown", 0.0
-        
-        # Compare against cached vectors
-        if not face_vectors_cache:
             return "Unknown", 0.0
         
         best_match_name = "Unknown"
@@ -526,6 +529,19 @@ def load_reference_data():
         print("   Warning: No reference photos found!")
         return False
     
+    # Remove corrupted DeepFace cache files before pre-build.
+    cache_files = glob.glob(os.path.join(PHOTOS_DIR, "ds_model_*.pkl"))
+    for cache_file in cache_files:
+        try:
+            with open(cache_file, "rb") as f:
+                pickle.load(f)
+        except Exception as e:
+            print(f"   Removing corrupted cache {os.path.basename(cache_file)}: {e}")
+            try:
+                os.remove(cache_file)
+            except Exception as remove_err:
+                print(f"   Warning: could not remove {cache_file}: {remove_err}")
+
     # Pre-build representations (creates .pkl cache in photos folder)
     try:
         print("   Pre-building face representations...")
