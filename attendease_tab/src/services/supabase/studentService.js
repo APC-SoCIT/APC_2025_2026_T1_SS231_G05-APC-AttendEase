@@ -14,7 +14,12 @@ export async function getStudentByEmail(email) {
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        *,
+        sections (
+          name
+        )
+      `)
       .eq('email', email)
       .single();
 
@@ -24,6 +29,11 @@ export async function getStudentByEmail(email) {
         return { success: true, student: null }; 
       }
       throw error;
+    }
+    
+    // Add section name to the root level for easier access
+    if (data && data.sections) {
+      data.section = data.sections.name;
     }
     
     return { success: true, student: data };
@@ -41,11 +51,21 @@ export async function getStudentById(id) {
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        *,
+        sections (
+          name
+        )
+      `)
       .eq('user_id', id)
       .single();
 
     if (error) throw error;
+    
+    // Add section name to the root level for easier access
+    if (data && data.sections) {
+      data.section = data.sections.name;
+    }
     
     return { success: true, student: data };
   } catch (error) {

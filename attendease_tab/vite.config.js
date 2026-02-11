@@ -33,6 +33,7 @@ export default defineConfig({
   server: {
     // Default Vite port for HTTP development
     port: 5173,
+    host: true, // Allow access from network (mobile devices)
     proxy: {
       '/api': {
         target: 'http://localhost:3333',

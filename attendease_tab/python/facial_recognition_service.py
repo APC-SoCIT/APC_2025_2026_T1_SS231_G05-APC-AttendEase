@@ -9,6 +9,171 @@ import os
 import sys
 import mediapipe as mp
 from collections import Counter
+from supabase import create_client, Client
+from dotenv import load_dotenv
+import threading
+
+# Load environment variables from parent directory
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+load_dotenv(env_path)
+
+# Initialize Supabase client
+supabase_url = os.getenv('SUPABASE_URL')
+supabase_key = os.getenv('SUPABASE_SECRET_KEY')
+supabase: Client = None
+face_vectors_cache = {}  # {student_id: face_vector}
+cache_last_updated = None
+
+if supabase_url and supabase_key:
+    try:
+        supabase = create_client(supabase_url, supabase_key)
+        print("[OK] Supabase client initialized successfully")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize Supabase client: {e}")
+else:
+    print("[WARN] Supabase credentials not found in .env file")
+
+
+def load_face_vectors_from_db():
+    """Load all face vectors from database into memory cache."""
+    global face_vectors_cache, cache_last_updated
+    
+    if not supabase:
+        print("[WARN] Supabase not initialized, cannot load face vectors")
+        return False
+    
+    try:
+        # Fetch all biometric data with student info
+        response = supabase.table('student_biometric_data')\
+            .select('student_id, face_profile, user_profiles(first_name, last_name, student_number)')\
+            .execute()
+        
+        if response.data:
+            new_cache = {}
+            for record in response.data:
+                student_id = record['student_id']
+                face_vector = record['face_profile']
+                
+                # Get student name from joined data
+                if record.get('user_profiles'):
+                    first_name = record['user_profiles'].get('first_name', '')
+                    last_name = record['user_profiles'].get('last_name', '')
+                    student_number = record['user_profiles'].get('student_number', '')
+                    name = f"{first_name} {last_name}".strip()
+                else:
+                    name = "Unknown"
+                    student_number = None
+                
+                if face_vector and isinstance(face_vector, list) and len(face_vector) > 0:
+                    new_cache[student_id] = {
+                        'vector': np.array(face_vector, dtype=np.float64),
+                        'name': name,
+                        'student_number': student_number
+                    }
+            
+            face_vectors_cache = new_cache
+            cache_last_updated = time.time()
+            print(f"[OK] Loaded {len(face_vectors_cache)} face vectors from database")
+            return True
+        else:
+            print("[WARN] No face vectors found in database")
+            return False
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to load face vectors from database: {e}")
+        return False
+
+
+def cosine_similarity(vec1, vec2):
+    """Calculate cosine similarity between two vectors."""
+    vec1 = np.array(vec1, dtype=np.float64)
+    vec2 = np.array(vec2, dtype=np.float64)
+    
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    return dot_product / (norm1 * norm2)
+
+
+def identify_face_from_vector(face_image_bgr):
+    """Identify a face by comparing its vector against cached database vectors."""
+    try:
+        if face_image_bgr is None or face_image_bgr.size == 0:
+            return "Unknown", 0.0
+        
+        if face_image_bgr.shape[0] < 20 or face_image_bgr.shape[1] < 20:
+            return "Unknown", 0.0
+        
+        # Extract face vector from the image
+        try:
+            embedding_objs = DeepFace.represent(
+                img_path=face_image_bgr,
+                model_name=DEEPFACE_MODEL,
+                detector_backend='opencv',
+                enforce_detection=False,
+                align=True
+            )
+            
+            if not embedding_objs or len(embedding_objs) == 0:
+                return "Unknown", 0.0
+            
+            face_vector = np.array(embedding_objs[0]['embedding'], dtype=np.float64)
+            
+        except Exception as e:
+            print(f"[ERROR] Face vector extraction failed: {e}")
+            return "Unknown", 0.0
+        
+        # Compare against cached vectors
+        if not face_vectors_cache:
+            return "Unknown", 0.0
+        
+        best_match_name = "Unknown"
+        best_similarity = 0.0
+        best_student_id = None
+        
+        for student_id, data in face_vectors_cache.items():
+            cached_vector = data['vector']
+            similarity = cosine_similarity(face_vector, cached_vector)
+            
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match_name = data['name']
+                best_student_id = student_id
+        
+        # Convert similarity to confidence
+        # Cosine similarity ranges from -1 to 1, but for face recognition typically 0.4+ is a match
+        # ArcFace threshold is typically around 0.4-0.6 similarity for matches
+        similarity_threshold = 0.40  # Adjust based on testing
+        
+        if best_similarity < similarity_threshold:
+            return "Unknown", 0.0
+        
+        # Map similarity (0.4-1.0) to confidence (0-1)
+        confidence = min(1.0, (best_similarity - similarity_threshold) / (1.0 - similarity_threshold))
+        
+        if confidence < MIN_CONFIDENCE:
+            return "Unknown", 0.0
+        
+        return best_match_name, confidence
+        
+    except Exception as e:
+        msg = f"      Face identification error: {str(e)}\n"
+        sys.stdout.buffer.write(msg.encode('utf-8'))
+        return "Unknown", 0.0
+
+
+def refresh_vector_cache_background():
+    """Background thread to refresh face vector cache every 5 minutes."""
+    while True:
+        time.sleep(300)  # 5 minutes
+        print("[INFO] Refreshing face vector cache from database...")
+        load_face_vectors_from_db()
+
+
 # MediaPipe Initialization (Tasks API)
 mp_tasks = mp.tasks
 vision = mp_tasks.vision
@@ -550,7 +715,7 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                 should_identify = (tracker.identification_count % 40 == 0)  # ~4 seconds at 10 FPS
             
             if should_identify:
-                name, confidence = identify_face_deepface(face_crop)
+                name, confidence = identify_face_from_vector(face_crop)
                 if name != "Unknown":
                     tracker.name = name
                     tracker.update_location(location, confidence)
@@ -575,7 +740,7 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         
         face_crop = frame_bgr[top_safe:bottom_safe, left_safe:right_safe]
         
-        name, confidence = identify_face_deepface(face_crop)
+        name, confidence = identify_face_from_vector(face_crop)
         
         tracker = FaceTracker(next_face_id, name, location)
         if confidence > 0:
@@ -955,6 +1120,122 @@ def process_frame():
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
 
 
+@app.route('/api/enroll-face', methods=['POST'])
+def enroll_face():
+    """
+    Enrollment endpoint for student photo upload.
+    Accepts base64 image, validates exactly one face, and returns face vector.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'image' not in data:
+            return jsonify({
+                "status": "error",
+                "message": "No image data provided"
+            }), 400
+        
+        # Decode base64 image
+        try:
+            img_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
+            img_bytes = base64.b64decode(img_data)
+            img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            
+            if img is None:
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid image format"
+                }), 400
+                
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Failed to decode image: {str(e)}"
+            }), 400
+        
+        # Detect faces in the image using DeepFace
+        try:
+            # Use DeepFace to detect faces
+            face_objs = DeepFace.extract_faces(
+                img_path=img,
+                detector_backend='opencv',
+                enforce_detection=True,
+                align=True
+            )
+            
+            num_faces = len(face_objs)
+            
+            # Validate exactly one face
+            if num_faces == 0:
+                return jsonify({
+                    "status": "error",
+                    "message": "No face detected",
+                    "detail": "Please ensure your face is clearly visible in the photo with good lighting."
+                }), 400
+            elif num_faces > 1:
+                return jsonify({
+                    "status": "error",
+                    "message": "Multiple faces detected",
+                    "detail": f"Found {num_faces} faces. Please upload a photo with only your face."
+                }), 400
+            
+            # Extract face vector using DeepFace with ArcFace model
+            try:
+                embedding_objs = DeepFace.represent(
+                    img_path=img,
+                    model_name=DEEPFACE_MODEL,
+                    detector_backend='opencv',
+                    enforce_detection=True,
+                    align=True
+                )
+                
+                if not embedding_objs or len(embedding_objs) == 0:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Face unclear",
+                        "detail": "Could not extract facial features. Please upload a clearer photo."
+                    }), 400
+                
+                # Get the face vector (embedding)
+                face_vector = embedding_objs[0]['embedding']
+                
+                return jsonify({
+                    "status": "success",
+                    "message": "Face enrolled successfully",
+                    "vector": face_vector,
+                    "vector_length": len(face_vector)
+                })
+                
+            except Exception as e:
+                return jsonify({
+                    "status": "error",
+                    "message": "Face unclear",
+                    "detail": f"Could not extract facial features: {str(e)}"
+                }), 400
+                
+        except ValueError as e:
+            # DeepFace raises ValueError when no face is detected
+            return jsonify({
+                "status": "error",
+                "message": "No face detected",
+                "detail": "Please ensure your face is clearly visible in the photo with good lighting."
+            }), 400
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": "Face detection failed",
+                "detail": str(e)
+            }), 500
+            
+    except Exception as e:
+        print(f"[ERROR] Enrollment error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Enrollment failed: {str(e)}"
+        }), 500
+
+
 @app.route('/api/debug/status', methods=['GET'])
 def debug_status():
     """Return debug information about the service."""
@@ -985,7 +1266,23 @@ def debug_status():
 
 if __name__ == '__main__':
     print("Initializing Facial Recognition Service with DeepFace...")
+    
+    # Load face vectors from database (new vector-based recognition)
+    if supabase:
+        print("[INFO] Loading face vectors from database...")
+        if load_face_vectors_from_db():
+            # Start background refresh thread
+            refresh_thread = threading.Thread(target=refresh_vector_cache_background, daemon=True)
+            refresh_thread.start()
+            print("[OK] Face vector cache loaded and background refresh started")
+        else:
+            print("[WARN] Failed to load face vectors. Recognition will not work until vectors are loaded.")
+    else:
+        print("[WARN] Supabase not initialized. Vector-based recognition disabled.")
+    
+    # Legacy filesystem-based reference data (fallback)
     if not load_reference_data():
-        print("Warning: Could not load reference data. Face recognition will only detect unknown faces.")
+        print("[WARN] Could not load filesystem reference data.")
+    
     print("Starting Flask service on port 5000...")
     app.run(host='0.0.0.0', port=5000, debug=True)
