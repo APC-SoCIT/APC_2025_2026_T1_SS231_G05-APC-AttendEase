@@ -170,9 +170,9 @@ def identify_face_from_vector(face_image_bgr):
 
 
 def refresh_vector_cache_background():
-    """Background thread to refresh face vector cache every 5 minutes."""
+    """Background thread to refresh face vector cache every 2 minutes."""
     while True:
-        time.sleep(300)  # 5 minutes
+        time.sleep(120)  # 2 minutes
         print("[INFO] Refreshing face vector cache from database...")
         load_face_vectors_from_db()
 
@@ -1150,6 +1150,30 @@ def clear_trackers():
     next_face_id = 0
     process_frame_count = 0
     return jsonify({"status": "success", "message": "Face trackers cleared"})
+
+
+@app.route('/api/refresh-vectors', methods=['POST'])
+def refresh_vectors():
+    """Reload face vector cache from Supabase immediately.
+    
+    Called by the Express backend after a student enrolment so that the
+    newly-uploaded face is recognised on the very next frame cycle.
+    """
+    if not supabase:
+        return jsonify({"status": "error", "message": "Supabase not initialized"}), 503
+
+    success = load_face_vectors_from_db()
+    if success:
+        return jsonify({
+            "status": "success",
+            "message": f"Face vector cache refreshed ({len(face_vectors_cache)} vectors loaded)",
+            "cache_size": len(face_vectors_cache)
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Failed to refresh face vector cache"
+        }), 500
 
 
 @app.route('/api/process-frame', methods=['POST'])

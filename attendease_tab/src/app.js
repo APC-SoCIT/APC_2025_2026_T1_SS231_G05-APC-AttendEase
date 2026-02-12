@@ -133,6 +133,24 @@ app.get('/api/facial-recognition/camera/status', async (req, res) => {
   }
 });
 
+// Get Python debug status via backend proxy
+app.get('/api/facial-recognition/debug/status', async (req, res) => {
+  try {
+    const response = await axios.get(`${FACIAL_RECOGNITION_SERVICE_URL}/api/debug/status`, {
+      timeout: 5000
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error fetching debug status:', error.message);
+    const statusCode = error.response?.status || (error.code === 'ECONNREFUSED' ? 503 : 500);
+    res.status(statusCode).json({
+      status: 'error',
+      message: error.response?.data?.message || `Failed to fetch debug status: ${error.message}`,
+      details: error.code || 'unknown_error'
+    });
+  }
+});
+
 // Start camera
 app.post('/api/facial-recognition/camera/start', async (req, res) => {
   try {
@@ -191,6 +209,40 @@ app.post('/api/facial-recognition/process-frame', async (req, res) => {
     res.status(statusCode).json({ 
       status: 'error', 
       message: errorMessage,
+      details: error.code || 'unknown_error'
+    });
+  }
+});
+
+// Clear Python face trackers
+app.post('/api/facial-recognition/clear-trackers', async (req, res) => {
+  try {
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/clear-trackers`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error clearing trackers:', error.message);
+    const statusCode = error.response?.status || (error.code === 'ECONNREFUSED' ? 503 : 500);
+    res.status(statusCode).json({
+      status: 'error',
+      message: error.response?.data?.message || `Failed to clear trackers: ${error.message}`,
+      details: error.code || 'unknown_error'
+    });
+  }
+});
+
+// Refresh Python face vector cache (called after enrollment)
+app.post('/api/facial-recognition/refresh-vectors', async (req, res) => {
+  try {
+    const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/refresh-vectors`, null, {
+      timeout: 10000
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error refreshing face vectors:', error.message);
+    const statusCode = error.response?.status || (error.code === 'ECONNREFUSED' ? 503 : 500);
+    res.status(statusCode).json({
+      status: 'error',
+      message: error.response?.data?.message || `Failed to refresh face vectors: ${error.message}`,
       details: error.code || 'unknown_error'
     });
   }
@@ -673,7 +725,13 @@ app.post('/api/students/:id/enroll-face', async (req, res) => {
     }
 
     console.log(`[Enrollment] ✅ Student ${id} enrolled successfully`);
-    
+
+    // Fire-and-forget: tell the Python service to reload its face vector cache
+    // so the new student is recognised on the live feed immediately.
+    axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/refresh-vectors`, null, { timeout: 10000 })
+      .then(r => console.log(`[Enrollment] Python vector cache refreshed (${r.data.cache_size} vectors)`))
+      .catch(err => console.warn('[Enrollment] Could not refresh Python vector cache:', err.message));
+
     res.json({ 
       status: 'success', 
       message: 'Face enrolled successfully',

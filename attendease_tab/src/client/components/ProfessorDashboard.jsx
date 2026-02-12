@@ -121,6 +121,17 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between'
   },
+  participantToggleButton: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    textAlign: 'left'
+  },
   participantContent: {
     marginTop: '16px',
     display: 'flex',
@@ -404,7 +415,7 @@ function ProfessorDashboard({ userContext }) {
   useEffect(() => {
     const fetchDebugStatus = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/debug/status');
+        const response = await fetch('/api/facial-recognition/debug/status');
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -417,8 +428,8 @@ function ProfessorDashboard({ userContext }) {
           messages.push(`Hand Detector: ${data.hand_detector}`);
           messages.push(`Tracked Faces: ${data.total_faces_tracked}`);
           
-          Object.entries(data.tracked_faces).forEach(([id, tracker]) => {
-            if (tracker.ear_history.length > 0) {
+          Object.entries(data.tracked_faces || {}).forEach(([id, tracker]) => {
+            if (tracker?.ear_history?.length > 0) {
               const lastEAR = tracker.ear_history[tracker.ear_history.length - 1];
               messages.push(`${tracker.name} (ID:${id}): EAR=${lastEAR.toFixed(3)}, Sleeping=${tracker.is_sleeping}`);
             }
@@ -436,13 +447,45 @@ function ProfessorDashboard({ userContext }) {
     return () => clearInterval(interval);
   }, []);
 
-  const handleExportReport = () => {
-    const combinedData = [
-      ...onsiteAttendance.map(s => ({ ...s, mode: 'Onsite' })),
-      ...unknownFaces.map(s => ({ ...s, mode: 'Unknown' }))
-    ];
+  const csvSafe = (value) => {
+    const normalized = value === null || value === undefined || value === '' ? 'N/A' : String(value);
+    return `"${normalized.replace(/"/g, '""')}"`;
+  };
 
-    // Enhanced headers to match AttendanceRecords table schema
+  const downloadCsv = (headers, rows, filePrefix) => {
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map(csvSafe).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filePrefix}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const getCombinedExportData = () => ([
+    ...onsiteAttendance.map((student) => ({ ...student, mode: 'Onsite' })),
+    ...unknownFaces.map((student) => ({ ...student, mode: 'Unknown' }))
+  ]);
+
+  const notifyEmptyExport = () => {
+    setSystemMessages((prev) => [...prev, {
+      type: 'info',
+      message: 'No data yet. Exported CSV with headers only.',
+      timestamp: new Date().toLocaleTimeString()
+    }]);
+  };
+
+  const handleExportAttendanceReport = () => {
+    const combinedData = getCombinedExportData();
+    if (combinedData.length === 0) {
+      notifyEmptyExport();
+    }
+
     const headers = [
       'Attendance_ID',
       'Student_ID',
@@ -458,37 +501,97 @@ function ProfessorDashboard({ userContext }) {
       'Confidence Score'
     ];
 
-    const csvContent = [
-      headers.join(','),
-      ...combinedData.map((student, index) => {
-        // Generate attendance record data matching database schema
-        const attendanceId = student.id || index + 1;
-        const studentId = student.studentId || student.id || 'N/A';
-        const studentName = student.name || 'Unknown';
-        const courseId = currentClass?.id || 'N/A';
-        const courseName = currentClass?.name || 'N/A';
+    const sessionDate = new Date().toLocaleDateString();
+    const courseId = currentClass?.id || 'N/A';
+    const courseName = currentClass?.name || 'N/A';
+    const timeIn = cameraStartTime || 'N/A';
+    const timeOut = cameraStopTime || 'N/A';
+    const scheduledTime = currentClass ? `${currentClass.startTime} - ${currentClass.endTime}` : 'N/A';
 
-        // Session start/stop times (same for all students)
-        const sessionDate = new Date();
-        const date = sessionDate.toLocaleDateString();
-        const timeIn = cameraStartTime || 'N/A';
-        const timeOut = cameraStopTime || 'N/A';
+    const rows = combinedData.map((student, index) => {
+      const attendanceId = student.id || index + 1;
+      const studentId = student.studentId || student.id || 'N/A';
+      const studentName = student.name || 'Unknown';
+      const setUp = student.mode || 'Onsite';
+      const status = student.status || 'Present';
+      const confidenceScore = student.confidence || student.confidenceScore || 'N/A';
 
-        const setUp = student.mode || 'Onsite';
-        const status = student.status || 'Present';
-        const scheduledTime = currentClass ? `${currentClass.startTime} - ${currentClass.endTime}` : 'N/A';
-        const confidenceScore = student.confidence || student.confidenceScore || 'N/A';
+      return [
+        attendanceId,
+        studentId,
+        studentName,
+        courseId,
+        courseName,
+        sessionDate,
+        timeIn,
+        timeOut,
+        setUp,
+        status,
+        scheduledTime,
+        confidenceScore
+      ];
+    });
 
-        return `"${attendanceId}","${studentId}","${studentName}","${courseId}","${courseName}","${date}","${timeIn}","${timeOut}","${setUp}","${status}","${scheduledTime}","${confidenceScore}"`;
-      })
-    ].join('\n');
+    downloadCsv(headers, rows, 'attendance_report');
+  };
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+  const handleExportEngagementReport = () => {
+    const combinedData = getCombinedExportData();
+    if (combinedData.length === 0) {
+      notifyEmptyExport();
+    }
+
+    const headers = [
+      'Record_ID',
+      'Student_ID',
+      'Student Name',
+      'Mode',
+      'Course_ID',
+      'Course Name',
+      'Date',
+      'Session Start',
+      'Session End',
+      'Engagement Score',
+      'Engagement Level',
+      'Is Sleeping',
+      'Is Speaking',
+      'Hand Raised',
+      'Status'
+    ];
+
+    const sessionDate = new Date().toLocaleDateString();
+    const courseId = currentClass?.id || 'N/A';
+    const courseName = currentClass?.name || 'N/A';
+    const sessionStart = cameraStartTime || 'N/A';
+    const sessionEnd = cameraStopTime || 'N/A';
+
+    const rows = combinedData.map((student, index) => {
+      const numericScore = Number(student.engagementScore);
+      const engagementScore = Number.isFinite(numericScore) ? numericScore.toFixed(1) : 'N/A';
+      const isSleeping = typeof student.isSleeping === 'boolean' ? (student.isSleeping ? 'Yes' : 'No') : 'N/A';
+      const isSpeaking = typeof student.isSpeaking === 'boolean' ? (student.isSpeaking ? 'Yes' : 'No') : 'N/A';
+      const handRaised = typeof student.handRaised === 'boolean' ? (student.handRaised ? 'Yes' : 'No') : 'N/A';
+
+      return [
+        student.id || index + 1,
+        student.studentId || student.id || 'N/A',
+        student.name || 'Unknown',
+        student.mode || 'Unknown',
+        courseId,
+        courseName,
+        sessionDate,
+        sessionStart,
+        sessionEnd,
+        engagementScore,
+        student.engagementLevel || 'N/A',
+        isSleeping,
+        isSpeaking,
+        handRaised,
+        student.status || (student.mode === 'Unknown' ? 'Tentative' : 'Present')
+      ];
+    });
+
+    downloadCsv(headers, rows, 'engagement_report');
   };
 
   const totalPresent = onsiteAttendance.length;
@@ -658,12 +761,17 @@ function ProfessorDashboard({ userContext }) {
 
           {/* Participant Dropdown */}
           <Card className={styles.participantDropdown}>
-            <div
-              className={styles.participantHeader}
-              onClick={() => setParticipantsExpanded(!participantsExpanded)}
-            >
-              <Text weight="semibold">View Participants</Text>
-              {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
+            <div className={styles.participantHeader}>
+              <button
+                type="button"
+                className={styles.participantToggleButton}
+                onClick={() => setParticipantsExpanded((prev) => !prev)}
+                aria-expanded={participantsExpanded}
+                aria-label="Toggle participants list"
+              >
+                <Text weight="semibold">View Participants</Text>
+                {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
+              </button>
             </div>
 
             {participantsExpanded && (
@@ -703,7 +811,9 @@ function ProfessorDashboard({ userContext }) {
                               }
                               size="small"
                             >
-                              {p.engagementScore?.toFixed(0) || 0}%
+                              {Number.isFinite(Number(p.engagementScore))
+                                ? `${Number(p.engagementScore).toFixed(0)}%`
+                                : 'N/A'}
                             </Badge>
                           )}
                         </div>
@@ -751,7 +861,10 @@ function ProfessorDashboard({ userContext }) {
           </Card>
 
           {/* Export Panel */}
-          <ExportPanel onExport={handleExportReport} />
+          <ExportPanel
+            onExportAttendance={handleExportAttendanceReport}
+            onExportEngagement={handleExportEngagementReport}
+          />
 
           {/* Class Schedule Accordion */}
           <Card className={styles.scheduleCard}>
