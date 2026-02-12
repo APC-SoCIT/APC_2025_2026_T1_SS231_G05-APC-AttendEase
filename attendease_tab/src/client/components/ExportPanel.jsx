@@ -13,7 +13,10 @@ const useStyles = makeStyles({
     ...shorthands.padding('20px'),
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('12px')
+    ...shorthands.gap('12px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   header: {
     display: 'flex',
@@ -24,6 +27,13 @@ const useStyles = makeStyles({
     display: 'flex',
     flexWrap: 'wrap',
     ...shorthands.gap('10px')
+  },
+  button: {
+    backgroundColor: '#244670',
+    color: '#ffffff',
+    '&:hover': {
+      backgroundColor: '#1a3350',
+    }
   }
 });
 
@@ -41,20 +51,22 @@ function ExportPanel({ onExportAttendance, onExportEngagement }) {
           Attendance CSV focuses on participation records, while Engagement CSV captures engagement state metrics for this session.
         </Text>
         <div className={styles.actions}>
-        <Button
-          appearance="primary"
+          <Button
+            appearance="primary"
             onClick={onExportAttendance}
             icon={<ArrowDownload24Regular />}
+            className={styles.button}
           >
             Generate Attendance Report
           </Button>
           <Button
-            appearance="secondary"
+            appearance="primary"
             onClick={onExportEngagement}
-          icon={<ArrowDownload24Regular />}
-        >
+            icon={<ArrowDownload24Regular />}
+            className={styles.button}
+          >
             Generate Engagement Report
-        </Button>
+          </Button>
         </div>
       </div>
     </Card>

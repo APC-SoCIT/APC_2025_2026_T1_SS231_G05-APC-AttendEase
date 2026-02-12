@@ -9,13 +9,11 @@ import {
   Text,
   Divider
 } from '@fluentui/react-components';
-import { Settings48Regular, ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
+import { ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import ExportPanel from './ExportPanel';
-import AdminLoginModal from './modals/AdminLoginModal';
 import ScheduleModal from './modals/ScheduleModal';
 import DeleteConfirmDialog from './modals/DeleteConfirmDialog';
-import { setAdminSession } from '../utils/auth';
 import {
   getAllSchedules,
   createSchedule,
@@ -29,39 +27,49 @@ import '../../services/scheduleServices/testSchedule'; // Enable browser console
 const useStyles = makeStyles({
   root: {
     minHeight: '100vh',
-    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
+    backgroundImage: 'linear-gradient(135deg, #294972 35%, #ffba08)',
     ...shorthands.padding('20px'),
   },
   container: {
-    ...shorthands.padding('24px'),
-    backgroundImage: 'linear-gradient(to right,rgb(66, 59, 34), #FFCC00)',
-    minHeight: '100vh'
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100vh',
+    backgroundImage: 'linear-gradient(135deg, #294972 35%, #ffba08)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
   },
   header: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '24px',
-    ...shorthands.padding('0', '8px')
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    ...shorthands.padding('15px', '30px'),
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    '@media (max-width: 768px)': {
+      ...shorthands.padding('12px', '20px'),
+    }
   },
   headerTitle: {
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('4px'),
-    color: '#ffffff'
+    color: '#244670'
   },
-  adminButton: {
-    backgroundColor: '#d32f2f',
-    color: '#fff',
-    '&:hover': {
-      backgroundColor: '#b71c1c'
-    }
+  contentWrapper: {
+    display: 'flex',
+    flex: 1,
+    ...shorthands.padding('24px'),
   },
   layout: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     ...shorthands.gap('24px'),
     alignItems: 'flex-start',
+    width: '100%',
     '@media (max-width: 1200px)': {
       gridTemplateColumns: '1fr'
     }
@@ -76,7 +84,10 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('12px'),
-    width: '100%'
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   cameraHeader: {
     display: 'flex',
@@ -93,7 +104,10 @@ const useStyles = makeStyles({
     ...shorthands.padding('20px'),
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('16px')
+    ...shorthands.gap('16px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   statsGrid: {
     display: 'grid',
@@ -106,15 +120,17 @@ const useStyles = makeStyles({
     alignItems: 'center',
     ...shorthands.gap('8px'),
     ...shorthands.padding('12px'),
-    backgroundColor: '#f5f5f5',
-    borderRadius: '8px'
+    backgroundColor: '#f9fafb',
+    borderRadius: '8px',
+    ...shorthands.border('1px', 'solid', '#e1e4e8'),
   },
   participantDropdown: {
     ...shorthands.padding('16px'),
-    ...shorthands.border('1px', 'solid', '#e6e6e6'),
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-    cursor: 'pointer'
+    ...shorthands.border('1px', 'solid', '#e1e4e8'),
+    borderRadius: '12px',
+    backgroundColor: '#ffffff',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   participantHeader: {
     display: 'flex',
@@ -160,18 +176,21 @@ const useStyles = makeStyles({
   },
   messagesCard: {
     ...shorthands.padding('16px'),
-    backgroundColor: '#f9f9f9',
-    ...shorthands.border('1px', 'solid', '#e0e0e0'),
-    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    ...shorthands.border('1px', 'solid', '#e1e4e8'),
+    borderRadius: '12px',
     maxHeight: '200px',
-    overflowY: 'auto'
+    overflowY: 'auto',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   scheduleCard: {
     ...shorthands.padding('20px'),
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('16px')
+    ...shorthands.gap('16px'),
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   scheduleHeader: {
     display: 'flex',
@@ -237,7 +256,6 @@ function ProfessorDashboard({ userContext }) {
   const navigate = useNavigate();
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
-  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
@@ -596,34 +614,21 @@ function ProfessorDashboard({ userContext }) {
 
   const totalPresent = onsiteAttendance.length;
 
-  const handleAdminLoginSuccess = () => {
-    setAdminSession(true);
-    setIsAdminModalOpen(false);
-    navigate('/admin');
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <div className={styles.headerTitle}>
-          <Text size={600} weight="bold">Professor Dashboard</Text>
+          <Text size={600} weight="bold" style={{ color: '#244670' }}>Professor Dashboard</Text>
         </div>
-        <Button
-          onClick={() => setIsAdminModalOpen(true)}
-          appearance="primary"
-          className={styles.adminButton}
-          icon={<Settings48Regular />}
-        >
-          Admin
-        </Button>
       </div>
 
-      <div className={styles.layout}>
+      <div className={styles.contentWrapper}>
+        <div className={styles.layout}>
         {/* Left: Camera Feed and System Messages */}
         <div className={styles.leftPanel}>
           <Card className={styles.cameraCard}>
             <div className={styles.cameraHeader}>
-              <Text weight="semibold" size={500}>Onsite Camera Feed (ENG. TEST)</Text>
+              <Text weight="semibold" size={500}>Onsite Camera Feed</Text>
             </div>
             <FacialRecognition
               onAttendanceUpdate={(records) => {
@@ -659,6 +664,22 @@ function ProfessorDashboard({ userContext }) {
               ))
             )}
           </div>
+
+          {/* Debug Information */}
+          <Card className={styles.statsCard}>
+            <Text weight="semibold" size={400}>Debug Information</Text>
+            <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
+              {debugMessages.length === 0 ? (
+                <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
+              ) : (
+                debugMessages.map((msg, idx) => (
+                  <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
+                    {msg}
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Right: Stats, Participants, Export, Schedule */}
@@ -740,22 +761,6 @@ function ProfessorDashboard({ userContext }) {
               <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
               <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
               <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
-            </div>
-          </Card>
-
-          {/* Debug Messages Panel */}
-          <Card className={styles.statsCard}>
-            <Text weight="semibold" size={400}>Debug Information</Text>
-            <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
-              {debugMessages.length === 0 ? (
-                <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
-              ) : (
-                debugMessages.map((msg, idx) => (
-                  <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
-                    {msg}
-                  </div>
-                ))
-              )}
             </div>
           </Card>
 
@@ -1019,12 +1024,7 @@ function ProfessorDashboard({ userContext }) {
           </Card>
         </div>
       </div>
-
-      <AdminLoginModal
-        open={isAdminModalOpen}
-        onCancel={() => setIsAdminModalOpen(false)}
-        onSuccess={handleAdminLoginSuccess}
-      />
+      </div>
 
       <ScheduleModal
         open={scheduleModalOpen}
