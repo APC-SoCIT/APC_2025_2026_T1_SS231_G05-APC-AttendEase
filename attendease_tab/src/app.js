@@ -99,6 +99,7 @@ function generateDeviceId() {
 
 // Facial Recognition API endpoints
 const FACIAL_RECOGNITION_SERVICE_URL = 'http://localhost:5000';
+let processFrameProxyCount = 0;
 
 // List available cameras
 app.get('/api/facial-recognition/camera/list', async (req, res) => {
@@ -186,11 +187,31 @@ app.get('/api/facial-recognition/camera/frame', async (req, res) => {
 
 // Process frame from browser
 app.post('/api/facial-recognition/process-frame', async (req, res) => {
+  processFrameProxyCount += 1;
+  const shouldTrace = processFrameProxyCount <= 5 || processFrameProxyCount % 30 === 0;
+  if (shouldTrace) {
+    const payloadSize = req?.body?.frame?.length || 0;
+    console.log(`[FrameTrace][Proxy] recv #${processFrameProxyCount} payload=${payloadSize}`);
+  }
+
   try {
     const response = await axios.post(`${FACIAL_RECOGNITION_SERVICE_URL}/api/process-frame`, req.body);
+    if (shouldTrace) {
+      const faces = response.data?.detected_faces?.length ?? response.data?.total_faces ?? 0;
+      const faceNames = (response.data?.detected_faces || []).map(f => `${f.name}(${(f.confidence*100).toFixed(0)}%)`).join(', ');
+      const dbg = response.data?._debug || {};
+      console.log(
+        `[FrameTrace][Proxy] fwd_ok #${processFrameProxyCount} faces=${faces} names=[${faceNames}] idCalls=${dbg.identify_calls || 0} vecCache=${dbg.vectors_cached || '?'}`
+      );
+    }
     res.json(response.data);
   } catch (error) {
     console.error('Error processing frame:', error.message);
+    if (shouldTrace) {
+      console.log(
+        `[FrameTrace][Proxy] fwd_fail #${processFrameProxyCount} code=${error.code || 'n/a'} status=${error.response?.status || 'n/a'}`
+      );
+    }
     
     // Provide more detailed error information
     let errorMessage = 'Failed to process frame';

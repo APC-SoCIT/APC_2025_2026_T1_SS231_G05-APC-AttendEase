@@ -41,7 +41,7 @@
         "dev:frontend": "env-cmd --silent -f .localConfigs vite",
         "start": "nodemon --inspect=9239 --signal SIGINT src/app.js",
         "start:python": "./venv/bin/python python/facial_recognition_service.py",
-        "start:python:win": "C:\\att_venv\\Scripts\\python python/facial_recognition_service.py",
+        "start:python:win": "C:\\att_venv\\Scripts\\python -u python/facial_recognition_service.py",
         "build": "vite build",
         "test": "echo \"Error: no test specified\" && exit 1",
         "upload-photos": "node src/utils/uploadPhotos.js"

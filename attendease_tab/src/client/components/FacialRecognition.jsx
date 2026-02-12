@@ -111,6 +111,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   const processingTimesRef = useRef([]); // Rolling window of processing times for adaptive interval
   const currentIntervalRef = useRef(100); // Current adaptive frame interval in ms
   const jpegQualityRef = useRef(0.7); // Adaptive JPEG quality based on resolution
+  const frameTraceCounterRef = useRef(0); // Lightweight live-feed trace counter
 
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
@@ -295,6 +296,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       // Reset adaptive interval state
       processingTimesRef.current = [];
       currentIntervalRef.current = 100;
+      frameTraceCounterRef.current = 0;
 
       cameraActiveRef.current = true; // Set ref immediately for interval callback
       setCameraActive(true); // Set state for UI
@@ -489,6 +491,14 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       // Encode with adaptive JPEG quality based on camera resolution
       const imageData = encodeCanvas.toDataURL('image/jpeg', jpegQualityRef.current);
       const base64Data = imageData.split(',')[1];
+      frameTraceCounterRef.current += 1;
+      const frameTraceId = frameTraceCounterRef.current;
+      const shouldTraceFrame = frameTraceId <= 5 || frameTraceId % 30 === 0;
+      if (shouldTraceFrame) {
+        console.log(
+          `[FrameTrace][Frontend] send #${frameTraceId} payload=${base64Data.length} interval=${currentIntervalRef.current}ms`
+        );
+      }
 
       // Create fetch with timeout
       const controller = new AbortController();
@@ -546,6 +556,12 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       }
 
       const data = await response.json();
+      if (shouldTraceFrame) {
+        const faces = Array.isArray(data?.detected_faces) ? data.detected_faces.length : (data?.total_faces || 0);
+        console.log(
+          `[FrameTrace][Frontend] recv #${frameTraceId} status=${data?.status} faces=${faces} hand_count=${data?.hand_count ?? 'n/a'}`
+        );
+      }
 
       if (data.status === 'success') {
         const faces = data.detected_faces || [];

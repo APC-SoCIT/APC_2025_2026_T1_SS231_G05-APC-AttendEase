@@ -36,6 +36,42 @@ else:
     print("[WARN] Supabase credentials not found in .localConfigs")
 
 
+def parse_face_vector(raw):
+    """Parse a face vector from Supabase into a numpy array.
+    
+    Handles multiple formats returned by the supabase-py client depending
+    on column type (pgvector ``vector``, ``jsonb``, ``text``):
+      - Python list   -> direct conversion
+      - numpy array   -> pass through
+      - string "[0.1,0.2,...]" -> json.loads then convert
+      - None / empty  -> returns None
+    """
+    import json
+    if raw is None:
+        return None
+    if isinstance(raw, np.ndarray):
+        return raw if raw.size > 0 else None
+    if isinstance(raw, list):
+        return np.array(raw, dtype=np.float64) if len(raw) > 0 else None
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return None
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return np.array(parsed, dtype=np.float64)
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return None
+    # Unknown type – try converting directly
+    try:
+        arr = np.array(raw, dtype=np.float64)
+        return arr if arr.size > 0 else None
+    except Exception:
+        return None
+
+
 def load_face_vectors_from_db():
     """Load all face vectors from database into memory cache."""
     global face_vectors_cache, cache_last_updated
@@ -52,9 +88,16 @@ def load_face_vectors_from_db():
         
         if response.data:
             new_cache = {}
+            logged_first = False
             for record in response.data:
                 student_id = record['student_id']
-                face_vector = record['face_profile']
+                raw_vector = record['face_profile']
+                
+                # Diagnostic: log the type and preview of the first vector
+                if not logged_first:
+                    preview = str(raw_vector)[:120] if raw_vector else 'None'
+                    print(f"[VectorDebug] First record face_profile type={type(raw_vector).__name__}, preview={preview}")
+                    logged_first = True
                 
                 # Get student name from joined data
                 if record.get('user_profiles'):
@@ -66,12 +109,15 @@ def load_face_vectors_from_db():
                     name = "Unknown"
                     student_number = None
                 
-                if face_vector and isinstance(face_vector, list) and len(face_vector) > 0:
+                face_vector = parse_face_vector(raw_vector)
+                if face_vector is not None:
                     new_cache[student_id] = {
-                        'vector': np.array(face_vector, dtype=np.float64),
+                        'vector': face_vector,
                         'name': name,
                         'student_number': student_number
                     }
+                else:
+                    print(f"[VectorDebug] Skipped student {student_id} ({name}): vector could not be parsed")
             
             face_vectors_cache = new_cache
             cache_last_updated = time.time()
@@ -103,69 +149,92 @@ def cosine_similarity(vec1, vec2):
 
 def identify_face_from_vector(face_image_bgr):
     """Identify a face by comparing its vector against cached database vectors."""
+    global identify_call_count
     try:
+        identify_call_count += 1
+        _flog(f"[IDENTIFY] call={identify_call_count} cache={len(face_vectors_cache)}")
+
         if face_image_bgr is None or face_image_bgr.size == 0:
+            _flog(f"[IDENTIFY] call={identify_call_count} EARLY_EXIT=empty_crop")
             return "Unknown", 0.0
 
         if face_image_bgr.shape[0] < 20 or face_image_bgr.shape[1] < 20:
+            _flog(f"[IDENTIFY] call={identify_call_count} EARLY_EXIT=tiny_crop shape={face_image_bgr.shape[:2]}")
             return "Unknown", 0.0
 
-        # Fast path: if DB vectors are unavailable, use filesystem recognition directly.
-        # This avoids expensive embedding extraction that can trigger frontend timeouts.
+        # Vector-only recognition path (filesystem fallback intentionally disabled).
         if not face_vectors_cache:
-            return identify_face_deepface(face_image_bgr)
-
-        # Extract face vector from the image
-        try:
-            embedding_objs = DeepFace.represent(
-                img_path=face_image_bgr,
-                model_name=DEEPFACE_MODEL,
-                detector_backend='skip',  # Face is already cropped, skip redundant detection
-                enforce_detection=False,
-                align=True
-            )
-            
-            if not embedding_objs or len(embedding_objs) == 0:
-                return "Unknown", 0.0
-            
-            face_vector = np.array(embedding_objs[0]['embedding'], dtype=np.float64)
-            
-        except Exception as e:
-            print(f"[ERROR] Face vector extraction failed: {e}")
+            _flog(f"[IDENTIFY] call={identify_call_count} EARLY_EXIT=no_vectors")
             return "Unknown", 0.0
-        
+
+        # Prefer OpenCV backend for parity with enrollment (align=True),
+        # then fall back to skip backend when detection on crop fails.
+        face_vector = None
+        used_backend = None
+        last_error = None
+
+        for backend in ("opencv", "skip"):
+            try:
+                embedding_objs = DeepFace.represent(
+                    img_path=face_image_bgr,
+                    model_name=DEEPFACE_MODEL,
+                    detector_backend=backend,
+                    enforce_detection=False,
+                    align=True
+                )
+                if embedding_objs and len(embedding_objs) > 0:
+                    face_vector = np.array(embedding_objs[0]['embedding'], dtype=np.float64)
+                    used_backend = backend
+                    break
+            except Exception as e:
+                last_error = str(e)
+
+        if face_vector is None:
+            if should_trace:
+                sys.stderr.write(f"[IdentifyTrace] Embedding extraction failed for both backends (last_error={last_error})\n")
+            return "Unknown", 0.0
+
         best_match_name = "Unknown"
         best_similarity = 0.0
         best_student_id = None
-        
+        skipped_shape_mismatch = 0
+
         for student_id, data in face_vectors_cache.items():
             cached_vector = data['vector']
+            if face_vector.shape != cached_vector.shape:
+                skipped_shape_mismatch += 1
+                continue
             similarity = cosine_similarity(face_vector, cached_vector)
-            
+
             if similarity > best_similarity:
                 best_similarity = similarity
                 best_match_name = data['name']
                 best_student_id = student_id
-        
-        # Convert similarity to confidence
-        # Cosine similarity ranges from -1 to 1, but for face recognition typically 0.4+ is a match
-        # ArcFace threshold is typically around 0.4-0.6 similarity for matches
-        similarity_threshold = 0.40  # Adjust based on testing
+
+        # File-based log (guaranteed to work regardless of stdout/stderr issues)
+        _flog(
+            f"[SIM] call={identify_call_count} best={best_match_name} "
+            f"sim={best_similarity:.4f} thresh={VECTOR_SIMILARITY_THRESHOLD:.2f} "
+            f"backend={used_backend} cache={len(face_vectors_cache)} "
+            f"shape_skip={skipped_shape_mismatch} vec_dim={face_vector.shape}"
+        )
+
+        similarity_threshold = VECTOR_SIMILARITY_THRESHOLD
         
         if best_similarity < similarity_threshold:
             return "Unknown", 0.0
-        
-        # Map similarity (0.4-1.0) to confidence (0-1)
+
+        # Map similarity (threshold-1.0) to confidence (0-1)
         confidence = min(1.0, (best_similarity - similarity_threshold) / (1.0 - similarity_threshold))
-        
+
         if confidence < MIN_CONFIDENCE:
             return "Unknown", 0.0
-        
+
         return best_match_name, confidence
-        
+
     except Exception as e:
-        msg = f"      Face identification error: {str(e)}\n"
-        sys.stdout.buffer.write(msg.encode('utf-8'))
+        sys.stderr.write(f"[IdentifyTrace] ERROR: {str(e)}\n")
+        sys.stderr.flush()
         return "Unknown", 0.0
 
 
@@ -252,12 +321,28 @@ face_tracker = {}
 next_face_id = 0
 frame_count = 0
 process_frame_count = 0
+match_cycle_count = 0
+identify_call_count = 0
+
+# File-based debug log (bypasses all stdout/stderr/WSGI capture issues)
+_DEBUG_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'debug_trace.log')
+def _flog(msg):
+    """Append one line to file-based debug log."""
+    try:
+        with open(_DEBUG_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(f"{time.time():.2f} {msg}\n")
+    except Exception:
+        pass
+
+_flog("=== PYTHON SERVICE STARTED ===")
 
 # Configuration - DeepFace
 PHOTOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'photos')
 DEEPFACE_MODEL = "ArcFace"  # Best accuracy
 DISTANCE_THRESHOLD = 0.50   # Stricter threshold for ArcFace (default is 0.68, lower = stricter)
 MIN_CONFIDENCE = 0.35       # Minimum confidence to accept a match (below this = Unknown)
+VECTOR_SIMILARITY_THRESHOLD = float(os.getenv('VECTOR_SIMILARITY_THRESHOLD', '0.35'))  # Runtime threshold for DB vector matching
+TRACE_LOG_INTERVAL = 30     # Log every N frames/calls (plus first few warmup calls)
 
 # Tracking Configuration
 TRACKING_FRAMES = 15
@@ -631,7 +716,7 @@ def calculate_distance(loc1, loc2):
     return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
 
 
-def suppress_overlapping_faces(face_locations, iou_threshold=0.3):
+def suppress_overlapping_faces(face_locations, iou_threshold=0.45):
     """Remove overlapping bounding boxes via IoU-based Non-Maximum Suppression.
     
     Keeps the larger box when two detections overlap above `iou_threshold`.
@@ -725,7 +810,15 @@ def merge_duplicate_trackers():
 
 def match_faces_to_trackers(face_locations, frame_bgr):
     """Match detected faces to existing trackers or create new ones."""
-    global face_tracker, next_face_id, _hand_debug_counter
+    global face_tracker, next_face_id, _hand_debug_counter, match_cycle_count
+    match_cycle_count += 1
+    should_trace_match = (match_cycle_count <= 5 or match_cycle_count % TRACE_LOG_INTERVAL == 0)
+    if should_trace_match:
+        print(
+            f"[FrameTrace][Matcher] cycle={match_cycle_count} "
+            f"face_locations={len(face_locations)} trackers={len(face_tracker)}",
+            flush=True
+        )
     
     # NOTE: face_locations are already in full scale (no downscaling in this version)
     
@@ -854,9 +947,18 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                 should_identify = (tracker.identification_count % 10 == 0)  # ~1 second at 10 FPS - faster for unknown
             else:
                 should_identify = (tracker.identification_count % 40 == 0)  # ~4 seconds at 10 FPS
+
+            if should_trace_match and tracker.name == "Unknown":
+                print(
+                    f"[FrameTrace][Matcher] tracker={best_tracker} unknown "
+                    f"id_count={tracker.identification_count} should_identify={should_identify}"
+                )
             
             if should_identify:
+                crop_shape = face_crop.shape[:2] if face_crop is not None and face_crop.size > 0 else "empty"
+                _flog(f"[REIDENTIFY] tracker={best_tracker} name={tracker.name} id_count={tracker.identification_count} crop={crop_shape}")
                 name, confidence = identify_face_from_vector(face_crop)
+                _flog(f"[REIDENTIFY] result name={name} confidence={confidence:.4f}")
                 if name != "Unknown":
                     tracker.name = name
                     tracker.update_location(location, confidence)
@@ -869,6 +971,29 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         else:
             new_detections.append((location, i))
     
+    # Deduplicate new_detections: if two unmatched faces are very close,
+    # keep only the larger one to avoid creating duplicate trackers.
+    if len(new_detections) > 1:
+        dedup_threshold = FACE_DISTANCE_THRESHOLD * 0.4
+        keep_new = []
+        for loc, idx in sorted(new_detections,
+                                key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
+                                reverse=True):
+            is_dup = False
+            for kept_loc, _ in keep_new:
+                if calculate_distance(loc, kept_loc) < dedup_threshold:
+                    is_dup = True
+                    break
+            if not is_dup:
+                keep_new.append((loc, idx))
+        new_detections = keep_new
+
+    if should_trace_match:
+        print(
+            f"[FrameTrace][Matcher] matched={len(matched_trackers)} "
+            f"new={len(new_detections)}"
+        )
+
     # Create new trackers
     for location, idx in new_detections:
         top, right, bottom, left = location
@@ -879,8 +1004,10 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         right_safe = max(0, min(right, w))
         
         face_crop = frame_bgr[top_safe:bottom_safe, left_safe:right_safe]
+        _flog(f"[NEW_TRACKER] idx={idx} crop={face_crop.shape[:2] if face_crop is not None and face_crop.size > 0 else 'empty'} next_id={next_face_id}")
         
         name, confidence = identify_face_from_vector(face_crop)
+        _flog(f"[NEW_TRACKER] result name={name} confidence={confidence:.4f}")
         
         tracker = FaceTracker(next_face_id, name, location)
         if confidence > 0:
@@ -1185,12 +1312,19 @@ def process_frame():
             return jsonify({"status": "error", "message": "No frame data provided"})
         
         process_frame_count += 1
+        should_trace_frame = (process_frame_count <= 5 or process_frame_count % TRACE_LOG_INTERVAL == 0)
         frame_data = base64.b64decode(data['frame'])
         nparr = np.frombuffer(frame_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
             return jsonify({"status": "error", "message": "Invalid image data"})
+
+        if should_trace_frame:
+            _flog(
+                f"[FRAME] #{process_frame_count} frame={frame.shape[1]}x{frame.shape[0]} "
+                f"trackers={len(face_tracker)} vectors={len(face_vectors_cache)}"
+            )
         
         # Safety net: downscale if frontend somehow sends a larger-than-expected frame
         if frame.shape[1] > 640 or frame.shape[0] > 480:
@@ -1217,7 +1351,19 @@ def process_frame():
                     face_locations.append((y, x+w, y+h, x))
             
             face_locations = suppress_overlapping_faces(face_locations)
+            if should_trace_frame:
+                sys.stderr.write(
+                    f"[FrameTrace][Python] raw_detected={len(detected_faces_df)} "
+                    f"filtered_faces={len(face_locations)}\n"
+                )
+                sys.stderr.flush()
             hand_count = match_faces_to_trackers(face_locations, frame)
+            if should_trace_frame:
+                sys.stderr.write(
+                    f"[FrameTrace][Python] post_match trackers={len(face_tracker)} "
+                    f"hands={hand_count}\n"
+                )
+                sys.stderr.flush()
             
             detected_faces = []
             for tracker_id, tracker in list(face_tracker.items()):
@@ -1271,15 +1417,22 @@ def process_frame():
                     "engaged_count": int(engaged_count),
                     "present_count": int(present_count),
                     "disengaged_count": int(disengaged_count)
+                },
+                "_debug": {
+                    "frame_num": process_frame_count,
+                    "identify_calls": identify_call_count,
+                    "vectors_cached": len(face_vectors_cache)
                 }
             })
             
         except Exception as e:
-            print(f"Face processing error: {e}")
+            sys.stderr.write(f"[ERROR] Face processing error: {e}\n")
+            sys.stderr.flush()
             return jsonify({"status": "error", "message": f"Face processing error: {str(e)}"})
             
     except Exception as e:
-        print(f"Frame processing error: {e}")
+        sys.stderr.write(f"[ERROR] Frame processing error: {e}\n")
+        sys.stderr.flush()
         return jsonify({"status": "error", "message": f"Frame processing error: {str(e)}"})
 
 
@@ -1447,11 +1600,20 @@ if __name__ == '__main__':
     else:
         print("[WARN] Supabase not initialized. Vector-based recognition disabled.")
     
-    # Legacy filesystem-based reference data (fallback)
-    if not load_reference_data():
-        print("[WARN] Could not load filesystem reference data.")
+    # Legacy filesystem-based reference data (fallback) – disabled for testing
+    # To re-enable, uncomment the two lines below:
+    # if not load_reference_data():
+    #     print("[WARN] Could not load filesystem reference data.")
     
+    print(
+        f"[FrameTrace][Startup] vectors_loaded={len(face_vectors_cache)} "
+        f"similarity_threshold={VECTOR_SIMILARITY_THRESHOLD:.2f}"
+    )
+
     print("Starting Flask service on port 5000...")
-    # Keep a single process on Windows to avoid debug reloader teardown issues
-    # with MediaPipe/TensorFlow during long-running frame processing.
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    # CRITICAL: threaded=False prevents concurrent request handling that causes
+    # race conditions with shared state (face_tracker, next_face_id) when
+    # DeepFace.represent() blocks for several seconds during identification.
+    # Without this, every frame sees trackers=0 and spawns a new identification
+    # call that never completes before the response is sent.
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=False)
