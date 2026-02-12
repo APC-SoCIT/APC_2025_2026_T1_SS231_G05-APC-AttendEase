@@ -12,6 +12,7 @@ import AdminLogs from './components/AdminLogs';
 import AdminUsers from './components/AdminUsers';
 import AdminSettings from './components/AdminSettings';
 import AdminReports from './components/AdminReports';
+import AdminPrograms from './components/AdminPrograms';
 import { isAdminSessionActive } from './utils/auth';
 
 const useStyles = makeStyles({
@@ -101,6 +102,14 @@ function App() {
             element={
               adminActive
                 ? <AdminUsers />
+                : <Navigate to="/professor" replace />
+            }
+          />
+          <Route
+            path="/admin/programs"
+            element={
+              adminActive
+                ? <AdminPrograms />
                 : <Navigate to="/professor" replace />
             }
           />

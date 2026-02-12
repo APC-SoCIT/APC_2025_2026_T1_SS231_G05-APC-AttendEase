@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
     makeStyles,
     shorthands,
@@ -17,12 +16,12 @@ import {
     MenuItem
 } from '@fluentui/react-components';
 import {
-    ArrowCircleLeft24Regular,
     ArrowDownload24Regular,
     Search24Regular,
     ChevronLeft20Regular,
     ChevronRight20Regular
 } from '@fluentui/react-icons';
+import AdminShell from './AdminShell';
 import {
     LineChart,
     Line,
@@ -42,27 +41,21 @@ import { mockReportData, getSessionsByDateRange, getSessionsByCourse, filterReco
 import { exportToCSV, exportToPDF } from '../utils/reportExports';
 
 const useStyles = makeStyles({
-    container: {
-        minHeight: '100vh',
-        backgroundImage: 'linear-gradient(to right, rgb(66, 59, 34), #FFCC00)',
-        ...shorthands.padding('40px'),
-    },
-    header: {
+    cardHeader: {
         display: 'flex',
-        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        marginBottom: '24px',
-        color: 'white'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        ...shorthands.gap('12px'),
     },
-    headerTitle: {
+    headerLeft: {
         display: 'flex',
         flexDirection: 'column',
-        ...shorthands.gap('6px'),
-        color: 'white'
+        ...shorthands.gap('4px'),
     },
     actions: {
         display: 'flex',
-        ...shorthands.gap('12px')
+        ...shorthands.gap('12px'),
     },
     content: {
         maxWidth: '1400px',
@@ -170,7 +163,6 @@ const PIE_COLORS = ['#2e7d32', '#ed6c02', '#d32f2f', '#757575'];
 
 function AdminReports() {
     const styles = useStyles();
-    const navigate = useNavigate();
 
     // Filter states
     const [dateRange, setDateRange] = useState('30'); // days
@@ -334,22 +326,11 @@ function AdminReports() {
     };
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header}>
-                <div className={styles.headerTitle}>
+        <AdminShell>
+            <div className={styles.cardHeader}>
+                <div className={styles.headerLeft}>
                     <Text weight="bold" size={600}>View Reports</Text>
-                    <Text size={300} style={{ color: '#ffffff' }}>
-                        Attendance analytics and export history
-                    </Text>
-                </div>
-                <div className={styles.actions}>
-                    <Button
-                        appearance="secondary"
-                        icon={<ArrowCircleLeft24Regular />}
-                        onClick={() => navigate('/admin')}
-                    >
-                        Back
-                    </Button>
+                    <Text size={200} style={{ color: '#64748b' }}>Attendance analytics and export history.</Text>
                 </div>
             </div>
 
@@ -622,7 +603,7 @@ function AdminReports() {
                     )}
                 </Card>
             </div>
-        </div>
+        </AdminShell>
     );
 }
 

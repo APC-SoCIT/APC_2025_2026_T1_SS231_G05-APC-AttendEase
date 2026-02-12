@@ -11,97 +11,185 @@ import {
   DialogBody,
   DialogTitle,
   DialogActions,
-  DialogContent,  
+  DialogContent,
   Select,
   Label,
-  Menu,
-  MenuTrigger,
-  MenuList,
-  MenuPopover,
-  MenuItem
 } from '@fluentui/react-components';
 import {
-  ArrowLeft24Regular,
   Add24Regular,
   Edit24Regular,
   Delete24Regular,
   Search24Regular,
   BookOpen24Regular,
-  Filter24Regular
+  Beaker24Regular,
 } from '@fluentui/react-icons';
-import { useNavigate } from 'react-router-dom';
 import { fetchCourses, createCourse, updateCourse, deleteCourse } from '../../services/supabase/referenceData.js';
+import { insertLog } from '../../services/supabase/logService.js';
+import AdminShell from './AdminShell';
 
 const useStyles = makeStyles({
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
-    ...shorthands.padding('40px'),
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('20px'),
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('10px'),
-  },
-  topBar: {
+  cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%'
+    flexWrap: 'wrap',
+    ...shorthands.gap('12px'),
+  },
+  headerLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('4px'),
   },
   controls: {
     display: 'flex',
     ...shorthands.gap('8px'),
-    alignItems: 'center'
+    alignItems: 'center',
+  },
+  listHeader: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 100px 80px 120px',
+    ...shorthands.gap('16px'),
+    ...shorthands.padding('10px', '16px'),
+    backgroundColor: '#f8fafc',
+    borderRadius: '8px',
+    '@media (max-width: 768px)': {
+      display: 'none',
+    },
+  },
+  listHeaderLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
   courseList: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
-    ...shorthands.gap('20px'),
-  },
-  courseCard: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'stretch',
-    ...shorthands.padding('16px'),
-    backgroundColor: 'white',
-    height: '100%',
+    ...shorthands.gap('6px'),
+  },
+  courseRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 100px 80px 120px',
+    ...shorthands.gap('16px'),
+    alignItems: 'center',
+    ...shorthands.padding('14px', '16px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '8px',
+    ...shorthands.border('1px', 'solid', '#f0f0f0'),
+    transitionProperty: 'background-color, box-shadow',
+    transitionDuration: '150ms',
+    '&:hover': {
+      backgroundColor: '#f8fafc',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    },
+    '@media (max-width: 768px)': {
+      gridTemplateColumns: '1fr auto',
+    },
   },
   courseInfo: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     ...shorthands.gap('12px'),
-    marginBottom: '16px',
-    flexGrow: 1,
+  },
+  iconBadge: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    backgroundColor: '#f5f3ff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   courseDetails: {
     display: 'flex',
     flexDirection: 'column',
   },
+  unitsBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.padding('2px', '10px'),
+    backgroundColor: '#f1f5f9',
+    borderRadius: '12px',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#475569',
+  },
+  labBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.padding('2px', '10px'),
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: '600',
+  },
   actions: {
     display: 'flex',
     justifyContent: 'flex-end',
-    ...shorthands.gap('8px'),
+    ...shorthands.gap('4px'),
+  },
+  dialogSurface: {
+    borderRadius: '16px',
+    maxWidth: '480px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+  },
+  dialogTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    ...shorthands.gap('10px'),
+  },
+  dialogTitleIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   dialogContent: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('10px'),
-    marginTop: '10px'
-  }
+    ...shorthands.gap('14px'),
+    marginTop: '4px',
+  },
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dialogActionsRow: {
+    ...shorthands.borderTop('1px', 'solid', '#e2e8f0'),
+    paddingTop: '16px',
+    marginTop: '4px',
+  },
+  deleteWarning: {
+    backgroundColor: '#fef2f2',
+    ...shorthands.padding('12px', '16px'),
+    borderRadius: '8px',
+    ...shorthands.border('1px', 'solid', '#fecaca'),
+    fontSize: '14px',
+    color: '#991b1b',
+    lineHeight: '1.5',
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    ...shorthands.padding('40px'),
+    ...shorthands.gap('8px'),
+    color: '#94a3b8',
+  },
 });
 
 export default function AdminCourses() {
   const styles = useStyles();
-  const navigate = useNavigate();
-  
+
   const [courses, setCourses] = React.useState([]);
   const [searchText, setSearchText] = React.useState('');
-  const [filterDepartment, setFilterDepartment] = React.useState('All');
-  const [filterSection, setFilterSection] = React.useState('All');
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [editingCourse, setEditingCourse] = React.useState(null);
   const [courseToDelete, setCourseToDelete] = React.useState(null);
@@ -145,6 +233,13 @@ export default function AdminCourses() {
     const { success, data, error: createError } = await createCourse(newCourse);
     
     if (success) {
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'COURSE_CREATED',
+        description: `Created course ${newCourse.course_code}`,
+        performed_by: adminSession.user_id || null,
+        metadata: { course_id: data.id, course_code: newCourse.course_code }
+      });
       setCourses([...courses, data]);
       setIsAddDialogOpen(false);
       setNewCourse({ course_code: '', description: '', units: 3, is_laboratory: false });
@@ -179,6 +274,13 @@ export default function AdminCourses() {
     );
     
     if (success) {
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'COURSE_UPDATED',
+        description: `Updated course ${editingCourse.course_code}`,
+        performed_by: adminSession.user_id || null,
+        metadata: { course_id: editingCourse.id, course_code: editingCourse.course_code }
+      });
       setCourses(courses.map(c => c.id === editingCourse.id ? data : c));
       setEditingCourse(null);
       console.log('✅ Course updated successfully');
@@ -199,6 +301,13 @@ export default function AdminCourses() {
     const { success, error: deleteError } = await deleteCourse(courseToDelete.id);
     
     if (success) {
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'COURSE_DELETED',
+        description: `Deleted course ${courseToDelete.course_code}`,
+        performed_by: adminSession.user_id || null,
+        metadata: { course_id: courseToDelete.id, course_code: courseToDelete.course_code }
+      });
       setCourses(courses.filter(c => c.id !== courseToDelete.id));
       setCourseToDelete(null);
       console.log('✅ Course deleted successfully');
@@ -210,107 +319,138 @@ export default function AdminCourses() {
   };
 
   return (
-    <div className={styles.container}>
+    <AdminShell>
       {error && (
-        <div style={{ padding: '12px', backgroundColor: '#fed7d7', borderRadius: '4px', color: '#c53030' }}>
+        <div style={{ padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626' }}>
           <Text>Error: {error}</Text>
         </div>
       )}
-      
-      <div className={styles.header}>
-        <div className={styles.topBar}>
-          <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')} disabled={isLoading}>
-            Back to Admin
-          </Button>
-          <div className={styles.controls}>
-            <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)} disabled={isLoading}>
-              Add Course
-            </Button>
-            <Input 
-              contentBefore={<Search24Regular />} 
-              placeholder="Search courses..." 
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
+
+      <div className={styles.cardHeader}>
+        <div className={styles.headerLeft}>
+          <Text size={600} weight="bold">Manage Courses</Text>
+          <Text size={200} style={{ color: '#64748b' }}>View and manage course offerings.</Text>
         </div>
-        <Text size={600} weight="bold">Manage Courses</Text>
-        <Text>View and manage course offerings. Courses are system reference data managed by administrators only.</Text>
+        <div className={styles.controls}>
+          <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)} disabled={isLoading}>
+            Add Course
+          </Button>
+          <Input 
+            contentBefore={<Search24Regular />} 
+            placeholder="Search courses..." 
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            disabled={isLoading}
+          />
+        </div>
       </div>
 
       {isLoading ? (
-        <div style={{ padding: '20px', textAlign: 'center' }}>
+        <div style={{ padding: '40px', textAlign: 'center' }}>
           <Text>Loading courses...</Text>
         </div>
-      ) : (
-        <div className={styles.courseList}>
-          {courses
-            .filter(course => {
-              const searchRegex = new RegExp(searchText, 'i');
-              return searchRegex.test(course.course_code) || searchRegex.test(course.description || '');
-            })
-            .map(course => (
-              <Card key={course.id} className={styles.courseCard}>
-                <div className={styles.courseInfo}>
-                  <div style={{ padding: '8px', backgroundColor: '#eef2ff', borderRadius: '4px' }}>
-                    <BookOpen24Regular />
+      ) : (() => {
+        const filtered = courses.filter(course => {
+          const searchRegex = new RegExp(searchText, 'i');
+          return searchRegex.test(course.course_code) || searchRegex.test(course.description || '');
+        });
+        if (filtered.length === 0) {
+          return (
+            <div className={styles.emptyState}>
+              <BookOpen24Regular style={{ width: 40, height: 40 }} />
+              <Text weight="semibold">No courses found</Text>
+              <Text size={200}>Add a course or adjust your search.</Text>
+            </div>
+          );
+        }
+        return (
+          <>
+            <div className={styles.listHeader}>
+              <Text className={styles.listHeaderLabel}>Course</Text>
+              <Text className={styles.listHeaderLabel}>Units</Text>
+              <Text className={styles.listHeaderLabel}>Lab</Text>
+              <Text className={styles.listHeaderLabel} style={{ textAlign: 'right' }}>Actions</Text>
+            </div>
+            <div className={styles.courseList}>
+              {filtered.map(course => (
+                <div key={course.id} className={styles.courseRow}>
+                  <div className={styles.courseInfo}>
+                    <div className={styles.iconBadge}>
+                      <BookOpen24Regular style={{ color: '#8b5cf6', width: 18, height: 18 }} />
+                    </div>
+                    <div className={styles.courseDetails}>
+                      <Text weight="semibold" size={300}>{course.course_code}</Text>
+                      <Text size={200} style={{ color: '#64748b' }}>{course.description}</Text>
+                    </div>
                   </div>
-                  <div className={styles.courseDetails}>
-                    <Text weight="semibold">{course.course_code}</Text>
-                    <Text size={200}>{course.description}</Text>
-                    <Text size={200} style={{ color: '#666' }}>
-                      Units: {course.units} | Lab: {course.is_laboratory ? 'Yes' : 'No'}
-                    </Text>
+                  <span className={styles.unitsBadge}>{course.units}</span>
+                  <span
+                    className={styles.labBadge}
+                    style={{
+                      backgroundColor: course.is_laboratory ? '#ecfdf5' : '#f8fafc',
+                      color: course.is_laboratory ? '#059669' : '#94a3b8',
+                    }}
+                  >
+                    {course.is_laboratory ? 'Yes' : 'No'}
+                  </span>
+                  <div className={styles.actions}>
+                    <Button
+                      icon={<Edit24Regular />}
+                      appearance="subtle"
+                      size="small"
+                      onClick={() => handleEditClick(course)}
+                      disabled={isLoading}
+                    />
+                    <Button
+                      icon={<Delete24Regular />}
+                      appearance="subtle"
+                      size="small"
+                      onClick={() => handleDeleteClick(course)}
+                      disabled={isLoading}
+                    />
                   </div>
                 </div>
-                <div className={styles.actions}>
-                  <Button 
-                    icon={<Edit24Regular />} 
-                    appearance="subtle" 
-                    onClick={() => handleEditClick(course)}
-                    disabled={isLoading}
-                  />
-                  <Button 
-                    icon={<Delete24Regular />} 
-                    appearance="subtle" 
-                    onClick={() => handleDeleteClick(course)}
-                    disabled={isLoading}
-                  />
-                </div>
-              </Card>
-            ))}
-        </div>
-      )}
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Add Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(event, data) => setIsAddDialogOpen(data.open)}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Add New Course</DialogTitle>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#eef2ff' }}>
+                  <Add24Regular style={{ color: '#4f46e5', width: 20, height: 20 }} />
+                </div>
+                Add New Course
+              </div>
+            </DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              <Label>Course Code (Unique)</Label>
+              <Label className={styles.formLabel}>Course Code (Unique)</Label>
               <Input 
                 value={newCourse.course_code} 
                 onChange={(e, data) => setNewCourse({...newCourse, course_code: data.value})} 
                 placeholder="e.g., CS101"
                 disabled={isLoading}
               />
-              <Label>Description</Label>
+              <Label className={styles.formLabel}>Description</Label>
               <Input 
                 value={newCourse.description} 
                 onChange={(e, data) => setNewCourse({...newCourse, description: data.value})} 
                 placeholder="Course description"
                 disabled={isLoading}
               />
-              <Label>Units</Label>
+              <Label className={styles.formLabel}>Units</Label>
               <Input 
                 type="number"
                 value={newCourse.units.toString()} 
                 onChange={(e, data) => setNewCourse({...newCourse, units: parseInt(data.value) || 3})} 
                 disabled={isLoading}
               />
-              <Label>Is Laboratory?</Label>
+              <Label className={styles.formLabel}>Is Laboratory?</Label>
               <Select 
                 value={newCourse.is_laboratory ? 'true' : 'false'} 
                 onChange={(e, data) => setNewCourse({...newCourse, is_laboratory: data.value === 'true'})}
@@ -320,7 +460,7 @@ export default function AdminCourses() {
                 <option value="true">Yes</option>
               </Select>
             </DialogContent>
-            <DialogActions>
+            <DialogActions className={styles.dialogActionsRow}>
               <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)} disabled={isLoading}>Cancel</Button>
               <Button appearance="primary" onClick={handleAddCourse} disabled={isLoading}>Add</Button>
             </DialogActions>
@@ -330,30 +470,37 @@ export default function AdminCourses() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingCourse} onOpenChange={(event, data) => { if (!data.open) setEditingCourse(null); }}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Edit Course</DialogTitle>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#fef3c7' }}>
+                  <Edit24Regular style={{ color: '#d97706', width: 20, height: 20 }} />
+                </div>
+                Edit Course
+              </div>
+            </DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              <Label>Course Code</Label>
+              <Label className={styles.formLabel}>Course Code</Label>
               <Input 
                 value={editingCourse?.course_code || ''} 
                 onChange={(e, data) => setEditingCourse({...editingCourse, course_code: data.value})}
                 disabled={isLoading}
               />
-              <Label>Description</Label>
+              <Label className={styles.formLabel}>Description</Label>
               <Input 
                 value={editingCourse?.description || ''} 
                 onChange={(e, data) => setEditingCourse({...editingCourse, description: data.value})}
                 disabled={isLoading}
               />
-              <Label>Units</Label>
+              <Label className={styles.formLabel}>Units</Label>
               <Input 
                 type="number"
                 value={(editingCourse?.units || 3).toString()} 
                 onChange={(e, data) => setEditingCourse({...editingCourse, units: parseInt(data.value) || 3})}
                 disabled={isLoading}
               />
-              <Label>Is Laboratory?</Label>
+              <Label className={styles.formLabel}>Is Laboratory?</Label>
               <Select 
                 value={(editingCourse?.is_laboratory ? 'true' : 'false')} 
                 onChange={(e, data) => setEditingCourse({...editingCourse, is_laboratory: data.value === 'true'})}
@@ -363,7 +510,7 @@ export default function AdminCourses() {
                 <option value="true">Yes</option>
               </Select>
             </DialogContent>
-            <DialogActions>
+            <DialogActions className={styles.dialogActionsRow}>
               <Button appearance="secondary" onClick={() => setEditingCourse(null)} disabled={isLoading}>Cancel</Button>
               <Button appearance="primary" onClick={handleSaveEdit} disabled={isLoading}>Save</Button>
             </DialogActions>
@@ -373,19 +520,28 @@ export default function AdminCourses() {
 
       {/* Delete Dialog */}
       <Dialog open={!!courseToDelete} onOpenChange={(event, data) => { if (!data.open) setCourseToDelete(null); }}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#fef2f2' }}>
+                  <Delete24Regular style={{ color: '#ef4444', width: 20, height: 20 }} />
+                </div>
+                Confirm Deletion
+              </div>
+            </DialogTitle>
             <DialogContent>
-              Are you sure you want to delete {courseToDelete?.course_code}?
+              <div className={styles.deleteWarning}>
+                Are you sure you want to delete <Text weight="semibold">{courseToDelete?.course_code}</Text>? This action cannot be undone.
+              </div>
             </DialogContent>
-            <DialogActions>
+            <DialogActions className={styles.dialogActionsRow}>
               <Button appearance="secondary" onClick={() => setCourseToDelete(null)} disabled={isLoading}>Cancel</Button>
-              <Button appearance="primary" onClick={handleConfirmDelete} disabled={isLoading}>Delete</Button>
+              <Button appearance="primary" style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }} onClick={handleConfirmDelete} disabled={isLoading}>Delete</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

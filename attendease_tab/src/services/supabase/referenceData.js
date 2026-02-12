@@ -222,6 +222,115 @@ export async function deleteSection(sectionId) {
 }
 
 // ============================================================================
+// PROGRAMS SERVICE
+// ============================================================================
+
+/**
+ * Fetch all programs
+ * @returns {Promise<Object>} { success: boolean, data: Array, error: string }
+ */
+export async function fetchPrograms() {
+  try {
+    const { data, error } = await supabase
+      .from('programs')
+      .select('*')
+      .order('abbreviation', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching programs:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    console.log('✅ Programs fetched successfully:', data?.length || 0, 'records');
+    return { success: true, data: data || [], error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in fetchPrograms:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+/**
+ * Create a new program
+ * @param {Object} programData - { name, abbreviation }
+ * @returns {Promise<Object>} { success: boolean, data: Object, error: string }
+ */
+export async function createProgram(programData) {
+  try {
+    const { data, error } = await supabase
+      .from('programs')
+      .insert([programData])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating program:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    console.log('✅ Program created successfully:', data?.abbreviation);
+    return { success: true, data, error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in createProgram:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+/**
+ * Update an existing program
+ * @param {string} programId - UUID of the program
+ * @param {Object} programData - { name, abbreviation }
+ * @returns {Promise<Object>} { success: boolean, data: Object, error: string }
+ */
+export async function updateProgram(programId, programData) {
+  try {
+    const { data, error } = await supabase
+      .from('programs')
+      .update(programData)
+      .eq('id', programId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error updating program:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    console.log('✅ Program updated successfully:', data?.abbreviation);
+    return { success: true, data, error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in updateProgram:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+/**
+ * Delete a program
+ * @param {string} programId - UUID of the program
+ * @returns {Promise<Object>} { success: boolean, data: Object, error: string }
+ */
+export async function deleteProgram(programId) {
+  try {
+    const { data, error } = await supabase
+      .from('programs')
+      .delete()
+      .eq('id', programId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error deleting program:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    console.log('✅ Program deleted successfully:', data?.abbreviation);
+    return { success: true, data, error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in deleteProgram:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+// ============================================================================
 // DEFAULT EXPORTS
 // ============================================================================
 export default {
@@ -235,4 +344,9 @@ export default {
   createSection,
   updateSection,
   deleteSection,
+  // Programs
+  fetchPrograms,
+  createProgram,
+  updateProgram,
+  deleteProgram,
 };

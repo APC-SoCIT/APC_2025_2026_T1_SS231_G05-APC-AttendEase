@@ -494,6 +494,57 @@ initializeGraphClient();
 // Test Supabase connection on startup
 testSupabaseConnection();
 
+// ==================== AUTH ENDPOINTS ====================
+
+// Lookup user by email and return their role (for login routing)
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ status: 'error', message: 'Email and password are required.' });
+    }
+
+    // Prototype auth: all passwords are "test123"
+    if (password !== 'test123') {
+      return res.status(401).json({ status: 'error', message: 'Invalid email or password.' });
+    }
+
+    // Look up user in user_profiles by email
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, first_name, last_name, email, role')
+      .eq('email', email.trim())
+      .single();
+
+    if (error || !data) {
+      return res.status(401).json({ status: 'error', message: 'Email not found. Access denied.' });
+    }
+
+    // Audit log – fire-and-forget (don't block login response)
+    supabase.from('system_logs').insert([{
+      action: 'USER_LOGIN',
+      description: `${data.first_name} ${data.last_name} (${data.role}) logged in`,
+      performed_by: data.user_id,
+      metadata: { email: data.email, role: data.role }
+    }]).then();
+
+    res.json({
+      status: 'success',
+      user: {
+        user_id: data.user_id,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        role: data.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // ==================== STUDENT ENDPOINTS ====================
 
 // Get student by email

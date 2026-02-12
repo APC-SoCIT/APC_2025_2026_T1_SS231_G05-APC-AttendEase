@@ -18,9 +18,9 @@ import {
   Edit24Regular,
   Delete24Regular,
   Search24Regular,
-  Grid24Regular,
+  BookOpen24Regular,
 } from '@fluentui/react-icons';
-import { fetchSections, createSection, updateSection, deleteSection } from '../../services/supabase/referenceData.js';
+import { fetchPrograms, createProgram, updateProgram, deleteProgram } from '../../services/supabase/referenceData.js';
 import { insertLog } from '../../services/supabase/logService.js';
 import AdminShell from './AdminShell';
 
@@ -44,7 +44,7 @@ const useStyles = makeStyles({
   },
   listHeader: {
     display: 'grid',
-    gridTemplateColumns: '1fr 160px 120px',
+    gridTemplateColumns: '120px 1fr 120px',
     ...shorthands.gap('16px'),
     ...shorthands.padding('10px', '16px'),
     backgroundColor: '#f8fafc',
@@ -60,14 +60,14 @@ const useStyles = makeStyles({
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
-  sectionList: {
+  programList: {
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('6px'),
   },
-  sectionRow: {
+  programRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 160px 120px',
+    gridTemplateColumns: '120px 1fr 120px',
     ...shorthands.gap('16px'),
     alignItems: 'center',
     ...shorthands.padding('14px', '16px'),
@@ -84,24 +84,20 @@ const useStyles = makeStyles({
       gridTemplateColumns: '1fr auto',
     },
   },
-  sectionInfo: {
-    display: 'flex',
+  abbrBadge: {
+    display: 'inline-flex',
     alignItems: 'center',
-    ...shorthands.gap('12px'),
+    ...shorthands.gap('8px'),
   },
   iconBadge: {
     width: '36px',
     height: '36px',
     borderRadius: '8px',
-    backgroundColor: '#ecfeff',
+    backgroundColor: '#ecfdf5',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  dateBadge: {
-    fontSize: '13px',
-    color: '#64748b',
   },
   actions: {
     display: 'flex',
@@ -162,127 +158,131 @@ const useStyles = makeStyles({
   },
 });
 
-export default function AdminSections() {
+export default function AdminPrograms() {
   const styles = useStyles();
 
-  const [sections, setSections] = React.useState([]);
+  const [programs, setPrograms] = React.useState([]);
   const [searchText, setSearchText] = React.useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
-  const [editingSection, setEditingSection] = React.useState(null);
-  const [sectionToDelete, setSectionToDelete] = React.useState(null);
+  const [editingProgram, setEditingProgram] = React.useState(null);
+  const [programToDelete, setProgramToDelete] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
 
-  const [newSection, setNewSection] = React.useState({
-    name: ''
+  const [newProgram, setNewProgram] = React.useState({
+    name: '',
+    abbreviation: ''
   });
 
-  // Load sections on component mount
+  // Load programs on component mount
   React.useEffect(() => {
-    loadSections();
+    loadPrograms();
   }, []);
 
-  const loadSections = async () => {
+  const loadPrograms = async () => {
     setIsLoading(true);
     setError(null);
-    const { success, data, error: fetchError } = await fetchSections();
+    const { success, data, error: fetchError } = await fetchPrograms();
 
     if (success) {
-      setSections(data);
+      setPrograms(data);
     } else {
       setError(fetchError);
-      console.error('Failed to load sections:', fetchError);
+      console.error('Failed to load programs:', fetchError);
     }
     setIsLoading(false);
   };
 
-  const handleAddSection = async () => {
-    if (!newSection.name.trim()) {
-      setError('Section name is required');
+  const handleAddProgram = async () => {
+    if (!newProgram.name.trim() || !newProgram.abbreviation.trim()) {
+      setError('Program name and abbreviation are required');
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    const { success, data, error: createError } = await createSection(newSection);
+    const { success, data, error: createError } = await createProgram(newProgram);
 
     if (success) {
       const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
       insertLog({
-        action: 'SECTION_CREATED',
-        description: `Created section ${newSection.name}`,
+        action: 'PROGRAM_CREATED',
+        description: `Created program ${newProgram.abbreviation} (${newProgram.name})`,
         performed_by: adminSession.user_id || null,
-        metadata: { section_id: data.id, name: newSection.name }
+        metadata: { program_id: data.id, name: newProgram.name, abbreviation: newProgram.abbreviation }
       });
-      setSections([...sections, data]);
+      setPrograms([...programs, data]);
       setIsAddDialogOpen(false);
-      setNewSection({ name: '' });
-      console.log('✅ Section added successfully');
+      setNewProgram({ name: '', abbreviation: '' });
+      console.log('✅ Program added successfully');
     } else {
       setError(createError);
-      console.error('Failed to create section:', createError);
+      console.error('Failed to create program:', createError);
     }
     setIsLoading(false);
   };
 
-  const handleEditClick = (section) => {
-    setEditingSection({ ...section });
+  const handleEditClick = (program) => {
+    setEditingProgram({ ...program });
   };
 
   const handleSaveEdit = async () => {
-    if (!editingSection.name.trim()) {
-      setError('Section name is required');
+    if (!editingProgram.name.trim() || !editingProgram.abbreviation.trim()) {
+      setError('Program name and abbreviation are required');
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    const { success, data, error: updateError } = await updateSection(
-      editingSection.id,
-      { name: editingSection.name }
+    const { success, data, error: updateError } = await updateProgram(
+      editingProgram.id,
+      {
+        name: editingProgram.name,
+        abbreviation: editingProgram.abbreviation
+      }
     );
 
     if (success) {
       const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
       insertLog({
-        action: 'SECTION_UPDATED',
-        description: `Updated section ${editingSection.name}`,
+        action: 'PROGRAM_UPDATED',
+        description: `Updated program ${editingProgram.abbreviation} (${editingProgram.name})`,
         performed_by: adminSession.user_id || null,
-        metadata: { section_id: editingSection.id, name: editingSection.name }
+        metadata: { program_id: editingProgram.id, name: editingProgram.name, abbreviation: editingProgram.abbreviation }
       });
-      setSections(sections.map(s => s.id === editingSection.id ? data : s));
-      setEditingSection(null);
-      console.log('✅ Section updated successfully');
+      setPrograms(programs.map(p => p.id === editingProgram.id ? data : p));
+      setEditingProgram(null);
+      console.log('✅ Program updated successfully');
     } else {
       setError(updateError);
-      console.error('Failed to update section:', updateError);
+      console.error('Failed to update program:', updateError);
     }
     setIsLoading(false);
   };
 
-  const handleDeleteClick = (section) => {
-    setSectionToDelete(section);
+  const handleDeleteClick = (program) => {
+    setProgramToDelete(program);
   };
 
   const handleConfirmDelete = async () => {
     setIsLoading(true);
     setError(null);
-    const { success, error: deleteError } = await deleteSection(sectionToDelete.id);
+    const { success, error: deleteError } = await deleteProgram(programToDelete.id);
 
     if (success) {
       const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
       insertLog({
-        action: 'SECTION_DELETED',
-        description: `Deleted section ${sectionToDelete.name}`,
+        action: 'PROGRAM_DELETED',
+        description: `Deleted program ${programToDelete.abbreviation} (${programToDelete.name})`,
         performed_by: adminSession.user_id || null,
-        metadata: { section_id: sectionToDelete.id, name: sectionToDelete.name }
+        metadata: { program_id: programToDelete.id, name: programToDelete.name, abbreviation: programToDelete.abbreviation }
       });
-      setSections(sections.filter(s => s.id !== sectionToDelete.id));
-      setSectionToDelete(null);
-      console.log('✅ Section deleted successfully');
+      setPrograms(programs.filter(p => p.id !== programToDelete.id));
+      setProgramToDelete(null);
+      console.log('✅ Program deleted successfully');
     } else {
       setError(deleteError);
-      console.error('Failed to delete section:', deleteError);
+      console.error('Failed to delete program:', deleteError);
     }
     setIsLoading(false);
   };
@@ -297,16 +297,16 @@ export default function AdminSections() {
 
       <div className={styles.cardHeader}>
         <div className={styles.headerLeft}>
-          <Text size={600} weight="bold">Manage Sections</Text>
-          <Text size={200} style={{ color: '#64748b' }}>Organize and configure block sections.</Text>
+          <Text size={600} weight="bold">Manage Programs</Text>
+          <Text size={200} style={{ color: '#64748b' }}>Add, edit, and remove academic degree programs.</Text>
         </div>
         <div className={styles.controls}>
           <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)} disabled={isLoading}>
-            Add Section
+            Add Program
           </Button>
           <Input
             contentBefore={<Search24Regular />}
-            placeholder="Search sections..."
+            placeholder="Search programs..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             disabled={isLoading}
@@ -316,54 +316,52 @@ export default function AdminSections() {
 
       {isLoading ? (
         <div style={{ padding: '40px', textAlign: 'center' }}>
-          <Text>Loading sections...</Text>
+          <Text>Loading programs...</Text>
         </div>
       ) : (() => {
-        const filtered = sections.filter(section => {
+        const filtered = programs.filter(program => {
           const searchRegex = new RegExp(searchText, 'i');
-          return searchRegex.test(section.name);
+          return searchRegex.test(program.name) || searchRegex.test(program.abbreviation || '');
         });
         if (filtered.length === 0) {
           return (
             <div className={styles.emptyState}>
-              <Grid24Regular style={{ width: 40, height: 40 }} />
-              <Text weight="semibold">No sections found</Text>
-              <Text size={200}>Add a section or adjust your search.</Text>
+              <BookOpen24Regular style={{ width: 40, height: 40 }} />
+              <Text weight="semibold">No programs found</Text>
+              <Text size={200}>Add a program or adjust your search.</Text>
             </div>
           );
         }
         return (
           <>
             <div className={styles.listHeader}>
-              <Text className={styles.listHeaderLabel}>Section Name</Text>
-              <Text className={styles.listHeaderLabel}>Created</Text>
+              <Text className={styles.listHeaderLabel}>Abbreviation</Text>
+              <Text className={styles.listHeaderLabel}>Program Name</Text>
               <Text className={styles.listHeaderLabel} style={{ textAlign: 'right' }}>Actions</Text>
             </div>
-            <div className={styles.sectionList}>
-              {filtered.map(section => (
-                <div key={section.id} className={styles.sectionRow}>
-                  <div className={styles.sectionInfo}>
+            <div className={styles.programList}>
+              {filtered.map(program => (
+                <div key={program.id} className={styles.programRow}>
+                  <div className={styles.abbrBadge}>
                     <div className={styles.iconBadge}>
-                      <Grid24Regular style={{ color: '#06b6d4', width: 18, height: 18 }} />
+                      <BookOpen24Regular style={{ color: '#10b981', width: 18, height: 18 }} />
                     </div>
-                    <Text weight="semibold" size={300}>{section.name}</Text>
+                    <Text weight="semibold" size={300}>{program.abbreviation}</Text>
                   </div>
-                  <Text className={styles.dateBadge}>
-                    {new Date(section.created_at).toLocaleDateString()}
-                  </Text>
+                  <Text size={300} style={{ color: '#334155' }}>{program.name}</Text>
                   <div className={styles.actions}>
                     <Button
                       icon={<Edit24Regular />}
                       appearance="subtle"
                       size="small"
-                      onClick={() => handleEditClick(section)}
+                      onClick={() => handleEditClick(program)}
                       disabled={isLoading}
                     />
                     <Button
                       icon={<Delete24Regular />}
                       appearance="subtle"
                       size="small"
-                      onClick={() => handleDeleteClick(section)}
+                      onClick={() => handleDeleteClick(program)}
                       disabled={isLoading}
                     />
                   </div>
@@ -383,28 +381,35 @@ export default function AdminSections() {
                 <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#eef2ff' }}>
                   <Add24Regular style={{ color: '#4f46e5', width: 20, height: 20 }} />
                 </div>
-                Add New Section
+                Add New Program
               </div>
             </DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              <Label className={styles.formLabel}>Section Name (Unique)</Label>
+              <Label className={styles.formLabel}>Abbreviation</Label>
               <Input
-                value={newSection.name}
-                onChange={(e, data) => setNewSection({ name: data.value })}
-                placeholder="e.g., BSCS-SS231"
+                value={newProgram.abbreviation}
+                onChange={(e, data) => setNewProgram({ ...newProgram, abbreviation: data.value })}
+                placeholder="e.g., BSCS-SS"
+                disabled={isLoading}
+              />
+              <Label className={styles.formLabel}>Full Program Name</Label>
+              <Input
+                value={newProgram.name}
+                onChange={(e, data) => setNewProgram({ ...newProgram, name: data.value })}
+                placeholder="e.g., Bachelor of Science in Computer Science"
                 disabled={isLoading}
               />
             </DialogContent>
             <DialogActions className={styles.dialogActionsRow}>
               <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)} disabled={isLoading}>Cancel</Button>
-              <Button appearance="primary" onClick={handleAddSection} disabled={isLoading}>Add</Button>
+              <Button appearance="primary" onClick={handleAddProgram} disabled={isLoading}>Add</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingSection} onOpenChange={(event, data) => { if (!data.open) setEditingSection(null); }}>
+      <Dialog open={!!editingProgram} onOpenChange={(event, data) => { if (!data.open) setEditingProgram(null); }}>
         <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
             <DialogTitle>
@@ -412,19 +417,25 @@ export default function AdminSections() {
                 <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#fef3c7' }}>
                   <Edit24Regular style={{ color: '#d97706', width: 20, height: 20 }} />
                 </div>
-                Edit Section
+                Edit Program
               </div>
             </DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              <Label className={styles.formLabel}>Section Name</Label>
+              <Label className={styles.formLabel}>Abbreviation</Label>
               <Input
-                value={editingSection?.name || ''}
-                onChange={(e, data) => setEditingSection({ ...editingSection, name: data.value })}
+                value={editingProgram?.abbreviation || ''}
+                onChange={(e, data) => setEditingProgram({ ...editingProgram, abbreviation: data.value })}
+                disabled={isLoading}
+              />
+              <Label className={styles.formLabel}>Full Program Name</Label>
+              <Input
+                value={editingProgram?.name || ''}
+                onChange={(e, data) => setEditingProgram({ ...editingProgram, name: data.value })}
                 disabled={isLoading}
               />
             </DialogContent>
             <DialogActions className={styles.dialogActionsRow}>
-              <Button appearance="secondary" onClick={() => setEditingSection(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="secondary" onClick={() => setEditingProgram(null)} disabled={isLoading}>Cancel</Button>
               <Button appearance="primary" onClick={handleSaveEdit} disabled={isLoading}>Save</Button>
             </DialogActions>
           </DialogBody>
@@ -432,7 +443,7 @@ export default function AdminSections() {
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog open={!!sectionToDelete} onOpenChange={(event, data) => { if (!data.open) setSectionToDelete(null); }}>
+      <Dialog open={!!programToDelete} onOpenChange={(event, data) => { if (!data.open) setProgramToDelete(null); }}>
         <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
             <DialogTitle>
@@ -445,11 +456,11 @@ export default function AdminSections() {
             </DialogTitle>
             <DialogContent>
               <div className={styles.deleteWarning}>
-                Are you sure you want to delete the section <Text weight="semibold">"{sectionToDelete?.name}"</Text>? This action cannot be undone.
+                Are you sure you want to delete <Text weight="semibold">{programToDelete?.abbreviation}</Text> ({programToDelete?.name})? This action cannot be undone.
               </div>
             </DialogContent>
             <DialogActions className={styles.dialogActionsRow}>
-              <Button appearance="secondary" onClick={() => setSectionToDelete(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="secondary" onClick={() => setProgramToDelete(null)} disabled={isLoading}>Cancel</Button>
               <Button appearance="primary" style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }} onClick={handleConfirmDelete} disabled={isLoading}>Delete</Button>
             </DialogActions>
           </DialogBody>
