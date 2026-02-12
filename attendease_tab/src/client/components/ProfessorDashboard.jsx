@@ -135,7 +135,8 @@ const useStyles = makeStyles({
   participantHeader: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    pointerEvents: 'auto',
   },
   participantToggleButton: {
     width: '100%',
@@ -146,7 +147,13 @@ const useStyles = makeStyles({
     border: 'none',
     padding: 0,
     cursor: 'pointer',
-    textAlign: 'left'
+    textAlign: 'left',
+    pointerEvents: 'auto',
+    zIndex: 1,
+    '&:hover': {
+      backgroundColor: '#f9fafb',
+      borderRadius: '4px',
+    }
   },
   participantContent: {
     marginTop: '16px',
