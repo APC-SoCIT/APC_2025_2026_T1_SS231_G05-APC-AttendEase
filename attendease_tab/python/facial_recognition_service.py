@@ -631,9 +631,55 @@ def calculate_distance(loc1, loc2):
     return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
 
 
+def suppress_overlapping_faces(face_locations, iou_threshold=0.3):
+    """Remove overlapping bounding boxes via IoU-based Non-Maximum Suppression.
+    
+    Keeps the larger box when two detections overlap above `iou_threshold`.
+    face_locations: list of (top, right, bottom, left) tuples.
+    Returns a deduplicated list in the same format.
+    """
+    if len(face_locations) <= 1:
+        return face_locations
+
+    # Sort by box area descending so larger boxes are preferred
+    sorted_locs = sorted(face_locations, key=lambda loc: (loc[2] - loc[0]) * (loc[1] - loc[3]), reverse=True)
+    keep = []
+
+    for loc in sorted_locs:
+        top, right, bottom, left = loc
+        is_duplicate = False
+        for kept in keep:
+            k_top, k_right, k_bottom, k_left = kept
+            # Intersection
+            inter_top = max(top, k_top)
+            inter_left = max(left, k_left)
+            inter_bottom = min(bottom, k_bottom)
+            inter_right = min(right, k_right)
+            inter_w = max(0, inter_right - inter_left)
+            inter_h = max(0, inter_bottom - inter_top)
+            inter_area = inter_w * inter_h
+            # Union
+            area1 = (bottom - top) * (right - left)
+            area2 = (k_bottom - k_top) * (k_right - k_left)
+            union_area = area1 + area2 - inter_area
+            if union_area > 0 and inter_area / union_area >= iou_threshold:
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            keep.append(loc)
+
+    return keep
+
+
 def merge_duplicate_trackers():
-    """Merge duplicate trackers with the same name that are close to each other."""
+    """Merge duplicate trackers with the same name that are close to each other.
+    
+    Also merges Unknown-to-Unknown pairs when they are very close (tighter threshold)
+    to clean up duplicate detections of the same unidentified face.
+    """
     global face_tracker
+    
+    UNKNOWN_MERGE_THRESHOLD = TRACKER_MERGE_THRESHOLD * 0.6
     
     tracker_ids = list(face_tracker.keys())
     merged_ids = set()
@@ -643,7 +689,7 @@ def merge_duplicate_trackers():
             continue
             
         tracker_1 = face_tracker.get(tracker_id_1)
-        if not tracker_1 or tracker_1.name == "Unknown":
+        if not tracker_1:
             continue
         
         for tracker_id_2 in tracker_ids[i+1:]:
@@ -654,20 +700,27 @@ def merge_duplicate_trackers():
             if not tracker_2:
                 continue
             
-            if tracker_1.name == tracker_2.name:
-                distance = calculate_distance(tracker_1.location, tracker_2.location)
+            # Decide whether these two trackers should be compared
+            same_named = (tracker_1.name == tracker_2.name and tracker_1.name != "Unknown")
+            both_unknown = (tracker_1.name == "Unknown" and tracker_2.name == "Unknown")
+            
+            if not same_named and not both_unknown:
+                continue
+            
+            distance = calculate_distance(tracker_1.location, tracker_2.location)
+            threshold = TRACKER_MERGE_THRESHOLD if same_named else UNKNOWN_MERGE_THRESHOLD
+            
+            if distance < threshold:
+                conf_1 = np.mean(tracker_1.confidence_history) if tracker_1.confidence_history else 0
+                conf_2 = np.mean(tracker_2.confidence_history) if tracker_2.confidence_history else 0
                 
-                if distance < TRACKER_MERGE_THRESHOLD:
-                    conf_1 = np.mean(tracker_1.confidence_history) if tracker_1.confidence_history else 0
-                    conf_2 = np.mean(tracker_2.confidence_history) if tracker_2.confidence_history else 0
-                    
-                    if conf_1 >= conf_2:
-                        del face_tracker[tracker_id_2]
-                        merged_ids.add(tracker_id_2)
-                    else:
-                        del face_tracker[tracker_id_1]
-                        merged_ids.add(tracker_id_1)
-                        break
+                if conf_1 >= conf_2:
+                    del face_tracker[tracker_id_2]
+                    merged_ids.add(tracker_id_2)
+                else:
+                    del face_tracker[tracker_id_1]
+                    merged_ids.add(tracker_id_1)
+                    break
 
 
 def match_faces_to_trackers(face_locations, frame_bgr):
@@ -1006,6 +1059,7 @@ def get_frame():
                     # Use full coordinates directly
                     face_locations.append((y, x+w, y+h, x))
             
+            face_locations = suppress_overlapping_faces(face_locations)
             hand_count = match_faces_to_trackers(face_locations, frame)
         except Exception as e:
             hand_count = 0
@@ -1138,6 +1192,7 @@ def process_frame():
                     # Full resolution (no 1/4 scaling)
                     face_locations.append((y, x+w, y+h, x))
             
+            face_locations = suppress_overlapping_faces(face_locations)
             hand_count = match_faces_to_trackers(face_locations, frame)
             
             detected_faces = []
@@ -1373,4 +1428,6 @@ if __name__ == '__main__':
         print("[WARN] Could not load filesystem reference data.")
     
     print("Starting Flask service on port 5000...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Keep a single process on Windows to avoid debug reloader teardown issues
+    # with MediaPipe/TensorFlow during long-running frame processing.
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
