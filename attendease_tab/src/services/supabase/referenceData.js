@@ -222,6 +222,66 @@ export async function deleteSection(sectionId) {
 }
 
 // ============================================================================
+// SECTION STUDENTS SERVICE
+// ============================================================================
+
+/**
+ * Fetch students belonging to a specific section
+ * @param {string} sectionId - UUID of the section
+ * @returns {Promise<Object>} { success: boolean, data: Array, error: string }
+ */
+export async function fetchStudentsBySection(sectionId) {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, first_name, last_name, student_number, email')
+      .eq('role', 'Student')
+      .eq('section_id', sectionId)
+      .order('last_name', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching students for section:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    return { success: true, data: data || [], error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in fetchStudentsBySection:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+/**
+ * Fetch student counts grouped by section_id (for all sections at once)
+ * @returns {Promise<Object>} { success: boolean, data: Object (sectionId -> count), error: string }
+ */
+export async function fetchStudentCountsBySection() {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('section_id')
+      .eq('role', 'Student')
+      .not('section_id', 'is', null);
+
+    if (error) {
+      console.error('❌ Error fetching student counts:', error.message);
+      return { success: false, data: null, error: error.message };
+    }
+
+    // Count occurrences client-side
+    const counts = {};
+    (data || []).forEach(row => {
+      counts[row.section_id] = (counts[row.section_id] || 0) + 1;
+    });
+
+    return { success: true, data: counts, error: null };
+  } catch (err) {
+    console.error('❌ Unexpected error in fetchStudentCountsBySection:', err.message);
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+// ============================================================================
 // PROGRAMS SERVICE
 // ============================================================================
 
@@ -344,6 +404,8 @@ export default {
   createSection,
   updateSection,
   deleteSection,
+  fetchStudentsBySection,
+  fetchStudentCountsBySection,
   // Programs
   fetchPrograms,
   createProgram,

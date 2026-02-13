@@ -11,7 +11,9 @@ import {
   DialogTitle,
   DialogActions,
   DialogContent,
-  Label
+  Label,
+  Badge,
+  Spinner,
 } from '@fluentui/react-components';
 import {
   Add24Regular,
@@ -19,8 +21,18 @@ import {
   Delete24Regular,
   Search24Regular,
   Grid24Regular,
+  ChevronDown24Regular,
+  ChevronUp24Regular,
+  People24Regular,
 } from '@fluentui/react-icons';
-import { fetchSections, createSection, updateSection, deleteSection } from '../../services/supabase/referenceData.js';
+import {
+  fetchSections,
+  createSection,
+  updateSection,
+  deleteSection,
+  fetchStudentsBySection,
+  fetchStudentCountsBySection,
+} from '../../services/supabase/referenceData.js';
 import { insertLog } from '../../services/supabase/logService.js';
 import AdminShell from './AdminShell';
 
@@ -44,7 +56,7 @@ const useStyles = makeStyles({
   },
   listHeader: {
     display: 'grid',
-    gridTemplateColumns: '1fr 160px 120px',
+    gridTemplateColumns: '1fr 120px 160px 120px',
     ...shorthands.gap('16px'),
     ...shorthands.padding('10px', '16px'),
     backgroundColor: '#f8fafc',
@@ -65,21 +77,25 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     ...shorthands.gap('6px'),
   },
-  sectionRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 160px 120px',
-    ...shorthands.gap('16px'),
-    alignItems: 'center',
-    ...shorthands.padding('14px', '16px'),
+  sectionRowWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
     backgroundColor: '#ffffff',
     borderRadius: '8px',
     ...shorthands.border('1px', 'solid', '#f0f0f0'),
-    transitionProperty: 'background-color, box-shadow',
+    transitionProperty: 'box-shadow',
     transitionDuration: '150ms',
     '&:hover': {
-      backgroundColor: '#f8fafc',
       boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
     },
+  },
+  sectionRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 120px 160px 120px',
+    ...shorthands.gap('16px'),
+    alignItems: 'center',
+    ...shorthands.padding('14px', '16px'),
+    cursor: 'pointer',
     '@media (max-width: 768px)': {
       gridTemplateColumns: '1fr auto',
     },
@@ -99,6 +115,13 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  studentCountBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    ...shorthands.gap('6px'),
+    color: '#64748b',
+    fontSize: '13px',
+  },
   dateBadge: {
     fontSize: '13px',
     color: '#64748b',
@@ -108,6 +131,41 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     ...shorthands.gap('4px'),
   },
+  // Expanded student panel
+  studentPanel: {
+    ...shorthands.padding('0', '16px', '16px', '16px'),
+    ...shorthands.borderTop('1px', 'solid', '#f0f0f0'),
+  },
+  studentTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    marginTop: '8px',
+  },
+  studentTableHead: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    textAlign: 'left',
+    ...shorthands.padding('8px', '12px'),
+    ...shorthands.borderBottom('1px', 'solid', '#e2e8f0'),
+  },
+  studentTableCell: {
+    fontSize: '13px',
+    color: '#334155',
+    ...shorthands.padding('10px', '12px'),
+    ...shorthands.borderBottom('1px', 'solid', '#f1f5f9'),
+  },
+  studentEmptyState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.padding('20px'),
+    color: '#94a3b8',
+    fontSize: '13px',
+  },
+  // Dialogs
   dialogSurface: {
     borderRadius: '16px',
     maxWidth: '480px',
@@ -173,11 +231,17 @@ export default function AdminSections() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
 
+  // Student-related state
+  const [studentCounts, setStudentCounts] = React.useState({}); // { sectionId: count }
+  const [expandedSectionId, setExpandedSectionId] = React.useState(null);
+  const [expandedStudents, setExpandedStudents] = React.useState([]);
+  const [isLoadingStudents, setIsLoadingStudents] = React.useState(false);
+
   const [newSection, setNewSection] = React.useState({
     name: ''
   });
 
-  // Load sections on component mount
+  // Load sections + student counts on mount
   React.useEffect(() => {
     loadSections();
   }, []);
@@ -185,15 +249,44 @@ export default function AdminSections() {
   const loadSections = async () => {
     setIsLoading(true);
     setError(null);
-    const { success, data, error: fetchError } = await fetchSections();
 
-    if (success) {
-      setSections(data);
+    const [sectionsResult, countsResult] = await Promise.all([
+      fetchSections(),
+      fetchStudentCountsBySection(),
+    ]);
+
+    if (sectionsResult.success) {
+      setSections(sectionsResult.data);
     } else {
-      setError(fetchError);
-      console.error('Failed to load sections:', fetchError);
+      setError(sectionsResult.error);
+      console.error('Failed to load sections:', sectionsResult.error);
     }
+
+    if (countsResult.success) {
+      setStudentCounts(countsResult.data);
+    }
+
     setIsLoading(false);
+  };
+
+  const handleToggleExpand = async (sectionId) => {
+    if (expandedSectionId === sectionId) {
+      // Collapse
+      setExpandedSectionId(null);
+      setExpandedStudents([]);
+      return;
+    }
+
+    // Expand and load students
+    setExpandedSectionId(sectionId);
+    setIsLoadingStudents(true);
+    setExpandedStudents([]);
+
+    const { success, data } = await fetchStudentsBySection(sectionId);
+    if (success) {
+      setExpandedStudents(data);
+    }
+    setIsLoadingStudents(false);
   };
 
   const handleAddSection = async () => {
@@ -225,7 +318,8 @@ export default function AdminSections() {
     setIsLoading(false);
   };
 
-  const handleEditClick = (section) => {
+  const handleEditClick = (section, e) => {
+    e.stopPropagation();
     setEditingSection({ ...section });
   };
 
@@ -260,7 +354,8 @@ export default function AdminSections() {
     setIsLoading(false);
   };
 
-  const handleDeleteClick = (section) => {
+  const handleDeleteClick = (section, e) => {
+    e.stopPropagation();
     setSectionToDelete(section);
   };
 
@@ -278,6 +373,17 @@ export default function AdminSections() {
         metadata: { section_id: sectionToDelete.id, name: sectionToDelete.name }
       });
       setSections(sections.filter(s => s.id !== sectionToDelete.id));
+      // Clean up expanded state if this section was expanded
+      if (expandedSectionId === sectionToDelete.id) {
+        setExpandedSectionId(null);
+        setExpandedStudents([]);
+      }
+      // Remove from counts
+      setStudentCounts(prev => {
+        const updated = { ...prev };
+        delete updated[sectionToDelete.id];
+        return updated;
+      });
       setSectionToDelete(null);
       console.log('✅ Section deleted successfully');
     } else {
@@ -298,7 +404,7 @@ export default function AdminSections() {
       <div className={styles.cardHeader}>
         <div className={styles.headerLeft}>
           <Text size={600} weight="bold">Manage Sections</Text>
-          <Text size={200} style={{ color: '#64748b' }}>Organize and configure block sections.</Text>
+          <Text size={200} style={{ color: '#64748b' }}>Organize and configure block sections. Click a row to view enrolled students.</Text>
         </div>
         <div className={styles.controls}>
           <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)} disabled={isLoading}>
@@ -336,39 +442,107 @@ export default function AdminSections() {
           <>
             <div className={styles.listHeader}>
               <Text className={styles.listHeaderLabel}>Section Name</Text>
+              <Text className={styles.listHeaderLabel}>Students</Text>
               <Text className={styles.listHeaderLabel}>Created</Text>
               <Text className={styles.listHeaderLabel} style={{ textAlign: 'right' }}>Actions</Text>
             </div>
             <div className={styles.sectionList}>
-              {filtered.map(section => (
-                <div key={section.id} className={styles.sectionRow}>
-                  <div className={styles.sectionInfo}>
-                    <div className={styles.iconBadge}>
-                      <Grid24Regular style={{ color: '#06b6d4', width: 18, height: 18 }} />
+              {filtered.map(section => {
+                const count = studentCounts[section.id] || 0;
+                const isExpanded = expandedSectionId === section.id;
+                return (
+                  <div key={section.id} className={styles.sectionRowWrapper}>
+                    <div
+                      className={styles.sectionRow}
+                      onClick={() => handleToggleExpand(section.id)}
+                      title="Click to view students"
+                    >
+                      <div className={styles.sectionInfo}>
+                        <div className={styles.iconBadge}>
+                          {isExpanded
+                            ? <ChevronUp24Regular style={{ color: '#06b6d4', width: 18, height: 18 }} />
+                            : <ChevronDown24Regular style={{ color: '#06b6d4', width: 18, height: 18 }} />
+                          }
+                        </div>
+                        <Text weight="semibold" size={300}>{section.name}</Text>
+                      </div>
+                      <div className={styles.studentCountBadge}>
+                        <People24Regular style={{ width: 16, height: 16 }} />
+                        <Badge
+                          appearance="filled"
+                          color={count > 0 ? 'brand' : 'informative'}
+                          size="small"
+                        >
+                          {count} {count === 1 ? 'student' : 'students'}
+                        </Badge>
+                      </div>
+                      <Text className={styles.dateBadge}>
+                        {new Date(section.created_at).toLocaleDateString()}
+                      </Text>
+                      <div className={styles.actions}>
+                        <Button
+                          icon={<Edit24Regular />}
+                          appearance="subtle"
+                          size="small"
+                          onClick={(e) => handleEditClick(section, e)}
+                          disabled={isLoading}
+                        />
+                        <Button
+                          icon={<Delete24Regular />}
+                          appearance="subtle"
+                          size="small"
+                          onClick={(e) => handleDeleteClick(section, e)}
+                          disabled={isLoading}
+                        />
+                      </div>
                     </div>
-                    <Text weight="semibold" size={300}>{section.name}</Text>
+
+                    {/* Expanded student panel */}
+                    {isExpanded && (
+                      <div className={styles.studentPanel}>
+                        {isLoadingStudents ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', gap: '8px' }}>
+                            <Spinner size="tiny" />
+                            <Text size={200} style={{ color: '#64748b' }}>Loading students...</Text>
+                          </div>
+                        ) : expandedStudents.length === 0 ? (
+                          <div className={styles.studentEmptyState}>
+                            <People24Regular style={{ width: 20, height: 20, marginRight: 8 }} />
+                            <Text>No students enrolled in this section.</Text>
+                          </div>
+                        ) : (
+                          <table className={styles.studentTable}>
+                            <thead>
+                              <tr>
+                                <th className={styles.studentTableHead}>#</th>
+                                <th className={styles.studentTableHead}>Student Number</th>
+                                <th className={styles.studentTableHead}>Name</th>
+                                <th className={styles.studentTableHead}>Email</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {expandedStudents.map((student, idx) => (
+                                <tr key={student.user_id}>
+                                  <td className={styles.studentTableCell}>{idx + 1}</td>
+                                  <td className={styles.studentTableCell}>
+                                    <Text weight="semibold">{student.student_number || '—'}</Text>
+                                  </td>
+                                  <td className={styles.studentTableCell}>
+                                    {student.last_name}, {student.first_name}
+                                  </td>
+                                  <td className={styles.studentTableCell}>
+                                    <Text style={{ color: '#64748b' }}>{student.email || '—'}</Text>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <Text className={styles.dateBadge}>
-                    {new Date(section.created_at).toLocaleDateString()}
-                  </Text>
-                  <div className={styles.actions}>
-                    <Button
-                      icon={<Edit24Regular />}
-                      appearance="subtle"
-                      size="small"
-                      onClick={() => handleEditClick(section)}
-                      disabled={isLoading}
-                    />
-                    <Button
-                      icon={<Delete24Regular />}
-                      appearance="subtle"
-                      size="small"
-                      onClick={() => handleDeleteClick(section)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         );
