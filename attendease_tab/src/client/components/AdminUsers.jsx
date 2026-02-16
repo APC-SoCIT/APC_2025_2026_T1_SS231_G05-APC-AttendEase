@@ -22,43 +22,37 @@ import {
   Label,
   Select
 } from '@fluentui/react-components';
-import { 
-  ArrowLeft24Regular, 
-  Delete24Regular, 
+import {
+  Delete24Regular,
   Edit24Regular,
   Search24Regular,
   Filter24Regular,
   ArrowSort24Regular,
   Add24Regular
 } from '@fluentui/react-icons';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabase.config.js';
-import { fetchSections } from '../../services/supabase/referenceData.js';
+import { fetchSections, fetchPrograms } from '../../services/supabase/referenceData.js';
+import { insertLog } from '../../services/supabase/logService.js';
+import AdminShell from './AdminShell';
 
 const useStyles = makeStyles({
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
-    ...shorthands.padding('40px'),
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('20px'),
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('10px'),
-  },
-  topBar: {
+  cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%'
+    flexWrap: 'wrap',
+    ...shorthands.gap('12px'),
+  },
+  headerLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('4px'),
   },
   controls: {
     display: 'flex',
     ...shorthands.gap('8px'),
-    alignItems: 'center'
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   userList: {
     display: 'flex',
@@ -70,12 +64,18 @@ const useStyles = makeStyles({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    ...shorthands.padding('12px'),
-    backgroundColor: 'white',
+    ...shorthands.padding('16px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '10px',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    ...shorthands.border('1px', 'solid', '#e8e8e8'),
     cursor: 'pointer',
-    ':hover': {
-      backgroundColor: '#f0f0f0'
-    }
+    transitionProperty: 'transform, box-shadow',
+    transitionDuration: '200ms',
+    '&:hover': {
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+    },
   },
   detailsGrid: {
     display: 'grid',
@@ -97,14 +97,141 @@ const useStyles = makeStyles({
   },
   actions: {
     display: 'flex',
-    ...shorthands.gap('8px'),
-  }
+    ...shorthands.gap('4px'),
+  },
+  dialogSurface: {
+    borderRadius: '16px',
+    maxWidth: '480px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+  },
+  dialogTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    ...shorthands.gap('10px'),
+  },
+  dialogTitleIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  formContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('14px'),
+    marginTop: '4px',
+  },
+  formLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dialogActionsRow: {
+    ...shorthands.borderTop('1px', 'solid', '#e2e8f0'),
+    paddingTop: '16px',
+    marginTop: '4px',
+  },
+  deleteWarning: {
+    backgroundColor: '#fef2f2',
+    ...shorthands.padding('12px', '16px'),
+    borderRadius: '8px',
+    ...shorthands.border('1px', 'solid', '#fecaca'),
+    fontSize: '14px',
+    color: '#991b1b',
+    lineHeight: '1.5',
+  },
+  detailLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  detailValue: {
+    fontSize: '14px',
+    color: '#1e293b',
+    marginTop: '2px',
+  },
 });
+
+// Helper: get the default empty state for a new user based on role
+const getDefaultNewUser = (role = 'Student') => ({
+  role,
+  first_name: '',
+  last_name: '',
+  email: '',
+  // Student-specific
+  student_number: '',
+  program_id: '',
+  section_id: '',
+  // Professor/Admin-specific
+  id_number: ''
+});
+
+// Helper: build the insert payload based on role (only send relevant columns)
+const buildInsertPayload = (user) => {
+  const base = {
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    role: user.role
+  };
+
+  if (user.role === 'Student') {
+    return {
+      ...base,
+      student_number: user.student_number || null,
+      program_id: user.program_id || null,
+      section_id: user.section_id || null,
+      id_number: null
+    };
+  }
+  // Professor or Admin
+  return {
+    ...base,
+    id_number: user.id_number || null,
+    student_number: null,
+    program_id: null,
+    section_id: null
+  };
+};
+
+// Helper: build the update payload based on role
+const buildUpdatePayload = (user) => {
+  // Strip nested join objects before sending
+  const base = {
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    role: user.role
+  };
+
+  if (user.role === 'Student') {
+    return {
+      ...base,
+      student_number: user.student_number || null,
+      program_id: user.program_id || null,
+      section_id: user.section_id || null,
+      id_number: null
+    };
+  }
+  return {
+    ...base,
+    id_number: user.id_number || null,
+    student_number: null,
+    program_id: null,
+    section_id: null
+  };
+};
 
 export default function AdminUsers() {
   const styles = useStyles();
   const [users, setUsers] = React.useState([]);
   const [sections, setSections] = React.useState([]);
+  const [programs, setPrograms] = React.useState([]);
   const [searchText, setSearchText] = React.useState('');
   const [filterRole, setFilterRole] = React.useState('All');
   const [sortOrder, setSortOrder] = React.useState('Ascending');
@@ -114,22 +241,13 @@ export default function AdminUsers() {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
-  const [newUser, setNewUser] = React.useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    role: 'Student',
-    student_number: '',
-    program: '',
-    section_id: '',
-    password_hash: ''
-  });
-  const navigate = useNavigate();
-
-  // Load users and sections from Supabase
+  const [newUser, setNewUser] = React.useState(getDefaultNewUser('Student'));
+  
+  // Load users, sections, and programs from Supabase
   React.useEffect(() => {
     loadUsers();
     loadSections();
+    loadPrograms();
   }, []);
 
   const loadUsers = async () => {
@@ -143,6 +261,11 @@ export default function AdminUsers() {
           sections (
             id,
             name
+          ),
+          programs (
+            id,
+            name,
+            abbreviation
           )
         `)
         .order('first_name', { ascending: true });
@@ -164,6 +287,37 @@ export default function AdminUsers() {
     }
   };
 
+  const loadPrograms = async () => {
+    const result = await fetchPrograms();
+    if (result.success) {
+      setPrograms(result.data);
+    }
+  };
+
+  // When role changes in Add form, reset role-specific fields
+  const handleNewUserRoleChange = (role) => {
+    setNewUser({
+      ...getDefaultNewUser(role),
+      // Preserve common fields already filled in
+      first_name: newUser.first_name,
+      last_name: newUser.last_name,
+      email: newUser.email
+    });
+  };
+
+  // When role changes in Edit form, clear role-specific fields
+  const handleEditUserRoleChange = (role) => {
+    setEditingUser({
+      ...editingUser,
+      role,
+      // Reset role-specific fields
+      student_number: role === 'Student' ? (editingUser.student_number || '') : '',
+      program_id: role === 'Student' ? (editingUser.program_id || '') : '',
+      section_id: role === 'Student' ? (editingUser.section_id || '') : '',
+      id_number: role !== 'Student' ? (editingUser.id_number || '') : ''
+    });
+  };
+
   const handleEditClick = (e, user) => {
     e.stopPropagation();
     setEditingUser({ ...user });
@@ -172,16 +326,23 @@ export default function AdminUsers() {
   const handleSaveEdit = async () => {
     setIsLoading(true);
     try {
-      // Remove nested objects and only send actual column data
-      const { sections, ...updateData } = editingUser;
-      
+      const updateData = buildUpdatePayload(editingUser);
+
       const { error } = await supabase
         .from('user_profiles')
         .update(updateData)
         .eq('user_id', editingUser.user_id);
 
       if (error) throw error;
-      
+
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'USER_UPDATED',
+        description: `Updated user ${editingUser.first_name} ${editingUser.last_name} (${editingUser.role})`,
+        performed_by: adminSession.user_id || null,
+        metadata: { target_user_id: editingUser.user_id, role: editingUser.role }
+      });
+
       await loadUsers();
       setEditingUser(null);
     } catch (err) {
@@ -206,7 +367,15 @@ export default function AdminUsers() {
         .eq('user_id', userToDelete.user_id);
 
       if (error) throw error;
-      
+
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'USER_DELETED',
+        description: `Deleted user ${userToDelete.first_name} ${userToDelete.last_name} (${userToDelete.role})`,
+        performed_by: adminSession.user_id || null,
+        metadata: { target_user_id: userToDelete.user_id, email: userToDelete.email, role: userToDelete.role }
+      });
+
       await loadUsers();
       setUserToDelete(null);
     } catch (err) {
@@ -218,28 +387,35 @@ export default function AdminUsers() {
   };
 
   const handleAddUser = async () => {
+    if (!newUser.first_name.trim() || !newUser.last_name.trim() || !newUser.email.trim()) {
+      setError('First name, last name, and email are required');
+      return;
+    }
+
     setIsLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase
+      const payload = buildInsertPayload(newUser);
+
+      const { error } = await supabase
         .from('user_profiles')
-        .insert([newUser])
+        .insert([payload])
         .select()
         .single();
 
       if (error) throw error;
-      
+
+      const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+      insertLog({
+        action: 'USER_CREATED',
+        description: `Created new ${newUser.role} user: ${newUser.first_name} ${newUser.last_name}`,
+        performed_by: adminSession.user_id || null,
+        metadata: { email: newUser.email, role: newUser.role }
+      });
+
       await loadUsers();
       setIsAddDialogOpen(false);
-      setNewUser({
-        first_name: '',
-        last_name: '',
-        email: '',
-        role: 'Student',
-        student_number: '',
-        program: '',
-        section_id: '',
-        password_hash: ''
-      });
+      setNewUser(getDefaultNewUser('Student'));
     } catch (err) {
       console.error('Error adding user:', err);
       setError(err.message);
@@ -248,52 +424,159 @@ export default function AdminUsers() {
     }
   };
 
+  // Render role-conditional form fields for Add User
+  const renderAddFormFields = () => {
+    const role = newUser.role;
+
+    return (
+      <>
+        {/* Common fields */}
+        <Label className={styles.formLabel}>Last Name</Label>
+        <Input value={newUser.last_name} onChange={(e, data) => setNewUser({...newUser, last_name: data.value})} />
+        <Label className={styles.formLabel}>First Name</Label>
+        <Input value={newUser.first_name} onChange={(e, data) => setNewUser({...newUser, first_name: data.value})} />
+        <Label className={styles.formLabel}>Email</Label>
+        <Input value={newUser.email} onChange={(e, data) => setNewUser({...newUser, email: data.value})} />
+
+        {/* Student-specific fields */}
+        {role === 'Student' && (
+          <>
+            <Label className={styles.formLabel}>Student ID</Label>
+            <Input value={newUser.student_number} onChange={(e, data) => setNewUser({...newUser, student_number: data.value})} />
+            <Label className={styles.formLabel}>Program</Label>
+            <Select value={newUser.program_id} onChange={(e, data) => setNewUser({...newUser, program_id: data.value})}>
+              <option value="">Select Program</option>
+              {programs.map(program => (
+                <option key={program.id} value={program.id}>{program.abbreviation} — {program.name}</option>
+              ))}
+            </Select>
+            <Label className={styles.formLabel}>Section</Label>
+            <Select value={newUser.section_id} onChange={(e, data) => setNewUser({...newUser, section_id: data.value})}>
+              <option value="">Select Section</option>
+              {sections.map(section => (
+                <option key={section.id} value={section.id}>{section.name}</option>
+              ))}
+            </Select>
+          </>
+        )}
+
+        {/* Professor/Admin-specific fields */}
+        {(role === 'Professor' || role === 'Admin') && (
+          <>
+            <Label className={styles.formLabel}>ID Number</Label>
+            <Input value={newUser.id_number} onChange={(e, data) => setNewUser({...newUser, id_number: data.value})} />
+          </>
+        )}
+      </>
+    );
+  };
+
+  // Render role-conditional form fields for Edit User
+  const renderEditFormFields = () => {
+    if (!editingUser) return null;
+    const role = editingUser.role;
+
+    return (
+      <>
+        {/* Common fields */}
+        <Label className={styles.formLabel}>Last Name</Label>
+        <Input value={editingUser.last_name || ''} onChange={(e, data) => setEditingUser({...editingUser, last_name: data.value})} />
+        <Label className={styles.formLabel}>First Name</Label>
+        <Input value={editingUser.first_name || ''} onChange={(e, data) => setEditingUser({...editingUser, first_name: data.value})} />
+        <Label className={styles.formLabel}>Email</Label>
+        <Input value={editingUser.email || ''} onChange={(e, data) => setEditingUser({...editingUser, email: data.value})} />
+
+        {/* Student-specific fields */}
+        {role === 'Student' && (
+          <>
+            <Label className={styles.formLabel}>Student ID</Label>
+            <Input value={editingUser.student_number || ''} onChange={(e, data) => setEditingUser({...editingUser, student_number: data.value})} />
+            <Label className={styles.formLabel}>Program</Label>
+            <Select value={editingUser.program_id || ''} onChange={(e, data) => setEditingUser({...editingUser, program_id: data.value})}>
+              <option value="">Select Program</option>
+              {programs.map(program => (
+                <option key={program.id} value={program.id}>{program.abbreviation} — {program.name}</option>
+              ))}
+            </Select>
+            <Label className={styles.formLabel}>Section</Label>
+            <Select value={editingUser.section_id || ''} onChange={(e, data) => setEditingUser({...editingUser, section_id: data.value})}>
+              <option value="">Select Section</option>
+              {sections.map(section => (
+                <option key={section.id} value={section.id}>{section.name}</option>
+              ))}
+            </Select>
+          </>
+        )}
+
+        {/* Professor/Admin-specific fields */}
+        {(role === 'Professor' || role === 'Admin') && (
+          <>
+            <Label className={styles.formLabel}>ID Number</Label>
+            <Input value={editingUser.id_number || ''} onChange={(e, data) => setEditingUser({...editingUser, id_number: data.value})} />
+          </>
+        )}
+      </>
+    );
+  };
+
+  // Helper to get display label for user's subtitle on cards
+  const getUserSubtitle = (user) => {
+    if (user.role === 'Student') {
+      return `Section: ${user.sections?.name || 'None'}`;
+    }
+    return `ID: ${user.id_number || 'N/A'}`;
+  };
+
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className={styles.topBar}>
-          <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')}>
-            Back to Admin
-          </Button>
-          <div className={styles.controls}>
-            <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)}>
-              Add User
-            </Button>
-            <Input 
-              contentBefore={<Search24Regular />} 
-              placeholder="Search users..." 
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-            <Menu>
-              <MenuTrigger disableButtonEnhancement>
-                <Button icon={<Filter24Regular />}>
-                  Filter: {filterRole}
-                </Button>
-              </MenuTrigger>
-              <MenuPopover>
-                <MenuList>
-                  <MenuItem onClick={() => setFilterRole('All')}>All</MenuItem>
-                  <MenuItem onClick={() => setFilterRole('Student')}>Student</MenuItem>
-                  <MenuItem onClick={() => setFilterRole('Professor')}>Professor</MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-            <Menu>
-              <MenuTrigger disableButtonEnhancement>
-                <Button icon={<ArrowSort24Regular />}>Sort: {sortOrder}</Button>
-              </MenuTrigger>
-              <MenuPopover>
-                <MenuList>
-                  <MenuItem onClick={() => setSortOrder('Ascending')}>Ascending</MenuItem>
-                  <MenuItem onClick={() => setSortOrder('Descending')}>Descending</MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-          </div>
+    <AdminShell>
+      {error && (
+        <div style={{ padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', marginBottom: '8px' }}>
+          <Text>Error: {error}</Text>
         </div>
-        <Text size={600} weight="bold">Manage Users</Text>
-        <Text>View and manage registered users and their roles.</Text>
+      )}
+
+      <div className={styles.cardHeader}>
+        <div className={styles.headerLeft}>
+          <Text size={600} weight="bold">Manage Users</Text>
+          <Text size={200} style={{ color: '#64748b' }}>View and manage registered users and their roles.</Text>
+        </div>
+        <div className={styles.controls}>
+          <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)}>
+            Add User
+          </Button>
+          <Input 
+            contentBefore={<Search24Regular />} 
+            placeholder="Search users..." 
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <Button icon={<Filter24Regular />}>
+                Filter: {filterRole}
+              </Button>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                <MenuItem onClick={() => setFilterRole('All')}>All</MenuItem>
+                <MenuItem onClick={() => setFilterRole('Student')}>Student</MenuItem>
+                <MenuItem onClick={() => setFilterRole('Professor')}>Professor</MenuItem>
+                <MenuItem onClick={() => setFilterRole('Admin')}>Admin</MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <Button icon={<ArrowSort24Regular />}>Sort: {sortOrder}</Button>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                <MenuItem onClick={() => setSortOrder('Ascending')}>Ascending</MenuItem>
+                <MenuItem onClick={() => setSortOrder('Descending')}>Descending</MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
+        </div>
       </div>
       
       <div className={styles.userList}>
@@ -327,9 +610,9 @@ export default function AdminUsers() {
               <div className={styles.userDetails}>
                 <Text weight="semibold">{user.first_name} {user.last_name}</Text>
                 <Text size={200}>{user.email}</Text>
-                <Text size={100} style={{ color: '#666' }}>Section: {user.sections?.name || 'None'}</Text>
+                <Text size={100} style={{ color: '#666' }}>{getUserSubtitle(user)}</Text>
               </div>
-              <Badge appearance="tint" color={user.role === 'Professor' ? 'danger' : 'brand'}>
+              <Badge appearance="tint" color={user.role === 'Professor' ? 'danger' : user.role === 'Admin' ? 'warning' : 'brand'}>
                 {user.role}
               </Badge>
             </div>
@@ -351,51 +634,74 @@ export default function AdminUsers() {
         ))}
       </div>
 
+      {/* View User Details Dialog */}
       <Dialog open={!!selectedUser} onOpenChange={(event, data) => {
         if (!data.open) setSelectedUser(null);
       }}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>User Details</DialogTitle>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#eef2ff' }}>
+                  <Search24Regular style={{ color: '#4f46e5', width: 20, height: 20 }} />
+                </div>
+                User Details
+              </div>
+            </DialogTitle>
             <DialogContent>
               {selectedUser && (
                 <div className={styles.detailsGrid}>
                   <div className={styles.detailItem}>
-                    <Text weight="semibold">First Name</Text>
-                    <Text>{selectedUser.first_name}</Text>
+                    <Text className={styles.detailLabel}>First Name</Text>
+                    <Text className={styles.detailValue}>{selectedUser.first_name}</Text>
                   </div>
                   <div className={styles.detailItem}>
-                    <Text weight="semibold">Last Name</Text>
-                    <Text>{selectedUser.last_name}</Text>
+                    <Text className={styles.detailLabel}>Last Name</Text>
+                    <Text className={styles.detailValue}>{selectedUser.last_name}</Text>
                   </div>
                   <div className={styles.detailItem}>
-                    <Text weight="semibold">Email</Text>
-                    <Text>{selectedUser.email}</Text>
+                    <Text className={styles.detailLabel}>Email</Text>
+                    <Text className={styles.detailValue}>{selectedUser.email}</Text>
                   </div>
                   <div className={styles.detailItem}>
-                    <Text weight="semibold">Role</Text>
-                    <Text>{selectedUser.role}</Text>
+                    <Text className={styles.detailLabel}>Role</Text>
+                    <Text className={styles.detailValue}>{selectedUser.role}</Text>
                   </div>
+
+                  {/* Student-specific details */}
+                  {selectedUser.role === 'Student' && (
+                    <>
+                      <div className={styles.detailItem}>
+                        <Text className={styles.detailLabel}>Student ID</Text>
+                        <Text className={styles.detailValue}>{selectedUser.student_number || 'N/A'}</Text>
+                      </div>
+                      <div className={styles.detailItem}>
+                        <Text className={styles.detailLabel}>Program</Text>
+                        <Text className={styles.detailValue}>{selectedUser.programs?.abbreviation || 'N/A'}</Text>
+                      </div>
+                      <div className={styles.detailItem}>
+                        <Text className={styles.detailLabel}>Section</Text>
+                        <Text className={styles.detailValue}>{selectedUser.sections?.name || 'None'}</Text>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Professor/Admin-specific details */}
+                  {(selectedUser.role === 'Professor' || selectedUser.role === 'Admin') && (
+                    <div className={styles.detailItem}>
+                      <Text className={styles.detailLabel}>ID Number</Text>
+                      <Text className={styles.detailValue}>{selectedUser.id_number || 'N/A'}</Text>
+                    </div>
+                  )}
+
                   <div className={styles.detailItem}>
-                    <Text weight="semibold">Student Number</Text>
-                    <Text>{selectedUser.student_number || 'N/A'}</Text>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <Text weight="semibold">Program</Text>
-                    <Text>{selectedUser.program || 'N/A'}</Text>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <Text weight="semibold">Section</Text>
-                    <Text>{selectedUser.sections?.name || 'None'}</Text>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <Text weight="semibold">Photo URL</Text>
-                    <Text>{selectedUser.photo_url || 'Not set'}</Text>
+                    <Text className={styles.detailLabel}>Photo URL</Text>
+                    <Text className={styles.detailValue}>{selectedUser.photo_url || 'Not set'}</Text>
                   </div>
                 </div>
               )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions className={styles.dialogActionsRow}>
               <Button appearance="secondary" onClick={() => setSelectedUser(null)}>Close</Button>
             </DialogActions>
           </DialogBody>
@@ -403,40 +709,36 @@ export default function AdminUsers() {
       </Dialog>
 
       {/* Add User Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={(event, data) => setIsAddDialogOpen(data.open)}>
-        <DialogSurface>
+      <Dialog open={isAddDialogOpen} onOpenChange={(event, data) => {
+        if (!data.open) {
+          setIsAddDialogOpen(false);
+          setError(null);
+        } else {
+          setIsAddDialogOpen(true);
+        }
+      }}>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Add New User</DialogTitle>
-            <DialogContent className={styles.header}>
-              <Label>First Name</Label>
-              <Input value={newUser.first_name} onChange={(e, data) => setNewUser({...newUser, first_name: data.value})} />
-              <Label>Last Name</Label>
-              <Input value={newUser.last_name} onChange={(e, data) => setNewUser({...newUser, last_name: data.value})} />
-              <Label>Email</Label>
-              <Input value={newUser.email} onChange={(e, data) => setNewUser({...newUser, email: data.value})} />
-              <Label>Role</Label>
-              <Select value={newUser.role} onChange={(e, data) => setNewUser({...newUser, role: data.value})}>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#eef2ff' }}>
+                  <Add24Regular style={{ color: '#4f46e5', width: 20, height: 20 }} />
+                </div>
+                Add New User
+              </div>
+            </DialogTitle>
+            <DialogContent className={styles.formContent}>
+              <Label className={styles.formLabel}>Role</Label>
+              <Select value={newUser.role} onChange={(e, data) => handleNewUserRoleChange(data.value)}>
                 <option value="Student">Student</option>
                 <option value="Professor">Professor</option>
                 <option value="Admin">Admin</option>
               </Select>
-              <Label>Student Number</Label>
-              <Input value={newUser.student_number} onChange={(e, data) => setNewUser({...newUser, student_number: data.value})} />
-              <Label>Program</Label>
-              <Input value={newUser.program} onChange={(e, data) => setNewUser({...newUser, program: data.value})} />
-              <Label>Section</Label>
-              <Select value={newUser.section_id} onChange={(e, data) => setNewUser({...newUser, section_id: data.value})}>
-                <option value="">None</option>
-                {sections.map(section => (
-                  <option key={section.id} value={section.id}>{section.name}</option>
-                ))}
-              </Select>
-              <Label>Password Hash (temporary)</Label>
-              <Input value={newUser.password_hash} onChange={(e, data) => setNewUser({...newUser, password_hash: data.value})} />
+              {renderAddFormFields()}
             </DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleAddUser}>Add</Button>
+            <DialogActions className={styles.dialogActionsRow}>
+              <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" onClick={handleAddUser} disabled={isLoading}>Add</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -446,37 +748,28 @@ export default function AdminUsers() {
       <Dialog open={!!editingUser} onOpenChange={(event, data) => {
         if (!data.open) setEditingUser(null);
       }}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogContent className={styles.header}>
-              <Label>First Name</Label>
-              <Input value={editingUser?.first_name || ''} onChange={(e, data) => setEditingUser({...editingUser, first_name: data.value})} />
-              <Label>Last Name</Label>
-              <Input value={editingUser?.last_name || ''} onChange={(e, data) => setEditingUser({...editingUser, last_name: data.value})} />
-              <Label>Email</Label>
-              <Input value={editingUser?.email || ''} onChange={(e, data) => setEditingUser({...editingUser, email: data.value})} />
-              <Label>Role</Label>
-              <Select value={editingUser?.role || 'Student'} onChange={(e, data) => setEditingUser({...editingUser, role: data.value})}>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#fef3c7' }}>
+                  <Edit24Regular style={{ color: '#d97706', width: 20, height: 20 }} />
+                </div>
+                Edit User
+              </div>
+            </DialogTitle>
+            <DialogContent className={styles.formContent}>
+              <Label className={styles.formLabel}>Role</Label>
+              <Select value={editingUser?.role || 'Student'} onChange={(e, data) => handleEditUserRoleChange(data.value)}>
                 <option value="Student">Student</option>
                 <option value="Professor">Professor</option>
                 <option value="Admin">Admin</option>
               </Select>
-              <Label>Student Number</Label>
-              <Input value={editingUser?.student_number || ''} onChange={(e, data) => setEditingUser({...editingUser, student_number: data.value})} />
-              <Label>Program</Label>
-              <Input value={editingUser?.program || ''} onChange={(e, data) => setEditingUser({...editingUser, program: data.value})} />
-              <Label>Section</Label>
-              <Select value={editingUser?.section_id || ''} onChange={(e, data) => setEditingUser({...editingUser, section_id: data.value})}>
-                <option value="">None</option>
-                {sections.map(section => (
-                  <option key={section.id} value={section.id}>{section.name}</option>
-                ))}
-              </Select>
+              {renderEditFormFields()}
             </DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" onClick={() => setEditingUser(null)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleSaveEdit}>Save</Button>
+            <DialogActions className={styles.dialogActionsRow}>
+              <Button appearance="secondary" onClick={() => setEditingUser(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" onClick={handleSaveEdit} disabled={isLoading}>Save</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
@@ -486,19 +779,28 @@ export default function AdminUsers() {
       <Dialog open={!!userToDelete} onOpenChange={(event, data) => {
         if (!data.open) setUserToDelete(null);
       }}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogTitle>
+              <div className={styles.dialogTitleRow}>
+                <div className={styles.dialogTitleIcon} style={{ backgroundColor: '#fef2f2' }}>
+                  <Delete24Regular style={{ color: '#ef4444', width: 20, height: 20 }} />
+                </div>
+                Confirm Deletion
+              </div>
+            </DialogTitle>
             <DialogContent>
-              Are you sure you want to delete {userToDelete?.first_name} {userToDelete?.last_name}? This action cannot be undone.
+              <div className={styles.deleteWarning}>
+                Are you sure you want to delete <Text weight="semibold">{userToDelete?.first_name} {userToDelete?.last_name}</Text>? This action cannot be undone.
+              </div>
             </DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" onClick={() => setUserToDelete(null)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleConfirmDelete}>Delete</Button>
+            <DialogActions className={styles.dialogActionsRow}>
+              <Button appearance="secondary" onClick={() => setUserToDelete(null)} disabled={isLoading}>Cancel</Button>
+              <Button appearance="primary" style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }} onClick={handleConfirmDelete} disabled={isLoading}>Delete</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

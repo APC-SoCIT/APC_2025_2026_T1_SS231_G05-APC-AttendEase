@@ -8,57 +8,89 @@ import {
   Input,
   Badge,
   Avatar,
-  Dialog,
-  DialogSurface,
-  DialogBody,
-  DialogTitle,
-  DialogActions,
-  DialogContent,
-  Label
+  Select,
+  Spinner,
 } from '@fluentui/react-components';
 import {
-  ArrowLeft24Regular,
   Search24Regular,
-  CheckmarkCircle24Regular,
-  Timer24Regular,
+  ArrowClockwise24Regular,
   Person24Regular,
-  Add24Regular
+  DocumentText24Regular,
+  ArrowRight24Regular,
+  Edit24Regular,
+  Delete24Regular,
+  Add24Regular,
+  BookOpen24Regular,
+  ChevronLeft24Regular,
+  ChevronRight24Regular,
 } from '@fluentui/react-icons';
-import { useNavigate } from 'react-router-dom';
+import { fetchLogs, fetchLogStats } from '../../services/supabase/logService.js';
+import AdminShell from './AdminShell';
+
+/* ------------------------------------------------------------------ */
+/*  Action → display helpers                                          */
+/* ------------------------------------------------------------------ */
+const ACTION_META = {
+  USER_LOGIN:        { label: 'Login',           color: 'informative', icon: <ArrowRight24Regular /> },
+  USER_CREATED:      { label: 'User Created',    color: 'success',     icon: <Add24Regular /> },
+  USER_UPDATED:      { label: 'User Updated',    color: 'warning',     icon: <Edit24Regular /> },
+  USER_DELETED:      { label: 'User Deleted',    color: 'danger',      icon: <Delete24Regular /> },
+  COURSE_CREATED:    { label: 'Course Created',  color: 'success',     icon: <BookOpen24Regular /> },
+  COURSE_UPDATED:    { label: 'Course Updated',  color: 'warning',     icon: <BookOpen24Regular /> },
+  COURSE_DELETED:    { label: 'Course Deleted',  color: 'danger',      icon: <BookOpen24Regular /> },
+  SECTION_CREATED:   { label: 'Section Created', color: 'success',     icon: <Add24Regular /> },
+  SECTION_UPDATED:   { label: 'Section Updated', color: 'warning',     icon: <Edit24Regular /> },
+  SECTION_DELETED:   { label: 'Section Deleted', color: 'danger',      icon: <Delete24Regular /> },
+  PROGRAM_CREATED:   { label: 'Program Created', color: 'success',     icon: <Add24Regular /> },
+  PROGRAM_UPDATED:   { label: 'Program Updated', color: 'warning',     icon: <Edit24Regular /> },
+  PROGRAM_DELETED:   { label: 'Program Deleted', color: 'danger',      icon: <Delete24Regular /> },
+};
+
+const getMeta = (action) => ACTION_META[action] || { label: action, color: 'subtle', icon: <DocumentText24Regular /> };
+
+const formatDate = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const performerName = (performer) => {
+  if (!performer) return 'System';
+  return `${performer.first_name || ''} ${performer.last_name || ''}`.trim() || performer.email || 'Unknown';
+};
+
+/* ------------------------------------------------------------------ */
+/*  Styles                                                            */
+/* ------------------------------------------------------------------ */
 
 const useStyles = makeStyles({
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
-    ...shorthands.padding('40px'),
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('20px'),
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('10px'),
-  },
-  topBar: {
+  cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%'
+    flexWrap: 'wrap',
+    ...shorthands.gap('12px'),
+  },
+  headerLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('4px'),
   },
   controls: {
     display: 'flex',
     ...shorthands.gap('8px'),
-    alignItems: 'center'
+    alignItems: 'center',
   },
   filterBar: {
     display: 'flex',
     ...shorthands.gap('10px'),
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    ...shorthands.gap('20px'),
+    ...shorthands.gap('16px'),
   },
   statCard: {
     display: 'flex',
@@ -66,7 +98,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     ...shorthands.padding('24px'),
-    backgroundColor: 'white',
+    backgroundColor: '#f8fafc',
+    borderRadius: '10px',
+    ...shorthands.border('1px', 'solid', '#e8e8e8'),
     ...shorthands.gap('8px'),
   },
   statValue: {
@@ -77,7 +111,7 @@ const useStyles = makeStyles({
   statLabel: {
     fontSize: '14px',
     color: '#616161',
-    fontWeight: '600'
+    fontWeight: '600',
   },
   logList: {
     display: 'flex',
@@ -89,8 +123,11 @@ const useStyles = makeStyles({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    ...shorthands.padding('12px'),
-    backgroundColor: 'white',
+    ...shorthands.padding('14px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '10px',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    ...shorthands.border('1px', 'solid', '#e8e8e8'),
   },
   logInfo: {
     display: 'flex',
@@ -102,183 +139,186 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   timestamp: {
-    color: '#666',
+    color: '#94a3b8',
     minWidth: '150px',
-    textAlign: 'right'
-  }
+    textAlign: 'right',
+  },
+  pagination: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shorthands.gap('12px'),
+  },
 });
 
-const MOCK_LOGS = [
-  { id: 1, issue: 'Camera Feed Latency', professor: 'Christian Luis Esguerra', resolvedTime: '2023-10-27 09:30:00', downtime: '2m', status: 'Resolved' },
-  { id: 2, issue: 'Login Timeout', professor: 'Jane Doe', resolvedTime: '2023-10-26 14:45:00', downtime: '5m', status: 'Resolved' },
-  { id: 3, issue: 'Facial Recognition Service Restart', professor: 'System', resolvedTime: '2023-10-26 10:15:00', downtime: '15s', status: 'Resolved' },
-  { id: 4, issue: 'Database Connection Retry', professor: 'John Smith', resolvedTime: '2023-10-25 11:30:00', downtime: '1m', status: 'Resolved' },
-  { id: 5, issue: 'API Gateway 502', professor: 'System', resolvedTime: '2023-10-25 08:00:00', downtime: '45s', status: 'Resolved' },
-  { id: 6, issue: 'Slow Dashboard Load', professor: 'Moises Sy', resolvedTime: '-', downtime: 'Ongoing', status: 'Unresolved' },
-  { id: 7, issue: 'Export CSV Failure', professor: 'Suzanne Marie Rosco', resolvedTime: '-', downtime: 'Ongoing', status: 'Unresolved' },
-];
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
+
+const PAGE_SIZE = 20;
 
 export default function AdminLogs() {
   const styles = useStyles();
-  const navigate = useNavigate();
+
+  // Data
+  const [logs, setLogs] = React.useState([]);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [stats, setStats] = React.useState({ totalLogs: 0, loginsToday: 0, userChangesToday: 0 });
+
+  // Filters
   const [searchText, setSearchText] = React.useState('');
-  const [logs, setLogs] = React.useState(MOCK_LOGS);
-  const [viewMode, setViewMode] = React.useState('unresolved');
-  const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
-  const [newLog, setNewLog] = React.useState({
-    issue: '',
-    professor: '',
-    downtime: '',
-    status: 'Resolved'
-  });
+  const [actionFilter, setActionFilter] = React.useState('');
+  const [page, setPage] = React.useState(0);
 
-  const handleAddLog = () => {
-    const id = logs.length > 0 ? Math.max(...logs.map(l => l.id)) + 1 : 1;
-    const resolvedTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const logToAdd = { ...newLog, id, resolvedTime };
-    setLogs([logToAdd, ...logs]);
-    setIsAddDialogOpen(false);
-    setNewLog({ issue: '', professor: '', downtime: '', status: 'Resolved' });
+  // UI
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  /* ---------- loaders ---------- */
+  const loadLogs = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    const { success, data, count, error: fetchErr } = await fetchLogs({
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      action: actionFilter,
+      search: searchText,
+    });
+    if (success) {
+      setLogs(data);
+      setTotalCount(count ?? 0);
+    } else {
+      setError(fetchErr);
+    }
+    setIsLoading(false);
+  }, [page, actionFilter, searchText]);
+
+  const loadStats = async () => {
+    const { success, data } = await fetchLogStats();
+    if (success) setStats(data);
   };
 
-  const handleResolveLog = (id) => {
-    const resolvedTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    setLogs(logs.map(log => 
-      log.id === id 
-        ? { ...log, status: 'Resolved', resolvedTime, downtime: 'Recovered' } 
-        : log
-    ));
+  React.useEffect(() => { loadLogs(); }, [loadLogs]);
+  React.useEffect(() => { loadStats(); }, []);
+
+  /* ---------- handlers ---------- */
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') { setPage(0); loadLogs(); }
   };
 
-  // Calculate dynamic stats
-  const totalErrors = logs.filter(l => l.status === 'Resolved').length;
-  
-  const uptime = React.useMemo(() => {
-    // Equation: (Total Time Since Deployment - Total Downtime) / Total Time Since Deployment * 100
-    // const deploymentDate = new Date('2023-01-01').getTime();
-    // const totalTime = Date.now() - deploymentDate;
-    // const totalDowntime = logs.reduce((acc, log) => acc + parseDowntime(log.downtime), 0);
-    // return ((totalTime - totalDowntime) / totalTime * 100).toFixed(2) + '%';
-    return "N/A (Not Deployed)";
-  }, [logs]);
+  const handleActionChange = (_e, data) => {
+    setActionFilter(data.value);
+    setPage(0);
+  };
 
-  const activeSessions = React.useMemo(() => {
-    // Equation: Count of unique users with active sessions (last activity < 5 mins)
-    // const activeCount = sessions.filter(s => (Date.now() - s.lastActivity) < 300000).length;
-    // return activeCount;
-    return "N/A (Not Deployed)";
-  }, []);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
+  /* ---------- render ---------- */
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className={styles.topBar}>
-          <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')}>
-            Back to Admin
-          </Button>
-          <div className={styles.controls}>
-            <Button icon={<Add24Regular />} appearance="primary" onClick={() => setIsAddDialogOpen(true)}>
-              Create Log
-            </Button>
-            <Input 
-              contentBefore={<Search24Regular />} 
-              placeholder="Search resolved errors..." 
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </div>
+    <AdminShell>
+      {error && (
+        <div style={{ padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626' }}>
+          <Text>Error: {error}</Text>
         </div>
-        <Text size={600} weight="bold">System Logs</Text>
-        <Text>Review attendance logs and system activity.</Text>
+      )}
+
+      {/* Header */}
+      <div className={styles.cardHeader}>
+        <div className={styles.headerLeft}>
+          <Text size={600} weight="bold">Activity Logs</Text>
+          <Text size={200} style={{ color: '#64748b' }}>View audit trail of all admin and login activity.</Text>
+        </div>
+        <div className={styles.controls}>
+          <Button icon={<ArrowClockwise24Regular />} onClick={() => { loadLogs(); loadStats(); }} disabled={isLoading}>
+            Refresh
+          </Button>
+          <Input
+            contentBefore={<Search24Regular />}
+            placeholder="Search logs..."
+            value={searchText}
+            onChange={(_e, d) => setSearchText(d.value)}
+            onKeyDown={handleSearchKeyDown}
+          />
+        </div>
       </div>
 
+      {/* Stats */}
       <div className={styles.statsGrid}>
         <Card className={styles.statCard}>
-          <Timer24Regular style={{ color: '#0f6cbd', width: 32, height: 32 }} />
-          <Text className={styles.statValue}>{uptime}</Text>
-          <Text className={styles.statLabel}>Total Uptime</Text>
+          <DocumentText24Regular style={{ color: '#0f6cbd', width: 32, height: 32 }} />
+          <Text className={styles.statValue}>{stats.totalLogs}</Text>
+          <Text className={styles.statLabel}>Total Logs</Text>
         </Card>
         <Card className={styles.statCard}>
-          <CheckmarkCircle24Regular style={{ color: '#107c10', width: 32, height: 32 }} />
-          <Text className={styles.statValue}>{totalErrors}</Text>
-          <Text className={styles.statLabel}>Errors Resolved</Text>
+          <ArrowRight24Regular style={{ color: '#107c10', width: 32, height: 32 }} />
+          <Text className={styles.statValue}>{stats.loginsToday}</Text>
+          <Text className={styles.statLabel}>Logins Today</Text>
         </Card>
         <Card className={styles.statCard}>
           <Person24Regular style={{ color: '#d13438', width: 32, height: 32 }} />
-          <Text className={styles.statValue}>{activeSessions}</Text>
-          <Text className={styles.statLabel}>Active Sessions</Text>
+          <Text className={styles.statValue}>{stats.userChangesToday}</Text>
+          <Text className={styles.statLabel}>User Changes Today</Text>
         </Card>
       </div>
 
+      {/* Filter bar */}
       <div className={styles.filterBar}>
-        <Button appearance={viewMode === 'unresolved' ? 'primary' : 'subtle'} onClick={() => setViewMode('unresolved')}>
-          Errors List
-        </Button>
-        <Button appearance={viewMode === 'resolved' ? 'primary' : 'subtle'} onClick={() => setViewMode('resolved')}>
-          Resolved Errors
-        </Button>
+        <Select value={actionFilter} onChange={handleActionChange} style={{ minWidth: '180px' }}>
+          <option value="">All Actions</option>
+          {Object.entries(ACTION_META).map(([key, { label }]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </Select>
       </div>
 
-      <Text size={400} weight="semibold">{viewMode === 'resolved' ? 'Resolved Errors History' : 'Pending Errors List'}</Text>
+      {/* Loading spinner */}
+      {isLoading && <Spinner label="Loading logs..." />}
 
+      {/* Log list */}
       <div className={styles.logList}>
-        {logs
-          .filter(log => {
-            if (log.status !== (viewMode === 'resolved' ? 'Resolved' : 'Unresolved')) return false;
-            const searchRegex = new RegExp(searchText, 'i');
-            return searchRegex.test(log.issue) || searchRegex.test(log.professor);
-          })
-          .map(log => (
+        {!isLoading && logs.length === 0 && (
+          <Card className={styles.logCard}>
+            <Text>No logs found.</Text>
+          </Card>
+        )}
+
+        {logs.map((log) => {
+          const meta = getMeta(log.action);
+          const name = performerName(log.performer);
+          return (
             <Card key={log.id} className={styles.logCard}>
               <div className={styles.logInfo}>
-                <Avatar name={log.professor} size={32} />
+                <Avatar name={name} icon={meta.icon} size={32} color="colorful" />
                 <div className={styles.logDetails}>
-                  <Text weight="semibold">{log.issue}</Text>
-                  <Text size={200}>Affected: {log.professor}</Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Badge appearance="tint" color={meta.color}>{meta.label}</Badge>
+                    <Text weight="semibold">{log.description}</Text>
+                  </div>
+                  <Text size={200}>By: {name}{log.performer?.role ? ` (${log.performer.role})` : ''}</Text>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                  <Text size={200} weight="semibold">Downtime: {log.downtime}</Text>
-                  <Text size={200} className={styles.timestamp}>{log.resolvedTime}</Text>
-                </div>
-                {log.status === 'Unresolved' ? (
-                  <Button 
-                    appearance="primary" 
-                    size="small"
-                    icon={<CheckmarkCircle24Regular />}
-                    onClick={() => handleResolveLog(log.id)}
-                  >
-                    Resolve
-                  </Button>
-                ) : (
-                  <Badge appearance="tint" color={log.status === 'Resolved' ? 'success' : 'danger'}>{log.status}</Badge>
-                )}
-              </div>
+              <Text size={200} className={styles.timestamp}>{formatDate(log.created_at)}</Text>
             </Card>
-          ))}
+          );
+        })}
       </div>
 
-      {/* Add Log Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={(event, data) => setIsAddDialogOpen(data.open)}>
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle>Create New Log</DialogTitle>
-            <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <Label>Issue</Label>
-              <Input value={newLog.issue} onChange={(e, data) => setNewLog({...newLog, issue: data.value})} />
-              <Label>Professor</Label>
-              <Input value={newLog.professor} onChange={(e, data) => setNewLog({...newLog, professor: data.value})} />
-              <Label>Downtime</Label>
-              <Input value={newLog.downtime} onChange={(e, data) => setNewLog({...newLog, downtime: data.value})} placeholder="e.g. 5m, 30s" />
-            </DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button appearance="primary" onClick={handleAddLog}>Create</Button>
-            </DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className={styles.pagination}>
+          <Button
+            icon={<ChevronLeft24Regular />}
+            disabled={page === 0 || isLoading}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          />
+          <Text>Page {page + 1} of {totalPages}</Text>
+          <Button
+            icon={<ChevronRight24Regular />}
+            disabled={page >= totalPages - 1 || isLoading}
+            onClick={() => setPage((p) => p + 1)}
+          />
+        </div>
+      )}
+    </AdminShell>
   );
 }

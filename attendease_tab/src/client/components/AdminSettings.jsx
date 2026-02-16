@@ -32,27 +32,20 @@ import {
     Wrench24Regular,
     Info24Regular
 } from '@fluentui/react-icons';
-import { useNavigate } from 'react-router-dom';
+import AdminShell from './AdminShell';
 
 const useStyles = makeStyles({
-    container: {
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5',
-        ...shorthands.padding('40px'),
-        display: 'flex',
-        flexDirection: 'column',
-        ...shorthands.gap('20px'),
-    },
-    header: {
-        display: 'flex',
-        flexDirection: 'column',
-        ...shorthands.gap('10px'),
-    },
-    topBar: {
+    cardHeader: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        width: '100%'
+        flexWrap: 'wrap',
+        ...shorthands.gap('12px'),
+    },
+    headerLeft: {
+        display: 'flex',
+        flexDirection: 'column',
+        ...shorthands.gap('4px'),
     },
     tabsContainer: {
         backgroundColor: 'white',
@@ -118,7 +111,6 @@ const useStyles = makeStyles({
 
 export default function AdminSettings() {
     const styles = useStyles();
-    const navigate = useNavigate();
     const [selectedTab, setSelectedTab] = useState('integrations');
     const [hasChanges, setHasChanges] = useState(false);
 
@@ -999,15 +991,12 @@ export default function AdminSettings() {
     );
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header}>
-                <div className={styles.topBar}>
-                    <Button icon={<ArrowLeft24Regular />} onClick={() => navigate('/admin')}>
-                        Back to Admin
-                    </Button>
+        <AdminShell>
+            <div className={styles.cardHeader}>
+                <div className={styles.headerLeft}>
+                    <Text size={600} weight="bold">System Settings</Text>
+                    <Text size={200} style={{ color: '#64748b' }}>Configure integration settings and environment toggles.</Text>
                 </div>
-                <Text size={600} weight="bold">System Settings</Text>
-                <Text>Configure integration settings and environment toggles.</Text>
             </div>
 
             <Card className={styles.tabsContainer}>
@@ -1048,6 +1037,6 @@ export default function AdminSettings() {
                     </>
                 )}
             </Card>
-        </div>
+        </AdminShell>
     );
 }

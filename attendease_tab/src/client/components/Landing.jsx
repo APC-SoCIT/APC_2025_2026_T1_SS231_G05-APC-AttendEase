@@ -19,7 +19,8 @@ import {
   Tooltip,
 } from '@fluentui/react-components';
 
-import backgroundUrl from '../../assets/bg_img.jpg'; 
+import backgroundUrl from '../../assets/bg_img.jpg';
+import { setAdminSession } from '../utils/auth'; 
 
 const useStyles = makeStyles({
   container: {
@@ -281,47 +282,52 @@ function Landing() {
     setShowLogin(true);
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!acceptedTerms) {
       setMessageBar({ visible: true, message: 'Please accept the terms of service.' });
       return;
     }
 
-    // Test credential validation
-    const validCredentials = [
-      { email: 'test@student.apc.edu.ph', password: 'test123', route: '/student' },
-      { email: 'test@apc.edu.ph', password: 'test123', route: '/professor' }
-    ];
-
-    // Check if credentials match
-    const matchedCredential = validCredentials.find(
-      cred => cred.email === email && cred.password === password
-    );
-
-    if (matchedCredential) {
-      setMessageBar({ visible: false, message: '' });
-      localStorage.setItem('userEmail', email.trim());
-      navigate(matchedCredential.route);
+    if (!email.trim() || !password.trim()) {
+      setMessageBar({ visible: true, message: 'Please enter your email and password.' });
       return;
     }
 
-    // Check email domain and password for general pattern matching
-    if (password === 'test123') {
-      if (email.trim().endsWith('@student.apc.edu.ph')) {
-        setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email.trim());
-        navigate('/student');
-        return;
-      } else if (email.trim().endsWith('@apc.edu.ph')) {
-        setMessageBar({ visible: false, message: '' });
-        localStorage.setItem('userEmail', email.trim());
-        navigate('/professor');
+    setMessageBar({ visible: false, message: '' });
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.status !== 'success') {
+        setMessageBar({ visible: true, message: data.message || 'Invalid email or password.' });
         return;
       }
-    }
 
-    // Invalid credentials
-    setMessageBar({ visible: true, message: 'Invalid email or password.' });
+      // Store email for downstream pages
+      localStorage.setItem('userEmail', data.user.email);
+
+      // Route based on role from database
+      const role = data.user.role;
+      if (role === 'Student') {
+        navigate('/student');
+      } else if (role === 'Professor') {
+        navigate('/professor');
+      } else if (role === 'Admin') {
+        setAdminSession(true);
+        navigate('/admin');
+      } else {
+        setMessageBar({ visible: true, message: 'Unknown role. Please contact an administrator.' });
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setMessageBar({ visible: true, message: 'Unable to connect to server. Please try again.' });
+    }
   };
 
   return (

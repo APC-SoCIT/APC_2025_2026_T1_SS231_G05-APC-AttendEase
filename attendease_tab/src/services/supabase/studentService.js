@@ -18,6 +18,10 @@ export async function getStudentByEmail(email) {
         *,
         sections (
           name
+        ),
+        programs (
+          name,
+          abbreviation
         )
       `)
       .eq('email', email)
@@ -34,6 +38,10 @@ export async function getStudentByEmail(email) {
     // Add section name to the root level for easier access
     if (data && data.sections) {
       data.section = data.sections.name;
+    }
+    // Add program abbreviation to root level
+    if (data && data.programs) {
+      data.program = data.programs.abbreviation;
     }
     
     return { success: true, student: data };
@@ -55,6 +63,10 @@ export async function getStudentById(id) {
         *,
         sections (
           name
+        ),
+        programs (
+          name,
+          abbreviation
         )
       `)
       .eq('user_id', id)
@@ -65,6 +77,10 @@ export async function getStudentById(id) {
     // Add section name to the root level for easier access
     if (data && data.sections) {
       data.section = data.sections.name;
+    }
+    // Add program abbreviation to root level
+    if (data && data.programs) {
+      data.program = data.programs.abbreviation;
     }
     
     return { success: true, student: data };
@@ -93,8 +109,8 @@ export async function createStudent(studentData) {
         last_name: studentData.lastName,
         email: studentData.email,
         student_number: studentData.studentNumber,
-        section: studentData.section,
-        program: studentData.program, // 'course' in frontend, 'program' in DB
+        section_id: studentData.sectionId || studentData.section_id || null,
+        program_id: studentData.programId || studentData.program_id || null,
         role: 'Student',
         photo_url: studentData.photoUrl || null
       })
@@ -123,9 +139,8 @@ export async function updateStudent(id, updates) {
     if (updates.firstName) dbUpdates.first_name = updates.firstName;
     if (updates.lastName) dbUpdates.last_name = updates.lastName;
     if (updates.studentNumber) dbUpdates.student_number = updates.studentNumber;
-    if (updates.section) dbUpdates.section = updates.section;
-    if (updates.program) dbUpdates.program = updates.program; // course -> program
-    if (updates.course) dbUpdates.program = updates.course;   // handle both
+    if (updates.sectionId || updates.section_id) dbUpdates.section_id = updates.sectionId || updates.section_id;
+    if (updates.programId || updates.program_id) dbUpdates.program_id = updates.programId || updates.program_id;
     if (updates.photoUrl) dbUpdates.photo_url = updates.photoUrl;
     if (updates.email) dbUpdates.email = updates.email;
 
