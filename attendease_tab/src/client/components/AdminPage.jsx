@@ -53,6 +53,7 @@ const useStyles = makeStyles({
     fontWeight: '800',
     color: '#244670',
     cursor: 'default',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '@media (max-width: 768px)': {
       fontSize: '24px',
     },
@@ -115,6 +116,7 @@ const useStyles = makeStyles({
     fontSize: '18px',
     fontWeight: '600',
     color: '#244670',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
   closeButton: {
     width: '32px',
@@ -147,12 +149,15 @@ const useStyles = makeStyles({
     borderRadius: '4px',
     textAlign: 'left',
     width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    ...shorthands.gap('12px'),
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '&:hover': {
       backgroundColor: '#f3f2f1',
     },
+  },
+  menuItemActive: {
+    backgroundColor: '#e8f4f8',
+    color: '#244670',
+    fontWeight: '600',
   },
   menuDivider: {
     ...shorthands.margin('10px', '0'),
@@ -334,7 +339,7 @@ function AdminPage() {
     setAdminSession(false);
     localStorage.removeItem('adminSession');
     localStorage.removeItem('userEmail');
-    navigate('/');
+    window.location.href = '/';
   };
 
   /* ---- Render helpers ---- */
@@ -360,7 +365,7 @@ function AdminPage() {
         <div className={styles.menuBackdrop} onClick={() => setIsMenuOpen(false)} />
         <div className={styles.menuPanel}>
           <div className={styles.menuHeader}>
-            <Text className={styles.menuTitle}>Admin Menu</Text>
+            <Text className={styles.menuTitle}>Menu</Text>
             <button className={styles.closeButton} onClick={() => setIsMenuOpen(false)} aria-label="Close">
               <Dismiss24Regular />
             </button>
@@ -372,12 +377,11 @@ function AdminPage() {
                 className={styles.menuItem}
                 onClick={() => { setIsMenuOpen(false); navigate(action.path); }}
               >
-                {React.cloneElement(action.icon, { style: { color: action.color, flexShrink: 0 } })}
                 {action.title}
               </button>
             ))}
             <div className={styles.menuDivider} />
-            <button className={styles.menuItem} onClick={handleLogout} style={{ color: '#dc2626' }}>
+            <button className={styles.menuItem} onClick={handleLogout}>
               Logout
             </button>
           </div>

@@ -70,13 +70,17 @@ const DEFAULT_COLORS = [
 function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'create' }) {
     const styles = useStyles();
 
+    const [courses, setCourses] = useState([]);
+    const [sections, setSections] = useState([]);
+
     const [formData, setFormData] = useState({
         name: '',
+        course: '',
+        section: '',
         room: '',
         days: [],
         startTime: '',
         endTime: '',
-        description: '',
         color: DEFAULT_COLORS[0],
         isActive: true
     });
@@ -87,13 +91,18 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
     // Initialize form with data when editing
     useEffect(() => {
         if (initialData && mode === 'edit') {
+            // Normalize days to remove any stray asterisks
+            const normalizedDays = (initialData.days || []).map(d => String(d).replace(/\*/g, '').trim());
             setFormData({
                 name: initialData.name || '',
+                course: initialData.course || '',
+                course_id: initialData.course_id || initialData.courseId || null,
+                section: initialData.section || '',
+                section_id: initialData.section_id || initialData.sectionId || null,
                 room: initialData.room || '',
-                days: initialData.days || [],
+                days: normalizedDays,
                 startTime: initialData.startTime || '',
                 endTime: initialData.endTime || '',
-                description: initialData.description || '',
                 color: initialData.color || DEFAULT_COLORS[0],
                 isActive: initialData.isActive !== undefined ? initialData.isActive : true
             });
@@ -101,17 +110,37 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
             // Reset form when creating new
             setFormData({
                 name: '',
+                course: '',
+                section: '',
                 room: '',
                 days: [],
                 startTime: '',
                 endTime: '',
-                description: '',
                 color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
                 isActive: true
             });
         }
         setErrors({});
     }, [initialData, mode, open]);
+
+    // Load reference data (courses & sections)
+    useEffect(() => {
+        let mounted = true;
+        const loadRefs = async () => {
+            try {
+                const { fetchCourses, fetchSections } = await import('../../../services/supabase/referenceData');
+                const [coursesRes, sectionsRes] = await Promise.all([fetchCourses(), fetchSections()]);
+                if (!mounted) return;
+                setCourses(coursesRes.success ? coursesRes.data : []);
+                setSections(sectionsRes.success ? sectionsRes.data : []);
+            } catch (err) {
+                console.error('Error loading reference data:', err);
+            }
+        };
+
+        if (open) loadRefs();
+        return () => { mounted = false; };
+    }, [open]);
 
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -174,7 +203,9 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
         setIsSubmitting(true);
 
         try {
-            await onSave(formData);
+                // Sanitize days before saving (remove any asterisks/trailing whitespace)
+                const payload = { ...formData, days: (formData.days || []).map(d => String(d).replace(/\*/g, '').trim()) };
+                await onSave(payload);
             handleClose();
         } catch (error) {
             setErrors({ submit: error.message || 'Failed to save schedule' });
@@ -186,11 +217,14 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
     const handleClose = () => {
         setFormData({
             name: '',
+            course: '',
+            course_id: null,
+            section: '',
+            section_id: null,
             room: '',
             days: [],
             startTime: '',
             endTime: '',
-            description: '',
             color: DEFAULT_COLORS[0],
             isActive: true
         });
@@ -225,9 +259,48 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
                             <Input
                                 value={formData.name}
                                 onChange={(e) => handleChange('name', e.target.value)}
-                                placeholder="e.g., Machine Learning"
+                                placeholder="e.g., Modeling and Simulation"
                             />
                         </Field>
+
+                        {/* Course & Section (populated from Admin reference data) */}
+                        <div className={styles.formRow}>
+                            <Field label="Course" className={styles.formField}>
+                                <select
+                                    value={formData.course_id || ''}
+                                    onChange={(e) => {
+                                        const id = e.target.value || '';
+                                        const selected = courses.find(c => c.id === id);
+                                        handleChange('course_id', id || null);
+                                        handleChange('course', selected ? selected.course_code : '');
+                                    }}
+                                    style={{ width: '100%', padding: '8px', borderRadius: '4px' }}
+                                >
+                                    <option value="">-- Select Course --</option>
+                                    {courses.map(c => (
+                                        <option key={c.id} value={c.id}>{c.course_code} {c.description ? `- ${c.description}` : ''}</option>
+                                    ))}
+                                </select>
+                            </Field>
+
+                            <Field label="Section" className={styles.formField}>
+                                <select
+                                    value={formData.section_id || ''}
+                                    onChange={(e) => {
+                                        const id = e.target.value || '';
+                                        const selected = sections.find(s => s.id === id);
+                                        handleChange('section_id', id || null);
+                                        handleChange('section', selected ? selected.name : '');
+                                    }}
+                                    style={{ width: '100%', padding: '8px', borderRadius: '4px' }}
+                                >
+                                    <option value="">-- Select Section --</option>
+                                    {sections.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </div>
 
                         {/* Room */}
                         <Field
@@ -245,8 +318,7 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
 
                         {/* Days of Week */}
                         <Field
-                            label="Days"
-                            required
+                            label={<span>Days <span style={{ color: '#d32f2f' }}>*</span></span>}
                             validationMessage={errors.days}
                             validationState={errors.days ? 'error' : undefined}
                         >
@@ -254,7 +326,7 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
                                 {DAYS_OF_WEEK.map(day => (
                                     <Checkbox
                                         key={day}
-                                        label={day}
+                                        label={String(day).replace(/\*/g, '').trim()}
                                         checked={formData.days.includes(day)}
                                         onChange={() => handleDayToggle(day)}
                                         className={styles.dayCheckbox}
@@ -310,15 +382,7 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
                             </Field>
                         </div>
 
-                        {/* Description */}
-                        <Field label="Description (Optional)">
-                            <Textarea
-                                value={formData.description}
-                                onChange={(e) => handleChange('description', e.target.value)}
-                                placeholder="Brief description of the class"
-                                rows={3}
-                            />
-                        </Field>
+                        {/* Description field removed per UX request */}
 
                         {/* Color */}
                         <Field label="Color">
@@ -352,7 +416,7 @@ function ScheduleModal({ open, onClose, onSave, initialData = null, mode = 'crea
 
                         {/* Active Status */}
                         <Checkbox
-                            label="Active (visible in schedule)"
+                            label="Active"
                             checked={formData.isActive}
                             onChange={(e, data) => handleChange('isActive', data.checked)}
                         />
