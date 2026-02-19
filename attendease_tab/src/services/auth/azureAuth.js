@@ -1,106 +1,84 @@
 /**
- * Azure AD Authentication Service
- * 
- * TODO: This is a PLACEHOLDER for future Azure AD SSO integration
- * 
- * When implementing:
- * 1. Install: npm install @azure/msal-node (already installed)
- * 2. Configure MSAL client with azureConfig
- * 3. Implement OAuth 2.0 authorization code flow
- * 4. Handle token acquisition and refresh
- * 5. Integrate with Microsoft Teams SDK for seamless SSO
+ * Azure AD Authentication Service — Teams SDK SSO + OBO Flow
+ *
+ * This module provides the On-Behalf-Of (OBO) token exchange that enables
+ * seamless authentication when AttendEase runs inside Teams:
+ *
+ *   1. Teams JS SDK calls getAuthToken() → returns a Teams-scoped JWT
+ *   2. Frontend sends that JWT to our backend /api/auth/teams-sso endpoint
+ *   3. Backend uses MSAL's acquireTokenOnBehalfOf() to exchange it for a
+ *      Graph API access token
+ *   4. The Graph token is returned to the frontend, which then uses it
+ *      exactly like a Graph Explorer token (same delegated proxy endpoints)
+ *
+ * PREREQUISITES:
+ *   - AAD_APP_CLIENT_ID, AAD_APP_CLIENT_SECRET, AAD_APP_TENANT_ID env vars set
+ *   - The AAD app registration has:
+ *       · api://[domain]/[clientId] as an Application ID URI
+ *       · "access_as_user" scope exposed
+ *       · Graph API permissions consented by admin: User.Read, OnlineMeetings.Read,
+ *         OnlineMeetingArtifact.Read.All
+ *
+ * STATUS: Scaffolded — will work once the AAD app registration is properly configured.
  */
 
 import { azureConfig, isAzureConfigured } from '../../config/azure.config.js';
 
 /**
- * Initialize Azure AD authentication
- * TODO: Implement MSAL configuration
+ * Exchange a Teams SSO token for a Graph API access token via OBO flow.
+ * This runs on the backend (Express).
+ *
+ * @param {string} teamsToken - The JWT from microsoftTeams.authentication.getAuthToken()
+ * @returns {Promise<{success: boolean, graphToken?: string, error?: string}>}
  */
-export async function initializeAzureAuth() {
+export async function exchangeTeamsTokenForGraph(teamsToken) {
   if (!isAzureConfigured()) {
-    console.warn('⚠️ Azure AD not configured - authentication disabled');
-    return null;
+    return { success: false, error: 'Azure AD not configured. Set AAD_APP_CLIENT_ID, AAD_APP_CLIENT_SECRET, AAD_APP_TENANT_ID.' };
   }
-  
-  // TODO: Initialize MSAL client
-  // const msalConfig = {
-  //   auth: {
-  //     clientId: azureConfig.clientId,
-  //     authority: azureConfig.authority,
-  //     clientSecret: azureConfig.clientSecret,
-  //   }
-  // };
-  // const msalClient = new ConfidentialClientApplication(msalConfig);
-  
-  console.log('✅ Azure AD authentication initialized (PLACEHOLDER)');
-  return true;
-}
 
-/**
- * Authenticate user with Azure AD SSO
- * TODO: Implement OAuth flow
- */
-export async function authenticateWithAzureAD(req, res) {
-  if (!isAzureConfigured()) {
-    console.warn('⚠️ Azure AD not configured - using mock authentication');
+  try {
+    // Dynamic import to avoid breaking the app if msal-node isn't configured
+    const { ConfidentialClientApplication } = await import('@azure/msal-node');
+
+    const msalConfig = {
+      auth: {
+        clientId: azureConfig.clientId,
+        authority: azureConfig.authority,
+        clientSecret: azureConfig.clientSecret,
+      }
+    };
+
+    const msalClient = new ConfidentialClientApplication(msalConfig);
+
+    const oboRequest = {
+      oboAssertion: teamsToken,
+      scopes: ['https://graph.microsoft.com/User.Read', 'https://graph.microsoft.com/OnlineMeetings.Read', 'https://graph.microsoft.com/OnlineMeetingArtifact.Read.All'],
+    };
+
+    const result = await msalClient.acquireTokenOnBehalfOf(oboRequest);
+
     return {
       success: true,
-      user: {
-        id: 'mock-user-id',
-        email: 'testprofessor@apc.edu.ph',
-        name: 'Test Professor',
-        role: 'professor'
-      },
-      mock: true
+      graphToken: result.accessToken,
+      expiresOn: result.expiresOn,
     };
-  }
-  
-  // TODO: Implement actual Azure AD authentication
-  // 1. Redirect to Azure AD login
-  // 2. Handle callback with authorization code
-  // 3. Exchange code for access token
-  // 4. Validate token
-  // 5. Return user info
-  
-  throw new Error('Azure AD authentication not yet implemented');
-}
-
-/**
- * Get current authenticated user from token
- * TODO: Implement token validation
- */
-export async function getCurrentUser(accessToken) {
-  if (!isAzureConfigured()) {
-    // Return mock user for testing
+  } catch (error) {
+    console.error('OBO token exchange failed:', error.message);
     return {
-      id: '2020-00001',
-      email: 'testprofessor@apc.edu.ph',
-      name: 'Test Professor',
-      role: 'professor',
-      mock: true
+      success: false,
+      error: error.message || 'OBO token exchange failed',
     };
   }
-  
-  // TODO: Validate access token and extract user info
-  // Use Microsoft Graph API to get user profile
-  
-  throw new Error('Token validation not yet implemented');
 }
 
 /**
- * Logout user
- * TODO: Implement logout flow
+ * Check if Azure AD SSO is configured.
  */
-export async function logout(req, res) {
-  // TODO: Clear session, revoke tokens
-  return { success: true };
+export function isSSOConfigured() {
+  return isAzureConfigured();
 }
 
 export default {
-  initializeAzureAuth,
-  authenticateWithAzureAD,
-  getCurrentUser,
-  logout
+  exchangeTeamsTokenForGraph,
+  isSSOConfigured,
 };
-

@@ -34,6 +34,8 @@ export default defineConfig({
     // Default Vite port for HTTP development
     port: 5173,
     host: true, // Allow access from network (mobile devices)
+    // Allow ngrok and other tunnel hosts
+    allowedHosts: 'all',
     proxy: {
       '/api': {
         target: 'http://localhost:3333',
@@ -46,6 +48,11 @@ export default defineConfig({
         secure: false
       }
     },
+    // HMR config for ngrok tunnel compatibility
+    hmr: process.env.NGROK_URL ? {
+      clientPort: 443,
+      protocol: 'wss',
+    } : true,
     // HTTPS configuration (optional, for production/Teams deployment)
     https: process.env.SSL_CRT_FILE && process.env.SSL_KEY_FILE ? {
       cert: fs.readFileSync(process.env.SSL_CRT_FILE),

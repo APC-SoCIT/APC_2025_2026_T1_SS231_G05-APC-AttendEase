@@ -11,6 +11,7 @@ import {
 } from '@fluentui/react-components';
 import { ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
+import OnlineAttendance from './OnlineAttendance';
 import ExportPanel from './ExportPanel';
 import ScheduleModal from './modals/ScheduleModal';
 import DeleteConfirmDialog from './modals/DeleteConfirmDialog';
@@ -263,7 +264,9 @@ function ProfessorDashboard({ userContext }) {
   const navigate = useNavigate();
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
+  const [onlineStudents, setOnlineStudents] = useState([]);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
+  const [onlineExpanded, setOnlineExpanded] = useState(false);
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
   const [debugMessages, setDebugMessages] = useState([]);
@@ -494,7 +497,14 @@ function ProfessorDashboard({ userContext }) {
 
   const getCombinedExportData = () => ([
     ...onsiteAttendance.map((student) => ({ ...student, mode: 'Onsite' })),
-    ...unknownFaces.map((student) => ({ ...student, mode: 'Unknown' }))
+    ...unknownFaces.map((student) => ({ ...student, mode: 'Unknown' })),
+    ...onlineStudents.map((student) => ({
+      ...student,
+      mode: 'Online',
+      name: student.name || student.fullName || 'Unknown',
+      engagementScore: student.engagementScore,
+      status: 'Present'
+    }))
   ]);
 
   const notifyEmptyExport = () => {
@@ -619,7 +629,7 @@ function ProfessorDashboard({ userContext }) {
     downloadCsv(headers, rows, 'engagement_report');
   };
 
-  const totalPresent = onsiteAttendance.length;
+  const totalPresent = onsiteAttendance.length + onlineStudents.length;
 
   return (
     <div className={styles.container}>
@@ -715,8 +725,8 @@ function ProfessorDashboard({ userContext }) {
               </div>
               <div className={styles.statItem}>
                 <Text size={300} style={{ color: '#666' }}>Online</Text>
-                <Badge appearance="tint" color="subtle" size="extra-large">
-                  N/A
+                <Badge appearance={onlineStudents.length > 0 ? "filled" : "tint"} color={onlineStudents.length > 0 ? "success" : "subtle"} size="extra-large">
+                  {onlineStudents.length}
                 </Badge>
               </div>
             </div>
@@ -859,15 +869,67 @@ function ProfessorDashboard({ userContext }) {
                 </div>
 
                 <div className={styles.participantSection}>
-                  <Text weight="semibold" size={300} style={{ color: '#999' }}>
-                    Online (0)
+                  <Text weight="semibold" size={300} style={{ color: onlineStudents.length > 0 ? '#333' : '#999' }}>
+                    Online ({onlineStudents.length})
                   </Text>
                   <div className={styles.participantList}>
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      Online tracking paused
-                    </Text>
+                    {onlineStudents.length === 0 ? (
+                      <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                        Connect Graph API below to track online attendance
+                      </Text>
+                    ) : (
+                      onlineStudents.map((p, idx) => (
+                        <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <Text size={300} weight="semibold">{p.name || p.fullName}</Text>
+                            {p.email && (
+                              <Text size={200} style={{ color: '#666', display: 'block' }}>
+                                {p.email}
+                              </Text>
+                            )}
+                          </div>
+                          {p.engagementScore != null && (
+                            <Badge
+                              appearance="filled"
+                              color={
+                                p.engagementScore >= 80 ? 'success' :
+                                p.engagementScore >= 50 ? 'warning' : 'danger'
+                              }
+                              size="small"
+                            >
+                              {p.engagementScore}%
+                            </Badge>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Online Attendance Panel */}
+          <Card className={styles.statsCard}>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              onClick={() => setOnlineExpanded(!onlineExpanded)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Text weight="semibold" size={400}>Online Attendance (Teams)</Text>
+                {onlineStudents.length > 0 && (
+                  <Badge appearance="filled" color="success" size="small">
+                    {onlineStudents.length} online
+                  </Badge>
+                )}
+              </div>
+              {onlineExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
+            </div>
+            {onlineExpanded && (
+              <div style={{ marginTop: '8px' }}>
+                <OnlineAttendance
+                  onOnlineStudentsUpdate={(students) => setOnlineStudents(students)}
+                />
               </div>
             )}
           </Card>

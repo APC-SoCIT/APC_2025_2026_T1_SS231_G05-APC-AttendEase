@@ -1,127 +1,100 @@
 /**
- * Microsoft Graph API Client
- * 
- * TODO: This is a PLACEHOLDER for future Microsoft Graph API integration
- * 
- * When implementing:
- * 1. Use existing @microsoft/microsoft-graph-client (already installed)
- * 2. Configure authentication with Azure AD tokens
- * 3. Implement API calls for:
- *    - Teams meeting attendance
- *    - User profiles
- *    - Calendar events
- *    - Online meeting details
+ * Microsoft Graph API Client — Delegated Token Approach
+ *
+ * Instead of using application-level credentials (which require full Entra admin
+ * access), this module provides helpers for the delegated-token approach:
+ *
+ *   1. Professor pastes their Graph Explorer access token in the UI
+ *   2. Token is sent to our Express backend as a Bearer header
+ *   3. Backend proxies requests to Graph API using that token
+ *
+ * The backend endpoints are defined in src/app.js:
+ *   GET  /api/graph/delegated/verify-token   — verifies the token via GET /me
+ *   GET  /api/graph/delegated/meetings        — lists professor's online meetings
+ *   GET  /api/graph/delegated/online/:meetingId — gets attendance report
+ *   POST /api/attendance/online/save           — persists attendance to Supabase
+ *   POST /api/attendance/online/upload-csv     — persists CSV-parsed data
+ *
+ * This file exports thin wrapper functions that can be imported by React components
+ * if you prefer using JS functions over inline fetch() calls.
  */
-
-import { Client } from '@microsoft/microsoft-graph-client';
-import { ClientSecretCredential } from '@azure/identity';
-import { azureConfig, isAzureConfigured } from '../../config/azure.config.js';
-
-let graphClient = null;
 
 /**
- * Initialize Microsoft Graph client
- * TODO: This partially works but needs proper Azure AD setup
+ * Verify a Graph Explorer access token.
+ * @param {string} token - Bearer access token
+ * @returns {Promise<{status: string, user?: object, message?: string}>}
  */
-export async function initializeGraphClient() {
-  if (!isAzureConfigured()) {
-    console.warn('⚠️ Graph API not configured - online attendance features disabled');
-    return null;
-  }
-  
-  try {
-    const credential = new ClientSecretCredential(
-      azureConfig.tenantId,
-      azureConfig.clientId,
-      azureConfig.clientSecret
-    );
-
-    graphClient = Client.initWithMiddleware({
-      authProvider: {
-        getAccessToken: async () => {
-          const tokenResponse = await credential.getToken('https://graph.microsoft.com/.default');
-          return tokenResponse.token;
-        }
-      }
-    });
-
-    console.log('✅ Microsoft Graph API client initialized');
-    return graphClient;
-  } catch (error) {
-    console.error('❌ Failed to initialize Graph client:', error.message);
-    return null;
-  }
+export async function verifyGraphToken(token) {
+  const res = await fetch('/api/graph/delegated/verify-token', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
 }
 
 /**
- * Get Teams meeting attendance data
- * TODO: Implement actual API call
+ * List the signed-in user's online meetings.
+ * @param {string} token
+ * @returns {Promise<{status: string, meetings?: Array, message?: string}>}
  */
-export async function getTeamsMeetingAttendance(meetingId) {
-  if (!graphClient) {
-    console.warn('⚠️ Graph API not configured - returning mock data');
-    return {
-      mock: true,
-      students: [],
-      message: 'Graph API not configured. Set up Azure AD credentials to enable online attendance tracking.'
-    };
-  }
-  
-  try {
-    // TODO: Actual implementation when Azure AD is set up
-    // const attendanceReports = await graphClient
-    //   .api(`/me/onlineMeetings/${meetingId}/attendanceReports`)
-    //   .get();
-    
-    // For now, return mock data
-    return {
-      mock: true,
-      students: [
-        {
-          name: 'Mock Student 1',
-          email: 'student1@apc.edu.ph',
-          joinTime: new Date().toISOString(),
-          status: 'present'
-        }
-      ],
-      message: 'Mock data - Azure AD not configured'
-    };
-  } catch (error) {
-    console.error('❌ Error fetching Teams attendance:', error);
-    return {
-      error: true,
-      message: error.message,
-      students: []
-    };
-  }
+export async function listOnlineMeetings(token) {
+  const res = await fetch('/api/graph/delegated/meetings', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
 }
 
 /**
- * Get user profile from Graph API
- * TODO: Implement when Azure AD is ready
+ * Get the attendance report for a specific meeting.
+ * @param {string} token
+ * @param {string} meetingId
+ * @returns {Promise<{status: string, students?: Array, message?: string}>}
  */
-export async function getUserProfile(userId) {
-  if (!graphClient) {
-    return null;
-  }
-  
-  // TODO: Implement
-  // return await graphClient.api(`/users/${userId}`).get();
-  
-  return null;
+export async function getMeetingAttendance(token, meetingId) {
+  const res = await fetch(`/api/graph/delegated/online/${encodeURIComponent(meetingId)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
 }
 
 /**
- * Check if Graph API is configured and ready
+ * Save Graph-API-fetched online attendance to Supabase.
+ * @param {Object} payload - { sessionId?, students, meetingSubject?, meetingStartTime?, meetingEndTime? }
  */
-export function isGraphApiReady() {
-  return graphClient !== null;
+export async function saveOnlineAttendance(payload) {
+  const res = await fetch('/api/attendance/online/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+/**
+ * Save CSV-parsed engagement data to Supabase.
+ * @param {Object} payload - { sessionId?, students, meetingSubject? }
+ */
+export async function saveCSVAttendance(payload) {
+  const res = await fetch('/api/attendance/online/upload-csv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+/**
+ * Check if Graph API is configured (application credentials — legacy check).
+ */
+export async function checkGraphStatus() {
+  const res = await fetch('/api/attendance/graph-status');
+  return res.json();
 }
 
 export default {
-  initializeGraphClient,
-  getTeamsMeetingAttendance,
-  getUserProfile,
-  isGraphApiReady
+  verifyGraphToken,
+  listOnlineMeetings,
+  getMeetingAttendance,
+  saveOnlineAttendance,
+  saveCSVAttendance,
+  checkGraphStatus,
 };
-

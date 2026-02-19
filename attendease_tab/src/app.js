@@ -320,7 +320,246 @@ app.get('/api/attendance/graph-status', (req, res) => {
   }
 });
 
-// Delegated Graph proxy using a provided access token (e.g., from Graph Explorer)
+// ---- Delegated Graph API Proxy Endpoints ----
+// These use a Graph Explorer access token passed in the Authorization header.
+
+// Verify a delegated token by calling GET /me
+app.get('/api/graph/delegated/verify-token', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'error', message: 'Missing Bearer token in Authorization header' });
+    }
+
+    const meResponse = await axios.get('https://graph.microsoft.com/v1.0/me', {
+      headers: { Authorization: authHeader }
+    });
+
+    return res.json({
+      status: 'success',
+      user: {
+        displayName: meResponse.data.displayName,
+        mail: meResponse.data.mail || meResponse.data.userPrincipalName,
+        id: meResponse.data.id
+      }
+    });
+  } catch (error) {
+    console.error('Token verification error:', error?.response?.data || error.message);
+    const statusCode = error?.response?.status || 500;
+    return res.status(statusCode).json({
+      status: 'error',
+      message: error?.response?.data?.error?.message || 'Token verification failed'
+    });
+  }
+});
+
+// List professor's online meetings via delegated token
+app.get('/api/graph/delegated/meetings', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'error', message: 'Missing Bearer token in Authorization header' });
+    }
+
+    let meetings = [];
+    let discoveryMessage = null;
+
+    try {
+      // Fast path: list meetings directly.
+      // Some tenants support this endpoint as-is.
+      const meetingsUrl = 'https://graph.microsoft.com/v1.0/me/onlineMeetings';
+      const meetingsResponse = await axios.get(meetingsUrl, {
+        headers: { Authorization: authHeader }
+      });
+
+      meetings = (meetingsResponse.data?.value || []).map(m => ({
+        id: m.id,
+        subject: m.subject || '(No subject)',
+        startDateTime: m.startDateTime,
+        endDateTime: m.endDateTime,
+        joinUrl: m.joinWebUrl,
+        createdDateTime: m.creationDateTime
+      }));
+    } catch (directListError) {
+      const graphError = directListError?.response?.data?.error || {};
+      const requiresFilter = graphError.code === 'InvalidArgument'
+        && typeof graphError.message === 'string'
+        && graphError.message.includes('Filter expression expected');
+
+      if (!requiresFilter) {
+        throw directListError;
+      }
+
+      // Fallback path for tenants where /me/onlineMeetings requires $filter:
+      // 1) list meeting chats
+      // 2) resolve each chat's joinWebUrl into /me/onlineMeetings?$filter=JoinWebUrl eq '...'
+      try {
+        const chatsUrl = 'https://graph.microsoft.com/beta/me/chats?$filter=chatType eq \'meeting\'&$select=id,topic,createdDateTime,onlineMeetingInfo';
+        const chatsResponse = await axios.get(chatsUrl, {
+          headers: { Authorization: authHeader }
+        });
+
+        const chats = chatsResponse.data?.value || [];
+        const meetingMap = new Map();
+
+        await Promise.all(chats.map(async (chat) => {
+          const joinUrl = chat?.onlineMeetingInfo?.joinWebUrl;
+          const conferenceId = chat?.onlineMeetingInfo?.conferenceId;
+          if (!joinUrl && !conferenceId) {
+            return;
+          }
+
+          // Try multiple filter candidates because some tenants only resolve
+          // one specific parameter name.
+          const filterCandidates = [];
+          if (conferenceId) {
+            filterCandidates.push(`VideoTeleconferenceId eq '${conferenceId}'`);
+          }
+          if (joinUrl) {
+            const escapedJoinUrl = joinUrl.replace(/'/g, "''");
+            filterCandidates.push(`JoinWebUrl eq '${escapedJoinUrl}'`);
+          }
+
+          let match = null;
+          for (const filterExpr of filterCandidates) {
+            const lookupUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings?$filter=${encodeURIComponent(filterExpr)}`;
+            try {
+              const lookupResponse = await axios.get(lookupUrl, {
+                headers: { Authorization: authHeader }
+              });
+              match = lookupResponse.data?.value?.[0] || null;
+              if (match) break;
+            } catch (lookupError) {
+              console.warn('Meeting lookup failed:', lookupError?.response?.data?.error?.message || lookupError.message);
+            }
+          }
+
+          if (!match) {
+            return;
+          }
+
+          meetingMap.set(match.id, {
+            id: match.id,
+            subject: match.subject || chat.topic || '(No subject)',
+            startDateTime: match.startDateTime,
+            endDateTime: match.endDateTime,
+            joinUrl: match.joinWebUrl,
+            createdDateTime: match.creationDateTime || chat.createdDateTime,
+            chatId: chat.id
+          });
+        }));
+
+        meetings = Array.from(meetingMap.values());
+      } catch (chatDiscoveryError) {
+        const chatStatus = chatDiscoveryError?.response?.status;
+        const chatMessage = chatDiscoveryError?.response?.data?.error?.message || chatDiscoveryError.message;
+        const missingChatScope = chatStatus === 403 && /Chat\.ReadBasic|Chat\.Read|Chat\.ReadWrite/.test(chatMessage || '');
+
+        if (missingChatScope) {
+          // Don't fail the whole endpoint; frontend can use manual meeting input fallback.
+          meetings = [];
+          discoveryMessage = 'Meeting auto-discovery is limited because this token lacks Chat.Read. You can still fetch attendance by entering a meeting ID or Join URL manually.';
+        } else {
+          throw chatDiscoveryError;
+        }
+      }
+    }
+
+    // Sort newest first
+    meetings.sort((a, b) => new Date(b.startDateTime || b.createdDateTime || 0) - new Date(a.startDateTime || a.createdDateTime || 0));
+
+    return res.json({
+      status: 'success',
+      meetings,
+      totalCount: meetings.length,
+      message: discoveryMessage
+    });
+  } catch (error) {
+    console.error('List meetings error:', error?.response?.data || error.message);
+    const statusCode = error?.response?.status || 500;
+    const graphMessage = error?.response?.data?.error?.message;
+    const helpMessage = statusCode === 403
+      ? 'Failed to list meetings. Ensure delegated permissions include Chat.Read and OnlineMeetings.Read.'
+      : 'Failed to list meetings';
+    return res.status(statusCode).json({
+      status: 'error',
+      message: graphMessage || helpMessage
+    });
+  }
+});
+
+// Resolve a meeting from a known Join URL or conference ID using filtered lookup.
+// Useful when tenant restrictions block /me/onlineMeetings listing and chat scopes are missing.
+app.get('/api/graph/delegated/resolve-meeting', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'error', message: 'Missing Bearer token in Authorization header' });
+    }
+
+    const joinWebUrlRaw = req.query.joinWebUrl;
+    const videoTeleconferenceIdRaw = req.query.videoTeleconferenceId;
+    const joinWebUrl = typeof joinWebUrlRaw === 'string' ? joinWebUrlRaw.trim() : '';
+    const videoTeleconferenceId = typeof videoTeleconferenceIdRaw === 'string' ? videoTeleconferenceIdRaw.trim() : '';
+
+    if (!joinWebUrl && !videoTeleconferenceId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Provide joinWebUrl or videoTeleconferenceId as query parameter.'
+      });
+    }
+
+    const filterCandidates = [];
+    if (videoTeleconferenceId) {
+      filterCandidates.push(`VideoTeleconferenceId eq '${videoTeleconferenceId}'`);
+    }
+    if (joinWebUrl) {
+      const escapedJoinUrl = joinWebUrl.replace(/'/g, "''");
+      filterCandidates.push(`JoinWebUrl eq '${escapedJoinUrl}'`);
+    }
+
+    let meeting = null;
+    for (const filterExpr of filterCandidates) {
+      const lookupUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings?$filter=${encodeURIComponent(filterExpr)}`;
+      const lookupResponse = await axios.get(lookupUrl, {
+        headers: { Authorization: authHeader }
+      });
+      const candidate = lookupResponse.data?.value?.[0];
+      if (candidate) {
+        meeting = candidate;
+        break;
+      }
+    }
+
+    if (!meeting) {
+      return res.json({
+        status: 'no_data',
+        message: 'No matching meeting was found for the provided value.'
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      meeting: {
+        id: meeting.id,
+        subject: meeting.subject || '(No subject)',
+        startDateTime: meeting.startDateTime,
+        endDateTime: meeting.endDateTime,
+        joinUrl: meeting.joinWebUrl,
+        createdDateTime: meeting.creationDateTime
+      }
+    });
+  } catch (error) {
+    console.error('Resolve meeting error:', error?.response?.data || error.message);
+    const statusCode = error?.response?.status || 500;
+    return res.status(statusCode).json({
+      status: 'error',
+      message: error?.response?.data?.error?.message || 'Failed to resolve meeting'
+    });
+  }
+});
+
+// Get attendance report for a specific meeting via delegated token
 app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
@@ -332,9 +571,7 @@ app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
 
     const reportsUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings/${encodeURIComponent(meetingId)}/attendanceReports`;
     const reportsResponse = await axios.get(reportsUrl, {
-      headers: {
-        Authorization: authHeader
-      }
+      headers: { Authorization: authHeader }
     });
 
     const reports = reportsResponse.data?.value || [];
@@ -347,19 +584,34 @@ app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
       });
     }
 
+    // Get the latest attendance report with expanded records
     const latestReportId = reports[0].id;
-    const reportUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings/${encodeURIComponent(meetingId)}/attendanceReports/${encodeURIComponent(latestReportId)}`;
+    const reportUrl = `https://graph.microsoft.com/v1.0/me/onlineMeetings/${encodeURIComponent(meetingId)}/attendanceReports/${encodeURIComponent(latestReportId)}?$expand=attendanceRecords`;
     const reportResponse = await axios.get(reportUrl, {
-      headers: {
-        Authorization: authHeader
-      }
+      headers: { Authorization: authHeader }
     });
 
-    const attendanceRecords = reportResponse.data?.attendanceRecords || [];
+    const report = reportResponse.data;
+    const attendanceRecords = report?.attendanceRecords || [];
+    const meetingStartTime = report?.meetingStartDateTime;
+    const meetingEndTime = report?.meetingEndDateTime;
+
+    // Calculate total meeting duration in seconds
+    let meetingDurationSeconds = 0;
+    if (meetingStartTime && meetingEndTime) {
+      meetingDurationSeconds = (new Date(meetingEndTime) - new Date(meetingStartTime)) / 1000;
+    }
 
     const students = attendanceRecords.map(record => {
       const joinDateTime = record.attendanceIntervals?.[0]?.joinDateTime;
-      const leaveDateTime = record.attendanceIntervals?.[0]?.leaveDateTime;
+      const leaveDateTime = record.attendanceIntervals?.[record.attendanceIntervals.length - 1]?.leaveDateTime;
+
+      // Compute engagement score as % of meeting attended
+      const durationSeconds = record.totalAttendanceInSeconds || 0;
+      let engagementScore = 0;
+      if (meetingDurationSeconds > 0) {
+        engagementScore = Math.min(100, Math.round((durationSeconds / meetingDurationSeconds) * 100));
+      }
 
       return {
         name: record.identity?.displayName || 'Unknown',
@@ -367,15 +619,19 @@ app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
         joinTime: joinDateTime,
         leaveTime: leaveDateTime,
         status: leaveDateTime ? 'left' : 'present',
-        duration: record.totalAttendanceInSeconds,
-        role: record.role
+        duration: durationSeconds,
+        role: record.role,
+        engagementScore
       };
     });
 
     return res.json({
       status: 'success',
       students,
-      totalCount: students.length
+      totalCount: students.length,
+      meetingStartTime,
+      meetingEndTime,
+      meetingDurationSeconds
     });
   } catch (error) {
     console.error('Delegated Graph proxy error:', error?.response?.data || error.message);
@@ -385,6 +641,160 @@ app.get('/api/graph/delegated/online/:meetingId', async (req, res) => {
       status: 'error',
       message
     });
+  }
+});
+
+// Save online attendance records to Supabase
+app.post('/api/attendance/online/save', async (req, res) => {
+  try {
+    const { sessionId, students, meetingSubject, meetingStartTime, meetingEndTime } = req.body;
+
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'students array is required' });
+    }
+
+    const savedRecords = [];
+    const errors = [];
+
+    for (const student of students) {
+      try {
+        // Try to find the student by email in user_profiles
+        let studentId = null;
+        if (student.email) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('user_id')
+            .eq('email', student.email)
+            .single();
+          if (profile) studentId = profile.user_id;
+        }
+
+        const record = {
+          session_id: sessionId || null,
+          student_id: studentId,
+          attendance_type: 'online',
+          check_in_time: student.joinTime || new Date().toISOString(),
+          status: 'present',
+          confidence_score: student.engagementScore || null,
+          notes: JSON.stringify({
+            source: 'graph_api',
+            meeting_subject: meetingSubject || null,
+            meeting_start: meetingStartTime || null,
+            meeting_end: meetingEndTime || null,
+            display_name: student.name,
+            email: student.email,
+            join_time: student.joinTime,
+            leave_time: student.leaveTime,
+            duration_seconds: student.duration,
+            engagement_score: student.engagementScore,
+            role: student.role,
+            // CSV enrichment fields (if present)
+            camera_duration: student.cameraDuration || null,
+            hand_raise_count: student.handRaiseCount || null,
+            reaction_count: student.reactionCount || null
+          })
+        };
+
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .insert(record)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedRecords.push(data);
+      } catch (err) {
+        errors.push({ student: student.email || student.name, error: err.message });
+      }
+    }
+
+    console.log(`✅ Saved ${savedRecords.length} online attendance records (${errors.length} errors)`);
+
+    return res.json({
+      status: 'success',
+      savedCount: savedRecords.length,
+      errorCount: errors.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error saving online attendance:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Save CSV-parsed engagement data to Supabase
+app.post('/api/attendance/online/upload-csv', async (req, res) => {
+  try {
+    const { sessionId, students, meetingSubject } = req.body;
+
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'students array is required' });
+    }
+
+    const savedRecords = [];
+    const errors = [];
+
+    for (const student of students) {
+      try {
+        // Try to find the student by email in user_profiles
+        let studentId = null;
+        if (student.email) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('user_id')
+            .eq('email', student.email)
+            .single();
+          if (profile) studentId = profile.user_id;
+        }
+
+        const record = {
+          session_id: sessionId || null,
+          student_id: studentId,
+          attendance_type: 'online',
+          check_in_time: student.joinTime || new Date().toISOString(),
+          status: 'present',
+          confidence_score: student.engagementScore || null,
+          notes: JSON.stringify({
+            source: 'teams_csv_upload',
+            meeting_subject: meetingSubject || null,
+            display_name: student.fullName,
+            email: student.email,
+            join_time: student.joinTime,
+            leave_time: student.leaveTime,
+            duration_seconds: student.durationSeconds,
+            in_meeting_duration_seconds: student.inMeetingDurationSeconds,
+            camera_duration_seconds: student.cameraDurationSeconds,
+            hand_raise_count: student.handRaiseCount,
+            reaction_count: student.reactionCount,
+            role: student.role,
+            engagement_score: student.engagementScore
+          })
+        };
+
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .insert(record)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedRecords.push(data);
+      } catch (err) {
+        errors.push({ student: student.email || student.fullName, error: err.message });
+      }
+    }
+
+    console.log(`✅ Saved ${savedRecords.length} CSV attendance records (${errors.length} errors)`);
+
+    return res.json({
+      status: 'success',
+      savedCount: savedRecords.length,
+      errorCount: errors.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error saving CSV attendance:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
@@ -477,6 +887,38 @@ app.get('/api/attendance/online/:meetingId', async (req, res) => {
       message: error.message || 'Failed to fetch online attendance',
       details: error.code
     });
+  }
+});
+
+// ---- Teams SDK SSO → OBO Token Exchange (Stretch Goal) ----
+// When the app runs inside Teams, the frontend can call
+//   microsoftTeams.authentication.getAuthToken()
+// and send the resulting JWT here to exchange it for a Graph API token.
+app.post('/api/auth/teams-sso', async (req, res) => {
+  try {
+    const { token: teamsToken } = req.body;
+    if (!teamsToken) {
+      return res.status(400).json({ status: 'error', message: 'Missing token in request body' });
+    }
+
+    const { exchangeTeamsTokenForGraph } = await import('./services/auth/azureAuth.js');
+    const result = await exchangeTeamsTokenForGraph(teamsToken);
+
+    if (result.success) {
+      return res.json({
+        status: 'success',
+        graphToken: result.graphToken,
+        expiresOn: result.expiresOn
+      });
+    } else {
+      return res.status(401).json({
+        status: 'error',
+        message: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Teams SSO error:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
   }
 });
 

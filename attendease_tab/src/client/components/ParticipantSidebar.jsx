@@ -68,7 +68,24 @@ function ParticipantList({ title, participants, placeholderText, badgeColor = 'i
         ) : (
           participants.map((participant, index) => (
             <div key={`${title}-${index}`} className={styles.participantItem}>
-              <Text weight="semibold">{participant.name || participant.email || 'Unnamed Participant'}</Text>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text weight="semibold">{participant.name || participant.fullName || participant.email || 'Unnamed Participant'}</Text>
+                {participant.engagementScore != null && (
+                  <Badge
+                    appearance="filled"
+                    color={
+                      participant.engagementScore >= 80 ? 'success' :
+                      participant.engagementScore >= 50 ? 'warning' : 'danger'
+                    }
+                    size="small"
+                  >
+                    {participant.engagementScore}%
+                  </Badge>
+                )}
+              </div>
+              {participant.email && (
+                <Text size={200} style={{ color: '#666' }}>{participant.email}</Text>
+              )}
               {participant.detectedTime && (
                 <Text size={200}>Detected: {participant.detectedTime}</Text>
               )}
@@ -83,7 +100,7 @@ function ParticipantList({ title, participants, placeholderText, badgeColor = 'i
   );
 }
 
-function ParticipantSidebar({ onsiteParticipants, unknownParticipants }) {
+function ParticipantSidebar({ onsiteParticipants, unknownParticipants, onlineParticipants = [] }) {
   const styles = useStyles();
   return (
     <Card className={styles.container}>
@@ -92,6 +109,12 @@ function ParticipantSidebar({ onsiteParticipants, unknownParticipants }) {
         participants={onsiteParticipants}
         placeholderText="Onsite participants will appear here."
         badgeColor="informative"
+      />
+      <ParticipantList
+        title="Online"
+        participants={onlineParticipants}
+        placeholderText="Connect Graph API to see online participants."
+        badgeColor="success"
       />
       <ParticipantList
         title="Unknown"
@@ -104,5 +127,3 @@ function ParticipantSidebar({ onsiteParticipants, unknownParticipants }) {
 }
 
 export default ParticipantSidebar;
-
-
