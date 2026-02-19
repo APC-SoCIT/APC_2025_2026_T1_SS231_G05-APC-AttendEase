@@ -1026,8 +1026,12 @@ function ProfessorDashboard({ userContext }) {
             </div>
             <div className={styles.statItem}>
               <Text size={300} style={{ color: '#666' }}>Online</Text>
-              <Badge appearance="tint" color="subtle" size="extra-large">
-                N/A
+              <Badge
+                appearance={onlineStudents.length > 0 ? 'filled' : 'tint'}
+                color={onlineStudents.length > 0 ? 'success' : 'subtle'}
+                size="extra-large"
+              >
+                {onlineStudents.length}
               </Badge>
             </div>
           </div>
@@ -1080,6 +1084,21 @@ function ProfessorDashboard({ userContext }) {
             <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
             <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
           </div>
+        </Card>
+
+        {/* Online Attendance Panel */}
+        <Card className={styles.statsCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text weight="semibold" size={400}>Online Attendance (Teams)</Text>
+            {onlineStudents.length > 0 && (
+              <Badge appearance="filled" color="success" size="small">
+                {onlineStudents.length} online
+              </Badge>
+            )}
+          </div>
+          <OnlineAttendance
+            onOnlineStudentsUpdate={(students) => setOnlineStudents(students)}
+          />
         </Card>
 
         {/* Participant Dropdown */}
@@ -1170,13 +1189,40 @@ function ProfessorDashboard({ userContext }) {
               </div>
 
               <div className={styles.participantSection}>
-                <Text weight="semibold" size={300} style={{ color: '#999' }}>
-                  Online (0)
+                <Text weight="semibold" size={300} style={{ color: onlineStudents.length > 0 ? '#333' : '#999' }}>
+                  Online ({onlineStudents.length})
                 </Text>
                 <div className={styles.participantList}>
-                  <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                    Online tracking paused
-                  </Text>
+                  {onlineStudents.length === 0 ? (
+                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                      Connect Graph API below to track online attendance
+                    </Text>
+                  ) : (
+                    onlineStudents.map((p, idx) => (
+                      <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <Text size={300} weight="semibold">{p.name || p.fullName}</Text>
+                          {p.email && (
+                            <Text size={200} style={{ color: '#666', display: 'block' }}>
+                              {p.email}
+                            </Text>
+                          )}
+                        </div>
+                        {p.engagementScore != null && (
+                          <Badge
+                            appearance="filled"
+                            color={
+                              p.engagementScore >= 80 ? 'success' :
+                              p.engagementScore >= 50 ? 'warning' : 'danger'
+                            }
+                            size="small"
+                          >
+                            {p.engagementScore}%
+                          </Badge>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
