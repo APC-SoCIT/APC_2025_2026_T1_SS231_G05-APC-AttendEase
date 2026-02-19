@@ -145,9 +145,8 @@ const useStyles = makeStyles({
     borderRadius: '4px',
     textAlign: 'left',
     width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    ...shorthands.gap('12px'),
+    // Match Student Portal menu item styling exactly (inline content)
+    '& svg': { marginRight: '8px', verticalAlign: 'middle' },
     '&:hover': { backgroundColor: '#f3f2f1' },
   },
   menuDivider: {

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Badge,
@@ -9,7 +8,19 @@ import {
   Text,
   Divider
 } from '@fluentui/react-components';
-import { ChevronDown20Regular, ChevronUp20Regular, Add20Regular, Edit20Regular, Delete20Regular, EyeOff20Regular, Eye20Regular } from '@fluentui/react-icons';
+import {
+  Dismiss24Regular,
+  ChevronDown20Regular,
+  ChevronUp20Regular,
+  Add20Regular,
+  Add24Regular,
+  Edit20Regular,
+  Delete20Regular,
+  Edit24Regular,
+  Delete24Regular,
+  EyeOff20Regular,
+  Eye20Regular
+} from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import OnlineAttendance from './OnlineAttendance';
 import ExportPanel from './ExportPanel';
@@ -19,18 +30,13 @@ import {
   getAllSchedules,
   createSchedule,
   updateSchedule,
-  deleteSchedule,
-  getCurrentClass,
-  getUpcomingClasses
+  deleteSchedule
 } from '../../services/scheduleServices/scheduleService';
 import '../../services/scheduleServices/testSchedule'; // Enable browser console testing
+import { supabase } from '../../config/supabase.config.js';
 
 const useStyles = makeStyles({
-  root: {
-    minHeight: '100vh',
-    backgroundImage: 'linear-gradient(135deg, #294972 35%, #ffba08)',
-    ...shorthands.padding('20px'),
-  },
+  /* ---- Layout shell ---- */
   container: {
     display: 'flex',
     flexDirection: 'column',
@@ -40,7 +46,18 @@ const useStyles = makeStyles({
     WebkitFontSmoothing: 'antialiased',
     MozOsxFontSmoothing: 'grayscale',
   },
-  header: {
+
+  /* Shared card baseline (to keep sizes cohesive like Student Portal) */
+  baseCard: {
+    ...shorthands.padding('24px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    minHeight: '200px',
+  },
+
+  /* ---- Top bar (matches Student Portal) ---- */
+  topBar: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -52,19 +69,121 @@ const useStyles = makeStyles({
     zIndex: 100,
     '@media (max-width: 768px)': {
       ...shorthands.padding('12px', '20px'),
-    }
+    },
   },
-  headerTitle: {
+  logo: {
+    fontSize: '28px',
+    fontWeight: '800',
+    color: '#244670',
+    cursor: 'default',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '@media (max-width: 768px)': { fontSize: '24px' },
+  },
+  logoHighlight: { color: '#FFB900' },
+  hamburgerButton: {
+    width: '44px',
+    height: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    backgroundColor: 'transparent',
+    ...shorthands.border('none'),
+    fontSize: '24px',
+    color: '#244670',
+    '&:hover': { backgroundColor: '#f3f2f1', borderRadius: '4px' },
+  },
+
+  /* ---- Slide-in sidebar overlay (matches Student Portal) ---- */
+  menuBackdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    zIndex: 999,
+    animation: 'fadeIn 300ms ease-in-out',
+  },
+  menuPanel: {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    height: '100vh',
+    width: '280px',
+    backgroundColor: '#ffffff',
+    boxShadow: '-2px 0 8px rgba(0,0,0,0.2)',
+    zIndex: 1000,
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('4px'),
-    color: '#244670'
+    animation: 'slideInRight 300ms ease-in-out',
+    '@media (max-width: 768px)': { width: '260px' },
   },
+  menuHeader: {
+    ...shorthands.padding('20px'),
+    ...shorthands.borderBottom('1px', 'solid', '#e1e4e8'),
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  menuTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#244670',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  closeButton: {
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    backgroundColor: 'transparent',
+    ...shorthands.border('none'),
+    borderRadius: '4px',
+    '&:hover': { backgroundColor: '#f3f2f1' },
+  },
+  menuItems: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.padding('10px'),
+    flex: 1,
+  },
+  menuItem: {
+    ...shorthands.padding('14px', '16px'),
+    cursor: 'pointer',
+    fontSize: '15px',
+    color: '#323130',
+    backgroundColor: 'transparent',
+    ...shorthands.border('none'),
+    borderRadius: '4px',
+    textAlign: 'left',
+    width: '100%',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '&:hover': { backgroundColor: '#f3f2f1' },
+  },
+  menuItemActive: {
+    backgroundColor: '#e8f4f8',
+    color: '#244670',
+    fontWeight: '600',
+  },
+  menuDivider: {
+    ...shorthands.margin('10px', '0'),
+    borderTop: '1px solid #e1e4e8',
+  },
+
+  /* ---- Content area ---- */
   contentWrapper: {
     display: 'flex',
     flex: 1,
     ...shorthands.padding('24px'),
+    '@media (max-width: 768px)': {
+      ...shorthands.padding('16px'),
+    },
   },
+
+  /* ---- Dashboard view: two-column grid ---- */
   layout: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -86,6 +205,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     ...shorthands.gap('12px'),
     width: '100%',
+    // reuse base card spacing/appearance
     backgroundColor: '#ffffff',
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -106,6 +226,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('16px'),
+    ...shorthands.border('none'),
     backgroundColor: '#ffffff',
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -191,6 +312,8 @@ const useStyles = makeStyles({
     overflowY: 'auto',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
+
+  /* ---- Schedule view ---- */
   scheduleCard: {
     ...shorthands.padding('20px'),
     backgroundColor: '#ffffff',
@@ -209,7 +332,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('12px'),
-    maxHeight: '300px',
+    maxHeight: '600px',
     overflowY: 'auto'
   },
   scheduleItem: {
@@ -248,28 +371,68 @@ const useStyles = makeStyles({
   },
   scheduleDays: {
     display: 'flex',
-    ...shorthands.gap('4px'),
-    flexWrap: 'wrap'
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...shorthands.gap('6px'),
+    flexWrap: 'nowrap',
+    overflowX: 'auto'
   },
   dayBadge: {
     fontSize: '11px',
-    padding: '2px 6px'
-  }
+    padding: '2px 6px',
+    display: 'inline-flex',
+    whiteSpace: 'nowrap',
+    flexShrink: 0
+  },
+
+  /* ---- Export / Schedule view wrapper ---- */
+  viewWrapper: {
+    width: '100%',
+    maxWidth: '900px',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('20px'),
+  },
+  viewTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: '4px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  scheduleTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#244670',
+    margin: 0,
+    textAlign: 'left',
+    lineHeight: '1.2',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '@media (max-width: 768px)': {
+      fontSize: '18px',
+      marginBottom: '8px',
+      lineHeight: '1.2',
+      ...shorthands.padding('0', '10px')
+    }
+  },
 });
 
 const DEFAULT_UNKNOWN = [];
 
 function ProfessorDashboard({ userContext }) {
   const styles = useStyles();
-  const navigate = useNavigate();
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
   const [onlineStudents, setOnlineStudents] = useState([]);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
-  const [onlineExpanded, setOnlineExpanded] = useState(false);
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
   const [debugMessages, setDebugMessages] = useState([]);
+
+  // Sidebar & view state
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'schedule' | 'export'
   
   // Engagement tracking state
   const [classEngagement, setClassEngagement] = useState({
@@ -295,6 +458,7 @@ function ProfessorDashboard({ userContext }) {
   const [schedules, setSchedules] = useState([]);
   const [currentClass, setCurrentClass] = useState(null);
   const [upcomingClasses, setUpcomingClasses] = useState([]);
+  const [profFirstName, setProfFirstName] = useState(null);
 
   // Modal state
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -305,39 +469,80 @@ function ProfessorDashboard({ userContext }) {
   const [showInactiveSchedules, setShowInactiveSchedules] = useState(false);
 
   useEffect(() => {
-    if (userContext?.meeting?.id) {
-      console.log('Meeting context detected:', userContext.meeting.id);
-    }
+    let mounted = true;
+    const loadProfileFirstName = async () => {
+      if (!supabase) return;
+      try {
+        // Prefer email from userContext when available
+        if (userContext?.email) {
+          const { data, error } = await supabase.from('user_profiles').select('first_name').eq('email', userContext.email).limit(1).maybeSingle();
+          if (!mounted) return;
+          if (!error && data) {
+            setProfFirstName(data.first_name || null);
+            return;
+          }
+        }
+
+        // Fallback: try auth user id if available
+        if (supabase.auth && supabase.auth.getUser) {
+          const { data: authData } = await supabase.auth.getUser();
+          const user = authData?.user;
+          if (user) {
+            const { data, error } = await supabase.from('user_profiles').select('first_name').eq('user_id', user.id).limit(1).maybeSingle();
+            if (!mounted) return;
+            if (!error && data) setProfFirstName(data.first_name || null);
+          }
+        }
+      } catch (err) {
+        console.debug('Could not load profile first name from Supabase:', err?.message || err);
+      }
+    };
+
+    loadProfileFirstName();
+    return () => { mounted = false; };
   }, [userContext]);
 
-  // Load schedules and check for current class
+  // Load schedules and compute current/upcoming classes
   useEffect(() => {
-    // Load all schedules
-    const loadedSchedules = getAllSchedules();
-    setSchedules(loadedSchedules);
+    let mounted = true;
 
-    // Get current and upcoming classes
-    const current = getCurrentClass();
-    const upcoming = getUpcomingClasses();
-    setCurrentClass(current);
-    setUpcomingClasses(upcoming);
+    const computeCurrentAndUpcoming = (schedulesList) => {
+      const now = new Date();
+      const currentDay = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.getDay()];
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Update every minute
-    const intervalId = setInterval(() => {
-      const current = getCurrentClass();
-      const upcoming = getUpcomingClasses();
-      setCurrentClass(current);
-      setUpcomingClasses(upcoming);
-    }, 60000); // Check every minute
+      const todaySchedules = (schedulesList || []).filter(sch => sch.isActive && (sch.days || []).includes(currentDay));
 
-    return () => clearInterval(intervalId);
+      const current = todaySchedules.find(schedule => schedule.startTime <= currentTime && schedule.endTime >= currentTime) || null;
+      const upcoming = todaySchedules.filter(schedule => schedule.startTime > currentTime);
+      return { current, upcoming };
+    };
+
+    const load = async () => {
+      try {
+        const loadedSchedules = await getAllSchedules();
+        if (!mounted) return;
+        setSchedules(loadedSchedules);
+        const { current, upcoming } = computeCurrentAndUpcoming(loadedSchedules);
+        setCurrentClass(current);
+        setUpcomingClasses(upcoming);
+      } catch (err) {
+        console.error('Error loading schedules:', err);
+      }
+    };
+
+    load();
+
+    const intervalId = setInterval(load, 60000);
+    return () => { mounted = false; clearInterval(intervalId); };
   }, []);
 
   // CRUD handlers for schedules
-  const handleCreateSchedule = (scheduleData) => {
+  const handleCreateSchedule = async (scheduleData) => {
     try {
-      const newSchedule = createSchedule(scheduleData);
-      setSchedules(getAllSchedules());
+      const newSchedule = await createSchedule(scheduleData);
+      const refreshed = await getAllSchedules();
+      setSchedules(refreshed);
       setSystemMessages(prev => [...prev, {
         type: 'success',
         message: `Created class: ${newSchedule.name}`,
@@ -354,10 +559,11 @@ function ProfessorDashboard({ userContext }) {
     }
   };
 
-  const handleUpdateSchedule = (id, updates) => {
+  const handleUpdateSchedule = async (id, updates) => {
     try {
-      const updated = updateSchedule(id, updates);
-      setSchedules(getAllSchedules());
+      const updated = await updateSchedule(id, updates);
+      const refreshed = await getAllSchedules();
+      setSchedules(refreshed);
       setSystemMessages(prev => [...prev, {
         type: 'success',
         message: `Updated class: ${updated.name}`,
@@ -374,11 +580,12 @@ function ProfessorDashboard({ userContext }) {
     }
   };
 
-  const handleDeleteSchedule = (id) => {
+  const handleDeleteSchedule = async (id) => {
     try {
-      const success = deleteSchedule(id);
+      const success = await deleteSchedule(id);
       if (success) {
-        setSchedules(getAllSchedules());
+        const refreshed = await getAllSchedules();
+        setSchedules(refreshed);
         setSystemMessages(prev => [...prev, {
           type: 'success',
           message: 'Class deleted successfully',
@@ -631,468 +838,532 @@ function ProfessorDashboard({ userContext }) {
 
   const totalPresent = onsiteAttendance.length + onlineStudents.length;
 
-  return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className={styles.headerTitle}>
-          <Text size={600} weight="bold" style={{ color: '#244670' }}>Professor Dashboard</Text>
-        </div>
+  // Helper: get authoritative first name from userContext or profile storage
+  const getFirstName = () => {
+    // Prefer Supabase profile first name when available
+    if (profFirstName) return String(profFirstName).split(' ')[0];
+    // Then prefer explicit first name fields from userContext (no email fallback)
+    const first = userContext?.firstName || userContext?.givenName || userContext?.profile?.first_name || userContext?.name || '';
+    if (first) return String(first).split(' ')[0];
+    try {
+      const stored = JSON.parse(localStorage.getItem('userData') || '{}');
+      if (stored?.firstName) return String(stored.firstName).split(' ')[0];
+      if (stored?.givenName) return String(stored.givenName).split(' ')[0];
+    } catch (e) {}
+    return 'Professor';
+  };
+
+  const totalStudentsOnsite = onsiteAttendance.length + unknownFaces.length;
+  const totalClasses = schedules.length;
+
+  const handleMenuToggle = () => setIsMenuOpen(!isMenuOpen);
+
+  const handleMenuItemClick = (view) => {
+    setCurrentView(view);
+    setIsMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('userEmail');
+    window.location.href = '/';
+  };
+
+  /* ---- Top Bar ---- */
+  const renderTopBar = () => (
+    <div className={styles.topBar}>
+      <div className={styles.logo}>
+        Attend<span className={styles.logoHighlight}>Ease</span>
       </div>
+      <button
+        className={styles.hamburgerButton}
+        onClick={handleMenuToggle}
+        aria-label="Menu"
+      >
+        ☰
+      </button>
+    </div>
+  );
 
-      <div className={styles.contentWrapper}>
-        <div className={styles.layout}>
-        {/* Left: Camera Feed and System Messages */}
-        <div className={styles.leftPanel}>
-          <Card className={styles.cameraCard}>
-            <div className={styles.cameraHeader}>
-              <Text weight="semibold" size={500}>Onsite Camera Feed</Text>
-            </div>
-            <FacialRecognition
-              onAttendanceUpdate={(records) => {
-                const confirmed = records.filter(r => r.isConfirmed && r.name !== 'Unknown');
-                const unknown = records.filter(r => r.name === 'Unknown' || !r.isConfirmed);
-                setOnsiteAttendance(confirmed);
-                setUnknownFaces(unknown);
-              }}
-              onMessagesUpdate={handleMessagesUpdate}
-              onEngagementUpdate={handleEngagementUpdate}
-            />
-          </Card>
+  /* ---- Slide-in Sidebar Menu ---- */
+  const renderMenu = () => {
+    if (!isMenuOpen) return null;
+    return (
+      <>
+        <div className={styles.menuBackdrop} onClick={() => setIsMenuOpen(false)} />
+        <div className={styles.menuPanel}>
+          <div className={styles.menuHeader}>
+            <Text className={styles.menuTitle}>Menu</Text>
+            <button className={styles.closeButton} onClick={() => setIsMenuOpen(false)} aria-label="Close">
+              <Dismiss24Regular />
+            </button>
+          </div>
+          <div className={styles.menuItems}>
+            <button
+              className={`${styles.menuItem} ${currentView === 'dashboard' ? styles.menuItemActive : ''}`}
+              onClick={() => handleMenuItemClick('dashboard')}
+            >
+              Dashboard
+            </button>
+            <button
+              className={`${styles.menuItem} ${currentView === 'schedule' ? styles.menuItemActive : ''}`}
+              onClick={() => handleMenuItemClick('schedule')}
+            >
+              Schedule
+            </button>
+            <button
+              className={`${styles.menuItem} ${currentView === 'export' ? styles.menuItemActive : ''}`}
+              onClick={() => handleMenuItemClick('export')}
+            >
+              Generate Reports
+            </button>
+            <div className={styles.menuDivider} />
+            <button className={styles.menuItem} onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  };
 
-          {/* System Messages */}
-          <div className={styles.messagesCard}>
-            <Text weight="semibold" size={300} style={{ marginBottom: '8px', display: 'block' }}>
-              System Messages
-            </Text>
-            {systemMessages.length === 0 ? (
-              <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
+  /* ---- Dashboard View (Camera + Stats + Engagement + Participants) ---- */
+  const renderDashboardView = () => (
+    <div className={styles.layout}>
+      {/* Welcome header intentionally removed per UX requirement */}
+      {/* Left: Camera Feed and System Messages */}
+      <div className={styles.leftPanel}>
+        <Card className={styles.cameraCard}>
+          <div className={styles.cameraHeader}>
+            <Text weight="semibold" size={500}>Onsite Camera Feed</Text>
+          </div>
+          <FacialRecognition
+            onAttendanceUpdate={(records) => {
+              const confirmed = records.filter(r => r.isConfirmed && r.name !== 'Unknown');
+              const unknown = records.filter(r => r.name === 'Unknown' || !r.isConfirmed);
+              setOnsiteAttendance(confirmed);
+              setUnknownFaces(unknown);
+            }}
+            onMessagesUpdate={handleMessagesUpdate}
+            onEngagementUpdate={handleEngagementUpdate}
+          />
+        </Card>
+
+        {/* System Messages */}
+        <div className={styles.messagesCard}>
+          <Text weight="semibold" size={300} style={{ marginBottom: '8px', display: 'block' }}>
+            System Messages
+          </Text>
+          {systemMessages.length === 0 ? (
+            <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
+          ) : (
+            systemMessages.slice(-5).map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
+                  fontSize: '12px',
+                  marginBottom: '4px'
+                }}
+              >
+                [{msg.timestamp}] {msg.message}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Debug Information */}
+        <Card className={styles.statsCard}>
+          <Text weight="semibold" size={400}>Debug Information</Text>
+          <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
+            {debugMessages.length === 0 ? (
+              <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
             ) : (
-              systemMessages.slice(-5).map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
-                    fontSize: '12px',
-                    marginBottom: '4px'
-                  }}
-                >
-                  [{msg.timestamp}] {msg.message}
+              debugMessages.map((msg, idx) => (
+                <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
+                  {msg}
                 </div>
               ))
             )}
           </div>
+        </Card>
+      </div>
 
-          {/* Debug Information */}
-          <Card className={styles.statsCard}>
-            <Text weight="semibold" size={400}>Debug Information</Text>
-            <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
-              {debugMessages.length === 0 ? (
-                <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
-              ) : (
-                debugMessages.map((msg, idx) => (
-                  <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
-                    {msg}
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Right: Stats, Participants, Export, Schedule */}
-        <div className={styles.rightPanel}>
-          {/* Stats Card */}
-          <Card className={styles.statsCard}>
-            <Text weight="semibold" size={400}>Live Statistics</Text>
-            <div className={styles.statsGrid}>
-              <div className={styles.statItem}>
-                <Text size={300} style={{ color: '#666' }}>Total Present</Text>
-                <Badge appearance="filled" color="brand" size="extra-large">
-                  {totalPresent}
-                </Badge>
-              </div>
-              <div className={styles.statItem}>
-                <Text size={300} style={{ color: '#666' }}>Onsite</Text>
-                <Badge appearance="filled" color="informative" size="extra-large">
-                  {onsiteAttendance.length}
-                </Badge>
-              </div>
-              <div className={styles.statItem}>
-                <Text size={300} style={{ color: '#666' }}>Unknown</Text>
-                <Badge appearance="filled" color="important" size="extra-large">
-                  {unknownFaces.length}
-                </Badge>
-              </div>
-              <div className={styles.statItem}>
-                <Text size={300} style={{ color: '#666' }}>Online</Text>
-                <Badge appearance={onlineStudents.length > 0 ? "filled" : "tint"} color={onlineStudents.length > 0 ? "success" : "subtle"} size="extra-large">
-                  {onlineStudents.length}
-                </Badge>
-              </div>
-            </div>
-          </Card>
-
-          {/* Engagement Stats Card */}
-          <Card className={styles.statsCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text weight="semibold" size={400}>Class Engagement</Text>
-              <Badge 
-                appearance="filled" 
-                color={
-                  classEngagement.average_score >= 70 ? 'success' : 
-                  classEngagement.average_score >= 40 ? 'warning' : 
-                  'danger'
-                }
-                size="large"
-              >
-                {classEngagement.average_score?.toFixed(0) || 0}% Average
+      {/* Right: Stats, Engagement, Participants */}
+      <div className={styles.rightPanel}>
+        {/* Stats Card */}
+        <Card className={styles.statsCard}>
+          <Text weight="semibold" size={400}>Live Statistics</Text>
+          <div className={styles.statsGrid}>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Total Classes</Text>
+              <Badge appearance="filled" color="brand" size="extra-large">
+                {totalClasses}
               </Badge>
             </div>
-            <div className={styles.statsGrid}>
-              <div className={styles.statItem} style={{ backgroundColor: '#dcfce7' }}>
-                <Text size={300} style={{ color: '#166534' }}>Engaged</Text>
-                <Badge appearance="filled" color="success" size="extra-large">
-                  {classEngagement.engaged_count}
-                </Badge>
-              </div>
-              <div className={styles.statItem} style={{ backgroundColor: '#fef3c7' }}>
-                <Text size={300} style={{ color: '#92400e' }}>Present</Text>
-                <Badge appearance="filled" color="warning" size="extra-large">
-                  {classEngagement.present_count}
-                </Badge>
-              </div>
-              <div className={styles.statItem} style={{ backgroundColor: '#fee2e2', gridColumn: 'span 2' }}>
-                <Text size={300} style={{ color: '#991b1b' }}>Disengaged</Text>
-                <Badge appearance="filled" color="danger" size="extra-large">
-                  {classEngagement.disengaged_count}
-                </Badge>
-              </div>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Total Present</Text>
+              <Badge appearance="filled" color="brand" size="extra-large">
+                {totalPresent}
+              </Badge>
             </div>
-            {onsiteAttendance.length === 0 && (
-              <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                Start the camera to track engagement
-              </Text>
-            )}
-            <Divider style={{ margin: '12px 0 8px 0' }} />
-            <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
-              <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
-              <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
-              <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Onsite</Text>
+              <Badge appearance="filled" color="informative" size="extra-large">
+                {onsiteAttendance.length}
+              </Badge>
             </div>
-          </Card>
-
-          {/* Participant Dropdown */}
-          <Card className={styles.participantDropdown}>
-            <div className={styles.participantHeader}>
-              <button
-                type="button"
-                className={styles.participantToggleButton}
-                onClick={() => setParticipantsExpanded((prev) => !prev)}
-                aria-expanded={participantsExpanded}
-                aria-label="Toggle participants list"
-              >
-                <Text weight="semibold">View Participants</Text>
-                {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-              </button>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Unknown</Text>
+              <Badge appearance="filled" color="important" size="extra-large">
+                {unknownFaces.length}
+              </Badge>
             </div>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Total Students</Text>
+              <Badge appearance="filled" color="success" size="extra-large">
+                {totalStudentsOnsite}
+              </Badge>
+            </div>
+            <div className={styles.statItem}>
+              <Text size={300} style={{ color: '#666' }}>Online</Text>
+              <Badge appearance="tint" color="subtle" size="extra-large">
+                N/A
+              </Badge>
+            </div>
+          </div>
+        </Card>
 
-            {participantsExpanded && (
-              <div className={styles.participantContent}>
-                <div className={styles.participantSection}>
-                  <Text weight="semibold" size={300}>
-                    Onsite ({onsiteAttendance.length})
-                  </Text>
-                  <div className={styles.participantList}>
-                    {onsiteAttendance.length === 0 ? (
-                      <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                        No onsite participants yet
-                      </Text>
-                    ) : (
-                      onsiteAttendance.map((p, idx) => (
-                        <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <Text size={300} weight="semibold">{p.name}</Text>
-                            {p.detectedTime && (
-                              <Text size={200} style={{ color: '#666', display: 'block' }}>
-                                {p.detectedTime}
-                              </Text>
-                            )}
-                            {p.dominantEmotion && (
-                              <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
-                                {p.dominantEmotion}
-                              </Text>
-                            )}
-                          </div>
-                          {p.engagementLevel && (
-                            <Badge 
-                              appearance="filled"
-                              color={
-                                p.engagementLevel === 'engaged' ? 'success' : 
-                                p.engagementLevel === 'present' ? 'warning' : 
-                                'danger'
-                              }
-                              size="small"
-                            >
-                              {Number.isFinite(Number(p.engagementScore))
-                                ? `${Number(p.engagementScore).toFixed(0)}%`
-                                : 'N/A'}
-                            </Badge>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+        {/* Engagement Stats Card */}
+        <Card className={styles.statsCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text weight="semibold" size={400}>Class Engagement</Text>
+            <Badge 
+              appearance="filled" 
+              color={
+                classEngagement.average_score >= 70 ? 'success' : 
+                classEngagement.average_score >= 40 ? 'warning' : 
+                'danger'
+              }
+              size="large"
+            >
+              {classEngagement.average_score?.toFixed(0) || 0}% Average
+            </Badge>
+          </div>
+          <div className={styles.statsGrid}>
+            <div className={styles.statItem} style={{ backgroundColor: '#dcfce7' }}>
+              <Text size={300} style={{ color: '#166534' }}>Engaged</Text>
+              <Badge appearance="filled" color="success" size="extra-large">
+                {classEngagement.engaged_count}
+              </Badge>
+            </div>
+            <div className={styles.statItem} style={{ backgroundColor: '#fef3c7' }}>
+              <Text size={300} style={{ color: '#92400e' }}>Present</Text>
+              <Badge appearance="filled" color="warning" size="extra-large">
+                {classEngagement.present_count}
+              </Badge>
+            </div>
+            <div className={styles.statItem} style={{ backgroundColor: '#fee2e2', gridColumn: 'span 2' }}>
+              <Text size={300} style={{ color: '#991b1b' }}>Disengaged</Text>
+              <Badge appearance="filled" color="danger" size="extra-large">
+                {classEngagement.disengaged_count}
+              </Badge>
+            </div>
+          </div>
+          {onsiteAttendance.length === 0 && (
+            <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+              Start the camera to track engagement
+            </Text>
+          )}
+          <Divider style={{ margin: '12px 0 8px 0' }} />
+          <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
+            <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
+            <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
+            <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
+          </div>
+        </Card>
 
-                <div className={styles.participantSection}>
-                  <Text weight="semibold" size={300}>
-                    Unknown ({unknownFaces.length})
-                  </Text>
-                  <div className={styles.participantList}>
-                    {unknownFaces.length === 0 ? (
-                      <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                        No unknown faces detected
-                      </Text>
-                    ) : (
-                      unknownFaces.map((p, idx) => (
-                        <div key={idx} className={styles.participantItem}>
-                          <Text size={300}>Unknown Face #{idx + 1}</Text>
+        {/* Participant Dropdown */}
+        <Card className={styles.participantDropdown}>
+          <div className={styles.participantHeader}>
+            <button
+              type="button"
+              className={styles.participantToggleButton}
+              onClick={() => setParticipantsExpanded((prev) => !prev)}
+              aria-expanded={participantsExpanded}
+              aria-label="Toggle participants list"
+            >
+              <Text weight="semibold">View Participants</Text>
+              {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
+            </button>
+          </div>
+
+          {participantsExpanded && (
+            <div className={styles.participantContent}>
+              <div className={styles.participantSection}>
+                <Text weight="semibold" size={300}>
+                  Onsite ({onsiteAttendance.length})
+                </Text>
+                <div className={styles.participantList}>
+                  {onsiteAttendance.length === 0 ? (
+                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                      No onsite participants yet
+                    </Text>
+                  ) : (
+                    onsiteAttendance.map((p, idx) => (
+                      <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <Text size={300} weight="semibold">{p.name}</Text>
                           {p.detectedTime && (
-                            <Text size={200} style={{ color: '#666' }}>
+                            <Text size={200} style={{ color: '#666', display: 'block' }}>
                               {p.detectedTime}
                             </Text>
                           )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className={styles.participantSection}>
-                  <Text weight="semibold" size={300} style={{ color: onlineStudents.length > 0 ? '#333' : '#999' }}>
-                    Online ({onlineStudents.length})
-                  </Text>
-                  <div className={styles.participantList}>
-                    {onlineStudents.length === 0 ? (
-                      <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                        Connect Graph API below to track online attendance
-                      </Text>
-                    ) : (
-                      onlineStudents.map((p, idx) => (
-                        <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <Text size={300} weight="semibold">{p.name || p.fullName}</Text>
-                            {p.email && (
-                              <Text size={200} style={{ color: '#666', display: 'block' }}>
-                                {p.email}
-                              </Text>
-                            )}
-                          </div>
-                          {p.engagementScore != null && (
-                            <Badge
-                              appearance="filled"
-                              color={
-                                p.engagementScore >= 80 ? 'success' :
-                                p.engagementScore >= 50 ? 'warning' : 'danger'
-                              }
-                              size="small"
-                            >
-                              {p.engagementScore}%
-                            </Badge>
+                          {p.dominantEmotion && (
+                            <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
+                              {p.dominantEmotion}
+                            </Text>
                           )}
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Online Attendance Panel */}
-          <Card className={styles.statsCard}>
-            <div
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-              onClick={() => setOnlineExpanded(!onlineExpanded)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Text weight="semibold" size={400}>Online Attendance (Teams)</Text>
-                {onlineStudents.length > 0 && (
-                  <Badge appearance="filled" color="success" size="small">
-                    {onlineStudents.length} online
-                  </Badge>
-                )}
-              </div>
-              {onlineExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-            </div>
-            {onlineExpanded && (
-              <div style={{ marginTop: '8px' }}>
-                <OnlineAttendance
-                  onOnlineStudentsUpdate={(students) => setOnlineStudents(students)}
-                />
-              </div>
-            )}
-          </Card>
-
-          {/* Export Panel */}
-          <ExportPanel
-            onExportAttendance={handleExportAttendanceReport}
-            onExportEngagement={handleExportEngagementReport}
-          />
-
-          {/* Class Schedule Accordion */}
-          <Card className={styles.scheduleCard}>
-            <div
-              className={styles.scheduleHeader}
-              onClick={() => setScheduleExpanded(!scheduleExpanded)}
-              style={{ cursor: 'pointer' }}
-            >
-              <Text weight="semibold" size={400}>Class Schedule</Text>
-              {scheduleExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-            </div>
-
-            {scheduleExpanded && (
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                  {currentClass && (
-                    <Badge appearance="filled" color="success">
-                      In Session
-                    </Badge>
+                        {p.engagementLevel && (
+                          <Badge 
+                            appearance="filled"
+                            color={
+                              p.engagementLevel === 'engaged' ? 'success' : 
+                              p.engagementLevel === 'present' ? 'warning' : 
+                              'danger'
+                            }
+                            size="small"
+                          >
+                            {Number.isFinite(Number(p.engagementScore))
+                              ? `${Number(p.engagementScore).toFixed(0)}%`
+                              : 'N/A'}
+                          </Badge>
+                        )}
+                      </div>
+                    ))
                   )}
-                  <Button
-                    appearance="subtle"
-                    icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
-                    onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
-                    size="small"
-                    title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
-                  >
-                    {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
-                  </Button>
-                  <Button
-                    appearance="primary"
-                    icon={<Add20Regular />}
-                    onClick={handleOpenCreateModal}
-                    size="small"
-                  >
-                    Add Class
-                  </Button>
                 </div>
+              </div>
 
-                {currentClass && (
-                  <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
-                    <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
-                      🎓 Currently Teaching:
-                    </Text>
-                    <Text size={400} weight="bold" style={{ display: 'block' }}>
-                      {currentClass.name}
-                    </Text>
-                    <Text size={200} style={{ color: '#666' }}>
-                      {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
-                    </Text>
-                  </div>
-                )}
-
-                <div className={styles.scheduleList}>
-                  {schedules.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
-                      No classes scheduled. Use the schedule service to add classes!
+              <div className={styles.participantSection}>
+                <Text weight="semibold" size={300}>
+                  Unknown ({unknownFaces.length})
+                </Text>
+                <div className={styles.participantList}>
+                  {unknownFaces.length === 0 ? (
+                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                      No unknown faces detected
                     </Text>
                   ) : (
-                    schedules
-                      .filter(schedule => showInactiveSchedules ? true : schedule.isActive) // Toggle: show all or active only
-                      .map((schedule) => {
-                        const isActive = currentClass?.id === schedule.id;
-                        const isInactive = !schedule.isActive;
-                        return (
-                          <div
-                            key={schedule.id}
-                            className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
-                            style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
-                          >
-                            <div
-                              className={styles.scheduleColorBar}
-                              style={{ backgroundColor: schedule.color }}
-                            />
-                            <div className={styles.scheduleItemContent}>
-                              <div className={styles.scheduleItemRow}>
-                                <Text weight="semibold" size={300}>
-                                  {schedule.name}
-                                </Text>
-                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                  {isActive && (
-                                    <Badge appearance="filled" color="success" size="small">
-                                      Active
-                                    </Badge>
-                                  )}
-                                  {isInactive && (
-                                    <Badge appearance="tint" color="warning" size="small">
-                                      Inactive
-                                    </Badge>
-                                  )}
-                                  <Button
-                                    appearance="subtle"
-                                    icon={<Edit20Regular />}
-                                    size="small"
-                                    onClick={() => handleOpenEditModal(schedule)}
-                                    title="Edit class"
-                                  />
-                                  <Button
-                                    appearance="subtle"
-                                    icon={<Delete20Regular />}
-                                    size="small"
-                                    onClick={() => handleOpenDeleteDialog(schedule)}
-                                    title="Delete class"
-                                    style={{ color: '#d32f2f' }}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className={styles.scheduleDays}>
-                                {schedule.days.map((day, idx) => (
-                                  <Badge
-                                    key={idx}
-                                    appearance="tint"
-                                    color="informative"
-                                    className={styles.dayBadge}
-                                  >
-                                    {day}
-                                  </Badge>
-                                ))}
-                              </div>
-
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                                <Text size={200} style={{ color: '#666' }}>
-                                  📍 {schedule.room}
-                                </Text>
-                                <Text size={200} style={{ color: '#666' }}>
-                                  🕐 {schedule.startTime} - {schedule.endTime}
-                                </Text>
-                              </div>
-
-                              {schedule.description && (
-                                <Text size={200} style={{ color: '#888', fontStyle: 'italic', marginTop: '4px' }}>
-                                  {schedule.description}
-                                </Text>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
+                    unknownFaces.map((p, idx) => (
+                      <div key={idx} className={styles.participantItem}>
+                        <Text size={300}>Unknown Face #{idx + 1}</Text>
+                        {p.detectedTime && (
+                          <Text size={200} style={{ color: '#666' }}>
+                            {p.detectedTime}
+                          </Text>
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
-
-                {upcomingClasses.length > 0 && (
-                  <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
-                    <Text size={200} weight="semibold" style={{ color: '#856404' }}>
-                      ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
-                    </Text>
-                  </div>
-                )}
               </div>
-            )}
-          </Card>
-        </div>
+
+              <div className={styles.participantSection}>
+                <Text weight="semibold" size={300} style={{ color: '#999' }}>
+                  Online (0)
+                </Text>
+                <div className={styles.participantList}>
+                  <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
+                    Online tracking paused
+                  </Text>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
       </div>
+    </div>
+  );
+
+
+  /* ---- Schedule View ---- */
+  const renderScheduleView = () => (
+    <div className={styles.viewWrapper}>
+      <Card className={styles.scheduleCard}>
+        <div className={styles.scheduleHeader} style={{ marginBottom: '12px' }}>
+          <Text className={styles.scheduleTitle}>Class Schedule</Text>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+          {currentClass && (
+            <Badge appearance="filled" color="success">
+              In Session
+            </Badge>
+          )}
+          <Button
+            appearance="subtle"
+            icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
+            onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
+            size="small"
+            title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
+          >
+            {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
+          </Button>
+          <Button
+            appearance="primary"
+            icon={<Add24Regular />}
+            onClick={handleOpenCreateModal}
+          >
+            Add Class
+          </Button>
+        </div>
+
+        {currentClass && (
+          <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
+            <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
+              🎓 Currently Teaching:
+            </Text>
+            <Text size={400} weight="bold" style={{ display: 'block' }}>
+              {currentClass.name}
+            </Text>
+            <Text size={200} style={{ color: '#666' }}>
+              {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
+            </Text>
+          </div>
+        )}
+
+        <div className={styles.scheduleList}>
+          {schedules.length === 0 ? (
+            <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+              No classes scheduled. Use the schedule service to add classes!
+            </Text>
+          ) : (
+            schedules
+              .filter(schedule => showInactiveSchedules ? true : schedule.isActive)
+              .map((schedule) => {
+                const isActive = currentClass?.id === schedule.id;
+                const isInactive = !schedule.isActive;
+                return (
+                  <div
+                    key={schedule.id}
+                    className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
+                    style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
+                  >
+                    <div
+                      className={styles.scheduleColorBar}
+                      style={{ backgroundColor: schedule.color }}
+                    />
+                    <div className={styles.scheduleItemContent}>
+                      <div className={styles.scheduleItemRow}>
+                        <Text weight="semibold" size={300}>
+                          {schedule.name}
+                        </Text>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          {isActive && (
+                            <Badge appearance="filled" color="success" size="small">
+                              Active
+                            </Badge>
+                          )}
+                          {isInactive && (
+                            <Badge appearance="tint" color="warning" size="small">
+                              Inactive
+                            </Badge>
+                          )}
+                          <Button
+                            icon={<Edit24Regular />}
+                            appearance="subtle"
+                            size="small"
+                            onClick={() => handleOpenEditModal(schedule)}
+                            title="Edit class"
+                            aria-label={`Edit ${schedule.name}`}
+                          />
+                          <Button
+                            icon={<Delete24Regular />}
+                            appearance="subtle"
+                            size="small"
+                            onClick={() => handleOpenDeleteDialog(schedule)}
+                            title="Delete class"
+                            aria-label={`Delete ${schedule.name}`}
+                            style={{ color: '#d32f2f' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className={styles.scheduleDays}>
+                        {schedule.days.map((day, idx) => {
+                          const label = String(day).replace(/\*/g, '').trim();
+                          return (
+                            <Badge
+                              key={idx}
+                              appearance="tint"
+                              color="informative"
+                              className={styles.dayBadge}
+                            >
+                              {label}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                        <Text size={200} style={{ color: '#666' }}>
+                          <strong>Room:</strong> {schedule.room}
+                        </Text>
+                        <Text size={200} style={{ color: '#666' }}>
+                          <strong>Time:</strong> {schedule.startTime} - {schedule.endTime}
+                        </Text>
+                      </div>
+
+                      {/* description intentionally hidden per UX request */}
+                    </div>
+                  </div>
+                );
+              })
+          )}
+        </div>
+
+        {upcomingClasses.length > 0 && (
+          <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+            <Text size={200} weight="semibold" style={{ color: '#856404' }}>
+              ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
+            </Text>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+
+  /* ---- Export View ---- */
+  const renderExportView = () => (
+    <div className={styles.viewWrapper}>
+      <div className={styles.viewTitle}>Export Reports</div>
+      <ExportPanel
+        onExportAttendance={handleExportAttendanceReport}
+        onExportEngagement={handleExportEngagementReport}
+      />
+    </div>
+  );
+
+  /* ---- Render selected view ---- */
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'schedule':
+        return renderScheduleView();
+      case 'export':
+        return renderExportView();
+      case 'dashboard':
+      default:
+        return renderDashboardView();
+    }
+  };
+
+  return (
+    <div className={styles.container}>
+      {renderTopBar()}
+      {renderMenu()}
+
+      <div className={styles.contentWrapper}>
+        {renderCurrentView()}
       </div>
 
       <ScheduleModal
@@ -1109,6 +1380,17 @@ function ProfessorDashboard({ userContext }) {
         onCancel={() => setDeleteDialogOpen(false)}
         scheduleName={deletingSchedule?.name || ''}
       />
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
     </div>
   );
 }
