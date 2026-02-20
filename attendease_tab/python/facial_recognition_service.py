@@ -359,9 +359,16 @@ RAPID_MOVEMENT_THRESHOLD = 60
 # Engagement Configuration (Behavioral) - Adjusted for 10 FPS
 ENGAGEMENT_ANALYSIS_INTERVAL = 3  # Analyze every 3rd frame to reduce MediaPipe cost
 ENGAGEMENT_HISTORY_SIZE = 30
-EAR_THRESHOLD = 0.18        # Eye Aspect Ratio threshold (closing eyes) - less sensitive to borderline cases
+EAR_THRESHOLD = 0.15        # Eye Aspect Ratio fallback threshold (lowered for Asian eye geometry)
+EAR_CALIBRATION_FRAMES = 15 # Number of initial frames to calibrate per-person EAR baseline
+EAR_CLOSED_RATIO = 0.55     # Eyes must close to this fraction of personal baseline to count as closed
+EAR_CONSENSUS_WINDOW = 5    # Rolling window: require majority of last N readings below threshold
+EAR_CONSENSUS_MIN = 3       # Minimum readings in the window that must be "closed"
 MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
-SLEEP_FRAMES_THRESHOLD = 45 # ~4.5 seconds at 10 FPS - requires sustained closed eyes to prevent false positives
+SLEEP_FRAMES_THRESHOLD = 30 # ~3 seconds at 10 FPS with calibration reducing false positives
+HEAD_PITCH_THRESHOLD = 15.0  # degrees - head tilted down threshold for sleep detection
+HEAD_PITCH_STRONG = 25.0     # degrees - strongly tilted down, assume sleep even with borderline EAR
+PITCH_CALIBRATION_FRAMES = 15  # Number of initial frames to calibrate per-person head pitch baseline
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
 HAND_RAISE_FRAMES_THRESHOLD = 2  # Need 2+ consecutive frames to confirm hand raised
 HAND_DECAY_MISS_FRAMES = 2  # Require consecutive misses before lowering hand counter
@@ -398,6 +405,64 @@ def calculate_mar(landmarks):
     if B == 0: return 0
     return A / B
 
+def calculate_head_pitch_raw(landmarks):
+    """Calculate the raw pitch ratio from MediaPipe face landmarks.
+    
+    Returns (pitch_ratio, face_width) tuple:
+    - pitch_ratio: nose-below-eyes distance normalized by face width
+    - face_width: inter-eye-corner distance (for validation)
+    
+    The raw ratio must be compared against a per-person baseline
+    to determine actual head tilt, since facial structure varies
+    significantly across ethnicities.
+    """
+    try:
+        left_eye_landmarks = [33, 133, 160, 158, 153, 144]
+        right_eye_landmarks = [362, 263, 385, 387, 373, 380]
+        
+        left_eye_y = sum(landmarks[i].y for i in left_eye_landmarks) / len(left_eye_landmarks)
+        right_eye_y = sum(landmarks[i].y for i in right_eye_landmarks) / len(right_eye_landmarks)
+        avg_eye_y = (left_eye_y + right_eye_y) / 2.0
+        
+        nose_tip_y = landmarks[4].y
+        nose_below_eyes = nose_tip_y - avg_eye_y
+        
+        left_eye_corner = landmarks[33]
+        right_eye_corner = landmarks[362]
+        face_width = calculate_landmark_distance(left_eye_corner, right_eye_corner)
+        
+        if face_width == 0:
+            return None, 0
+        
+        pitch_ratio = nose_below_eyes / face_width
+        return pitch_ratio, face_width
+    except (IndexError, AttributeError, ZeroDivisionError):
+        return None, 0
+
+
+def calculate_head_pitch(landmarks, baseline_ratio=None):
+    """Calculate head pitch (up/down tilt) using MediaPipe face landmarks.
+    
+    Returns pitch angle in degrees:
+    - Positive values = head tilted down (sleeping posture)
+    - Negative values = head tilted up (looking up)
+    - ~0 = head level (normal posture)
+    
+    If baseline_ratio is provided (per-person calibration), uses that
+    instead of the generic default. This is critical for accuracy across
+    different facial structures (e.g. Asian vs Western eye/nose geometry).
+    """
+    pitch_ratio, face_width = calculate_head_pitch_raw(landmarks)
+    if pitch_ratio is None:
+        return None
+    
+    # Use per-person baseline if available, otherwise generic fallback
+    if baseline_ratio is None:
+        baseline_ratio = 0.11  # Generic default (may not fit all facial structures)
+    
+    pitch_degrees = (pitch_ratio - baseline_ratio) * 100
+    return pitch_degrees
+
 
 class FaceTracker:
     def __init__(self, face_id, name, location, encoding=None):
@@ -427,10 +492,17 @@ class FaceTracker:
         self.matched_hand_points = 0
         self.ear_history = []
         self.mar_history = []
+        self.recent_ear_closed = []  # Rolling window of booleans for EAR consensus
+        
+        # Per-person adaptive calibration
+        self.ear_baseline = None          # Calibrated "eyes open" EAR for this person
+        self.ear_calibration_samples = []  # EAR samples collected during calibration
+        self.pitch_baseline = None         # Calibrated "head level" pitch for this person
+        self.pitch_calibration_samples = [] # Pitch samples collected during calibration
         
         # Legacy/Composite Engagement
         self.current_engagement_score = 75.0 # Start at attentive
-        self.engagement_level = 'engaged'
+        self.engagement_level = 'present'    # Start neutral (consistent with score 75)
         self.engagement_analysis_count = 0
         
         # Template-based head tracking
@@ -503,44 +575,106 @@ class FaceTracker:
     def is_expired(self):
         return self.missed_frames > TRACKING_FRAMES
 
-    def update_behavior(self, ear, mar, hand_raised_detected, matched_hand_points=0):
+    def _get_effective_ear_threshold(self):
+        """Return the per-person EAR threshold if calibrated, else the global fallback."""
+        if self.ear_baseline is not None:
+            return max(self.ear_baseline * EAR_CLOSED_RATIO, 0.10)  # floor at 0.10 safety
+        return EAR_THRESHOLD
+
+    def _calibrate(self, ear, head_pitch_raw_ratio):
+        """Collect calibration samples during the first N frames.
+        
+        Assumes the person is normally attentive during early tracking.
+        Once enough samples are collected, sets per-person baselines.
+        """
+        if ear is not None and self.ear_baseline is None:
+            self.ear_calibration_samples.append(ear)
+            if len(self.ear_calibration_samples) >= EAR_CALIBRATION_FRAMES:
+                # Use median to be robust against outliers (e.g. a blink during calibration)
+                self.ear_baseline = float(np.median(self.ear_calibration_samples))
+                effective_thresh = self._get_effective_ear_threshold()
+                print(f"[{self.name}] EAR calibrated: baseline={self.ear_baseline:.3f}, "
+                      f"closed_threshold={effective_thresh:.3f}")
+        
+        if head_pitch_raw_ratio is not None and self.pitch_baseline is None:
+            self.pitch_calibration_samples.append(head_pitch_raw_ratio)
+            if len(self.pitch_calibration_samples) >= PITCH_CALIBRATION_FRAMES:
+                self.pitch_baseline = float(np.median(self.pitch_calibration_samples))
+                print(f"[{self.name}] Pitch calibrated: baseline_ratio={self.pitch_baseline:.4f}")
+
+    def update_behavior(self, ear, mar, head_pitch, hand_raised_detected, matched_hand_points=0,
+                        head_pitch_raw_ratio=None):
         self.raw_hand_detected = bool(hand_raised_detected)
         self.matched_hand_points = int(matched_hand_points)
+        
+        # Run per-person calibration during early frames
+        self._calibrate(ear, head_pitch_raw_ratio)
 
         # Update EAR history
         if ear is not None:
             self.ear_history.append(ear)
             if len(self.ear_history) > ENGAGEMENT_HISTORY_SIZE: self.ear_history.pop(0)
             
-            # Sleeping Logic with improved counter management
-            if ear < EAR_THRESHOLD:
-                # Eyes are closed
+            # --- Adaptive EAR threshold ---
+            effective_ear_threshold = self._get_effective_ear_threshold()
+            eyes_closed = (ear < effective_ear_threshold)
+            
+            # --- Rolling consensus: require majority of recent readings to agree ---
+            self.recent_ear_closed.append(eyes_closed)
+            if len(self.recent_ear_closed) > EAR_CONSENSUS_WINDOW:
+                self.recent_ear_closed.pop(0)
+            closed_count = sum(self.recent_ear_closed)
+            consensus_eyes_closed = (closed_count >= EAR_CONSENSUS_MIN)
+            
+            # Head tilt detection (uses per-person baseline if calibrated)
+            head_tilted_down = False
+            if head_pitch is not None:
+                head_tilted_down = (head_pitch > HEAD_PITCH_THRESHOLD)
+            
+            # --- Sleep detection: EAR is PRIMARY, head pitch is ACCELERATOR ---
+            # Eyes closed alone = drowsy (slow buildup)
+            # Eyes closed + head down = sleeping (fast buildup)
+            # Eyes open = awake (recovery)
+            if consensus_eyes_closed and head_tilted_down:
+                # Strong sleep signal: eyes closed + head down → +2
+                self.sleep_counter += 2
+                self.consecutive_open_frames = 0
+            elif consensus_eyes_closed:
+                # Eyes closed but head level → drowsy, still counts → +1
                 self.sleep_counter += 1
                 self.consecutive_open_frames = 0
-            else:
-                # Eyes are open - decay faster (decrement by 2) and track consecutive open frames
+            elif not eyes_closed:
+                # Eyes are open on this frame - person is awake
                 self.consecutive_open_frames += 1
-                # Only allow full reset if eyes have been open for at least 5 consecutive frames
-                if self.consecutive_open_frames >= 5:
-                    self.sleep_counter = max(0, self.sleep_counter - 2)
+                if self.consecutive_open_frames >= 15:
+                    # Sustained wakefulness - full reset
+                    self.sleep_counter = 0
+                elif self.consecutive_open_frames >= 8:
+                    # Strong recovery
+                    self.sleep_counter = max(0, self.sleep_counter - 15)
+                elif self.consecutive_open_frames >= 3:
+                    # Moderate recovery
+                    self.sleep_counter = max(0, self.sleep_counter - 5)
                 else:
-                    # Still decay but slower until we have confidence eyes are truly open
-                    self.sleep_counter = max(0, self.sleep_counter - 1)
+                    self.sleep_counter = max(0, self.sleep_counter - 2)
+            else:
+                # Single-frame eyes closed without consensus - neutral, slow decay
+                self.consecutive_open_frames = 0
+                self.sleep_counter = max(0, self.sleep_counter - 1)
             
             was_sleeping = self.is_sleeping
             self.is_sleeping = self.sleep_counter > SLEEP_FRAMES_THRESHOLD
             
             # Log state changes
             if self.is_sleeping and not was_sleeping:
-                print(f"[{self.name}] SLEEPING detected (eyes closed for {self.sleep_counter} frames)")
+                print(f"[{self.name}] SLEEPING detected (counter={self.sleep_counter}, "
+                      f"head pitch: {head_pitch:.1f}°, EAR thresh: {effective_ear_threshold:.3f})")
             elif not self.is_sleeping and was_sleeping:
-                print(f"[{self.name}] AWAKE (eyes opened)")
+                print(f"[{self.name}] AWAKE (counter={self.sleep_counter})")
         else:
-            # MediaPipe failed - slow decay to prevent false positives
-            # Only decay every other frame to be conservative
-            if self.sleep_counter > 0 and self.sleep_counter % 2 == 0:
+            # MediaPipe failed - unconditional slow decay (fixes odd-counter stuck bug)
+            if self.sleep_counter > 0:
                 self.sleep_counter = max(0, self.sleep_counter - 1)
-            # Don't increment consecutive_open_frames on MediaPipe failures
             
         # Update MAR history
         if mar is not None:
@@ -685,15 +819,20 @@ class FaceTracker:
 _behavior_debug_counter = 0
 _hand_debug_counter = 0
 
-def analyze_face_behavior(face_img):
-    """Analyze engagement metrics (EAR, MAR) for a face crop using MediaPipe Face Mesh."""
+def analyze_face_behavior(face_img, pitch_baseline=None):
+    """Analyze engagement metrics (EAR, MAR, head pitch) for a face crop using MediaPipe Face Mesh.
+    
+    Returns (ear, mar, head_pitch, pitch_raw_ratio) tuple.
+    pitch_raw_ratio is the raw nose-to-eye ratio before baseline subtraction,
+    used for per-person calibration.
+    """
     global _behavior_debug_counter
     if not ENGAGEMENT_ENABLED:
-        return None, None
+        return None, None, None, None
         
     try:
         h, w = face_img.shape[:2]
-        if w < 10 or h < 10: return None, None
+        if w < 10 or h < 10: return None, None, None, None
         
         # Convert to RGB
         rgb_face = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
@@ -713,19 +852,25 @@ def analyze_face_behavior(face_img):
                 
                 mar = calculate_mar(landmarks)
                 
+                # Get raw pitch ratio for calibration + compute calibrated pitch
+                pitch_raw_ratio, _ = calculate_head_pitch_raw(landmarks)
+                head_pitch = calculate_head_pitch(landmarks, baseline_ratio=pitch_baseline)
+                
                 # Debug logging (reduced frequency to avoid I/O overhead)
                 _behavior_debug_counter += 1
                 if _behavior_debug_counter % 30 == 0:
                     eyes_status = "CLOSED" if ear < EAR_THRESHOLD else "open"
                     mouth_status = "OPEN" if mar > MAR_THRESHOLD else "closed"
-                    print(f"[Engagement] EAR={ear:.3f} ({eyes_status}), MAR={mar:.3f} ({mouth_status})")
+                    pitch_status = f"down({head_pitch:.1f}°)" if head_pitch and head_pitch > 15.0 else "up" if head_pitch and head_pitch < -5.0 else "level"
+                    baseline_info = f"personal={pitch_baseline:.4f}" if pitch_baseline else "generic"
+                    print(f"[Engagement] EAR={ear:.3f} ({eyes_status}), MAR={mar:.3f} ({mouth_status}), Pitch={head_pitch:.1f}° ({pitch_status}, {baseline_info})")
                 
-                return ear, mar
+                return ear, mar, head_pitch, pitch_raw_ratio
             
     except Exception as e:
         pass  # Silently handle errors to avoid log spam
     
-    return None, None
+    return None, None, None, None
 
 
 def load_reference_data():
@@ -1132,8 +1277,8 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             tracker.engagement_analysis_count += 1
             if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
                 has_raised_hand, matched_points = evaluate_hand_for_face(location, tracker.id)
-                ear, mar = analyze_face_behavior(face_crop)
-                tracker.update_behavior(ear, mar, has_raised_hand, matched_points)
+                ear, mar, head_pitch, pitch_raw_ratio = analyze_face_behavior(face_crop, pitch_baseline=tracker.pitch_baseline)
+                tracker.update_behavior(ear, mar, head_pitch, has_raised_hand, matched_points, head_pitch_raw_ratio=pitch_raw_ratio)
             
             # Re-identify (reduced frequency for stability and speed)
             if tracker.name == "Unknown":
@@ -1211,8 +1356,8 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             
         # Initial behavior analysis
         has_raised_hand, matched_points = evaluate_hand_for_face(location, next_face_id)
-        ear, mar = analyze_face_behavior(face_crop)
-        tracker.update_behavior(ear, mar, has_raised_hand, matched_points)
+        ear, mar, head_pitch, pitch_raw_ratio = analyze_face_behavior(face_crop, pitch_baseline=tracker.pitch_baseline)
+        tracker.update_behavior(ear, mar, head_pitch, has_raised_hand, matched_points, head_pitch_raw_ratio=pitch_raw_ratio)
         
         face_tracker[next_face_id] = tracker
         next_face_id += 1
@@ -1400,8 +1545,23 @@ def get_frame():
             hand_count = 0
             print(f"Error during face recognition: {e}")
     else:
+        # Skip-detection frame: still run engagement analysis so sleep counter can recover
         for tracker in face_tracker.values():
             tracker.increment_missed_frames()
+            # Run engagement on tracked faces even on skip frames
+            top, right, bottom, left = tracker.location
+            h_frame, w_frame = frame.shape[:2] if frame is not None else (0, 0)
+            if h_frame > 0 and w_frame > 0:
+                top_s = max(0, min(top, h_frame - 1))
+                bottom_s = max(0, min(bottom, h_frame))
+                left_s = max(0, min(left, w_frame - 1))
+                right_s = max(0, min(right, w_frame))
+                face_crop = frame[top_s:bottom_s, left_s:right_s]
+                if face_crop is not None and face_crop.size > 0:
+                    tracker.engagement_analysis_count += 1
+                    if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
+                        ear, mar, head_pitch, pitch_raw_ratio = analyze_face_behavior(face_crop, pitch_baseline=tracker.pitch_baseline)
+                        tracker.update_behavior(ear, mar, head_pitch, False, 0, head_pitch_raw_ratio=pitch_raw_ratio)
     
     detected_faces = []
     for tracker_id, tracker in list(face_tracker.items()):
@@ -1590,6 +1750,19 @@ def process_frame():
                         # Slow missed_frames growth when template tracking succeeds
                         if tracker.missed_frames % 2 == 0:
                             tracker.missed_frames += 1
+                        # Run engagement analysis even on skip-detection frames
+                        top, right, bottom, left = tracker.location
+                        h_f, w_f = frame.shape[:2]
+                        top_s = max(0, min(top, h_f - 1))
+                        bottom_s = max(0, min(bottom, h_f))
+                        left_s = max(0, min(left, w_f - 1))
+                        right_s = max(0, min(right, w_f))
+                        face_crop = frame[top_s:bottom_s, left_s:right_s]
+                        if face_crop is not None and face_crop.size > 0:
+                            tracker.engagement_analysis_count += 1
+                            if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
+                                ear, mar, head_pitch, pitch_raw_ratio = analyze_face_behavior(face_crop, pitch_baseline=tracker.pitch_baseline)
+                                tracker.update_behavior(ear, mar, head_pitch, False, 0, head_pitch_raw_ratio=pitch_raw_ratio)
                     else:
                         tracker.increment_missed_frames()
                     if tracker.is_expired():
