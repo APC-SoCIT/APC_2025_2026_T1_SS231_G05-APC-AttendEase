@@ -14,6 +14,7 @@ from collections import Counter
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import threading
+import urllib.request
 
 # Load environment variables from parent directory
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.localConfigs')
@@ -345,8 +346,8 @@ VECTOR_SIMILARITY_THRESHOLD = float(os.getenv('VECTOR_SIMILARITY_THRESHOLD', '0.
 TRACE_LOG_INTERVAL = 30     # Log every N frames/calls (plus first few warmup calls)
 
 # Tracking Configuration
-TRACKING_FRAMES = 15
-FACE_DISTANCE_THRESHOLD = 360  # Prevent duplicate trackers during fast motion
+TRACKING_FRAMES = 45  # ~4.5s at 10fps; keeps people tracked through brief head turns
+FACE_DISTANCE_THRESHOLD = 400  # Slightly wider matching radius for head-turn re-catches
 TRACKER_MERGE_THRESHOLD = 180  # Merge trackers within this distance with same name
 LOCATION_SMOOTHING_FACTOR = 0.4
 SMOOTHING_DISTANCE_THRESHOLD = 120
@@ -363,7 +364,7 @@ SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 sec
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
 HAND_RAISE_FRAMES_THRESHOLD = 2  # Need 2+ consecutive frames to confirm hand raised
 HAND_DECAY_MISS_FRAMES = 2  # Require consecutive misses before lowering hand counter
-MIN_FACE_SIZE = 40  # Minimum face width/height in pixels to filter false detections
+MIN_FACE_SIZE = 25  # Minimum face width/height in pixels to filter false detections (lowered for distant faces)
 HAND_HORIZONTAL_FACTOR = 1.1
 HAND_HORIZONTAL_MIN = 0.12
 HAND_HORIZONTAL_MAX = 0.45
@@ -429,6 +430,11 @@ class FaceTracker:
         self.current_engagement_score = 75.0 # Start at attentive
         self.engagement_level = 'engaged'
         self.engagement_analysis_count = 0
+        
+        # Template-based head tracking
+        self.head_template = None       # Grayscale template of head+shoulder region
+        self.template_size = None       # (w, h) of the template
+        self.template_origin = None     # (top, left) of template in frame coords
         
     @staticmethod
     def _center(location):
@@ -566,6 +572,96 @@ class FaceTracker:
             "raw_hand_detected": bool(self.raw_hand_detected),
             "matched_hand_points": int(self.matched_hand_points)
         }
+
+    # ---- Template-based head tracking ----
+
+    def update_template(self, frame, location):
+        """Cache a grayscale template of the wider head+shoulder region.
+        
+        Called whenever the face detector successfully finds this person so the
+        template stays fresh and adapts to appearance changes.
+        """
+        try:
+            fh, fw = frame.shape[:2]
+            top, right, bottom, left = location
+            face_w = right - left
+            face_h = bottom - top
+            # Pad by 1.5x around the face to capture head + shoulders
+            pad_x = int(face_w * 0.75)
+            pad_y = int(face_h * 0.75)
+            t_top = max(0, top - pad_y)
+            t_left = max(0, left - pad_x)
+            t_bottom = min(fh, bottom + pad_y)
+            t_right = min(fw, right + pad_x)
+            crop = frame[t_top:t_bottom, t_left:t_right]
+            if crop.size == 0:
+                return
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            self.head_template = gray
+            self.template_size = (t_right - t_left, t_bottom - t_top)
+            self.template_origin = (t_top, t_left)
+        except Exception:
+            pass  # Non-critical; template tracking is best-effort
+
+    def template_track(self, frame):
+        """Try to locate the head in the current frame using template matching.
+        
+        Searches a neighbourhood around the tracker's predicted position.
+        Returns the new (top, right, bottom, left) location or None if not found.
+        """
+        if self.head_template is None or self.location is None:
+            return None
+        try:
+            fh, fw = frame.shape[:2]
+            top, right, bottom, left = self.location
+            face_w = right - left
+            face_h = bottom - top
+            tmpl_h, tmpl_w = self.head_template.shape[:2]
+
+            # Define a search region ~2.5x face size around current predicted center
+            cx = (left + right) // 2
+            cy = (top + bottom) // 2
+            search_pad_x = max(tmpl_w, int(face_w * 1.5))
+            search_pad_y = max(tmpl_h, int(face_h * 1.5))
+
+            s_top = max(0, cy - search_pad_y)
+            s_left = max(0, cx - search_pad_x)
+            s_bottom = min(fh, cy + search_pad_y)
+            s_right = min(fw, cx + search_pad_x)
+
+            search_region = frame[s_top:s_bottom, s_left:s_right]
+            if search_region.shape[0] < tmpl_h or search_region.shape[1] < tmpl_w:
+                return None
+
+            gray_region = cv2.cvtColor(search_region, cv2.COLOR_BGR2GRAY)
+            result = cv2.matchTemplate(gray_region, self.head_template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+            TEMPLATE_MATCH_THRESHOLD = 0.35
+            if max_val < TEMPLATE_MATCH_THRESHOLD:
+                return None
+
+            # max_loc is (x, y) within the search region — convert back to frame coords
+            match_left = s_left + max_loc[0]
+            match_top = s_top + max_loc[1]
+
+            # Derive face bbox from the centre of the matched template region
+            tmpl_cx = match_left + tmpl_w // 2
+            tmpl_cy = match_top + tmpl_h // 2
+            new_left = tmpl_cx - face_w // 2
+            new_top = tmpl_cy - face_h // 2
+            new_right = new_left + face_w
+            new_bottom = new_top + face_h
+
+            # Clamp within frame
+            new_top = max(0, min(new_top, fh - 1))
+            new_left = max(0, min(new_left, fw - 1))
+            new_bottom = max(0, min(new_bottom, fh))
+            new_right = max(0, min(new_right, fw))
+
+            return (new_top, new_right, new_bottom, new_left)
+        except Exception:
+            return None
 
 
 # Debug counter for logging frequency
@@ -714,6 +810,39 @@ def calculate_distance(loc1, loc2):
     center1 = ((loc1[1] + loc1[3]) // 2, (loc1[0] + loc1[2]) // 2)
     center2 = ((loc2[1] + loc2[3]) // 2, (loc2[0] + loc2[2]) // 2)
     return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
+
+
+def ensure_yunet_model():
+    """Ensure YuNet model is downloaded. Downloads it if missing."""
+    yunet_url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+    
+    # Get the DeepFace weights directory
+    home_dir = os.path.expanduser("~")
+    weights_dir = os.path.join(home_dir, ".deepface", "weights")
+    model_path = os.path.join(weights_dir, "face_detection_yunet_2023mar.onnx")
+    
+    # Check if model already exists
+    if os.path.exists(model_path):
+        print(f"[OK] YuNet model found at {model_path}")
+        return True
+    
+    # Create weights directory if it doesn't exist
+    os.makedirs(weights_dir, exist_ok=True)
+    
+    # Download the model
+    print(f"[INFO] Downloading YuNet model from {yunet_url}...")
+    print(f"[INFO] This may take a minute. Saving to {model_path}")
+    try:
+        urllib.request.urlretrieve(yunet_url, model_path)
+        print(f"[OK] YuNet model downloaded successfully to {model_path}")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to download YuNet model: {e}")
+        print(f"[INFO] Please manually download from:")
+        print(f"       {yunet_url}")
+        print(f"[INFO] And save to:")
+        print(f"       {model_path}")
+        return False
 
 
 def suppress_overlapping_faces(face_locations, iou_threshold=0.45):
@@ -935,6 +1064,9 @@ def match_faces_to_trackers(face_locations, frame_bgr):
             tracker = face_tracker[best_tracker]
             tracker.identification_count += 1
             
+            # Refresh head template while face is visible
+            tracker.update_template(frame_bgr, location)
+            
             # Engagement Analysis
             tracker.engagement_analysis_count += 1
             if tracker.engagement_analysis_count % ENGAGEMENT_ANALYSIS_INTERVAL == 0:
@@ -1012,6 +1144,9 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         tracker = FaceTracker(next_face_id, name, location)
         if confidence > 0:
             tracker.update_location(location, confidence)
+        
+        # Cache initial head template for tracking
+        tracker.update_template(frame_bgr, location)
             
         # Initial behavior analysis
         has_raised_hand, matched_points = evaluate_hand_for_face(location, next_face_id)
@@ -1021,11 +1156,23 @@ def match_faces_to_trackers(face_locations, frame_bgr):
         face_tracker[next_face_id] = tracker
         next_face_id += 1
     
-    # Handle missed trackers
+    # Handle missed trackers — try template tracking before giving up
     for tracker_id in list(face_tracker.keys()):
         if tracker_id not in matched_trackers:
-            face_tracker[tracker_id].increment_missed_frames()
-            if face_tracker[tracker_id].is_expired():
+            tracker = face_tracker[tracker_id]
+            # Attempt lightweight template-based head tracking
+            tmpl_loc = tracker.template_track(frame_bgr)
+            if tmpl_loc is not None:
+                # Template found the head — update position without resetting missed_frames
+                # (we still want a true face detection to reset missed_frames)
+                tracker.location = tuple(int(v) for v in tmpl_loc)
+                tracker.raw_location = tracker.location
+                # Slow the missed_frames growth: only count every other miss
+                if tracker.missed_frames % 2 == 0:
+                    tracker.missed_frames += 1
+            else:
+                tracker.increment_missed_frames()
+            if tracker.is_expired():
                 del face_tracker[tracker_id]
     
     merge_duplicate_trackers()
@@ -1170,14 +1317,14 @@ def get_frame():
         try:
             detected_faces_df = DeepFace.extract_faces(
                 img_path=frame,
-                detector_backend='opencv',
+                detector_backend='yunet',
                 enforce_detection=False,
                 align=False
             )
             
             face_locations = []
             for face_obj in detected_faces_df:
-                if face_obj['confidence'] > 0.5:
+                if face_obj['confidence'] > 0.35:
                     region = face_obj['facial_area']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
                     # Filter out tiny false-positive detections
@@ -1337,24 +1484,23 @@ def process_frame():
             print(f"[WARN] Received oversized frame ({frame.shape[1]}x{frame.shape[0]}), downscaling to {new_w}x{new_h}")
             frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
-        # Skip-frame optimisation: only run expensive face detection every 3rd frame.
-        # On intermediate frames, reuse existing tracker positions and just
-        # increment missed-frames / run engagement on cached crops.
-        DETECTION_SKIP = 3
+        # Skip-frame optimisation: only run expensive face detection every 2nd frame.
+        # On intermediate frames, use template tracking to follow heads.
+        DETECTION_SKIP = 2
         run_detection = (process_frame_count % DETECTION_SKIP == 1) or len(face_tracker) == 0
 
         try:
             if run_detection:
                 detected_faces_df = DeepFace.extract_faces(
                     img_path=frame,
-                    detector_backend='opencv',
+                    detector_backend='yunet',
                     enforce_detection=False,
                     align=False
                 )
                 
                 face_locations = []
                 for face_obj in detected_faces_df:
-                    if face_obj['confidence'] > 0.5:
+                    if face_obj['confidence'] > 0.35:
                         region = face_obj['facial_area']
                         x, y, w, h = region['x'], region['y'], region['w'], region['h']
                         # Filter out tiny false-positive detections
@@ -1371,11 +1517,20 @@ def process_frame():
                     sys.stderr.flush()
                 hand_count = match_faces_to_trackers(face_locations, frame)
             else:
-                # Intermediate frame: skip detection, just tick existing trackers
+                # Intermediate frame: skip face detection, use template tracking
                 hand_count = 0
                 for tracker_id in list(face_tracker.keys()):
                     tracker = face_tracker[tracker_id]
-                    tracker.increment_missed_frames()
+                    # Try template-based head tracking first
+                    tmpl_loc = tracker.template_track(frame)
+                    if tmpl_loc is not None:
+                        tracker.location = tuple(int(v) for v in tmpl_loc)
+                        tracker.raw_location = tracker.location
+                        # Slow missed_frames growth when template tracking succeeds
+                        if tracker.missed_frames % 2 == 0:
+                            tracker.missed_frames += 1
+                    else:
+                        tracker.increment_missed_frames()
                     if tracker.is_expired():
                         del face_tracker[tracker_id]
             if should_trace_frame:
@@ -1606,6 +1761,14 @@ def debug_status():
 
 if __name__ == '__main__':
     print("Initializing Facial Recognition Service with DeepFace...")
+    
+    # Ensure YuNet model is downloaded
+    print("[INFO] Checking for YuNet face detection model...")
+    if ensure_yunet_model():
+        print("[OK] YuNet model ready")
+    else:
+        print("[WARN] YuNet model download failed. Face detection may not work.")
+        print("[INFO] The service will attempt to use YuNet, but may fail if the model is missing.")
     
     # Load face vectors from database (new vector-based recognition)
     if supabase:
