@@ -18,8 +18,8 @@ const useStyles = makeStyles({
   videoContainer: {
     position: 'relative',
     width: '100%',
-    maxWidth: '640px',
-    height: '480px',
+    maxWidth: '854px',
+    aspectRatio: '16 / 9',
     ...shorthands.border('2px', 'solid', '#ccc'),
     backgroundColor: '#f0f0f0',
     display: 'flex',
@@ -37,8 +37,8 @@ const useStyles = makeStyles({
     position: 'absolute',
     top: '0',
     left: '0',
-    width: '640px',
-    height: '480px',
+    width: '100%',
+    height: '100%',
     pointerEvents: 'none',
     zIndex: '10'
   },
@@ -101,16 +101,10 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
   const cameraActiveRef = useRef(false); // Use ref instead of state to avoid closure issues
-  const processingRef = useRef(false);
-  const processingStartTimeRef = useRef(0); // Track when processing started for watchdog
-  const watchdogTimerRef = useRef(null); // Watchdog timer to detect stuck processing
-  const frameSkipCounterRef = useRef(0); // Counter for frame skipping/throttling
   const processingCanvasRef = useRef(null); // Separate canvas for downscaling high-res frames
-  const cameraResolutionRef = useRef({ width: 640, height: 480 }); // Actual camera resolution
+  const cameraResolutionRef = useRef({ width: 854, height: 480 }); // Actual camera resolution
   const isHighResRef = useRef(false); // Whether camera is providing high-res frames
-  const processingTimesRef = useRef([]); // Rolling window of processing times for adaptive interval
-  const currentIntervalRef = useRef(100); // Current adaptive frame interval in ms
-  const jpegQualityRef = useRef(0.7); // Adaptive JPEG quality based on resolution
+  const jpegQualityRef = useRef(0.75); // Adaptive JPEG quality based on resolution
   const frameTraceCounterRef = useRef(0); // Lightweight live-feed trace counter
 
   const [cameras, setCameras] = useState([]);
@@ -127,22 +121,15 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     disengaged_count: 0
   });
   const [handCount, setHandCount] = useState(0);
-  
-  const frameIntervalRef = useRef(null);
 
   useEffect(() => {
     checkPythonService();
     loadCameras();
 
     return () => {
+      cameraActiveRef.current = false;
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
-      }
-      if (frameIntervalRef.current) {
-        clearInterval(frameIntervalRef.current);
-      }
-      if (watchdogTimerRef.current) {
-        clearTimeout(watchdogTimerRef.current);
       }
     };
   }, []);
@@ -234,14 +221,13 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     try {
       addMessage('Starting camera...', 'info');
 
-      // Use max constraints to force camera to output at most 640x480
-      // This prevents high-res cameras from streaming at 1080p/4K
+      // Request native 16:9 widescreen from the camera (e.g. Logitech MeetUp)
       const constraints = {
         video: {
           deviceId: { exact: selectedCamera },
-          width: { ideal: 640, max: 640 },
-          height: { ideal: 480, max: 480 },
-          frameRate: { ideal: 15, max: 30 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 60 }
         }
       };
 
@@ -262,43 +248,30 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         const actualWidth = videoRef.current.videoWidth;
         const actualHeight = videoRef.current.videoHeight;
         cameraResolutionRef.current = { width: actualWidth, height: actualHeight };
-        isHighResRef.current = actualWidth > 640 || actualHeight > 480;
+        // High-res = anything above the 854x480 processing target
+        isHighResRef.current = actualWidth > 854 || actualHeight > 480;
 
         console.log(`Camera actual resolution: ${actualWidth}x${actualHeight} (high-res: ${isHighResRef.current})`);
         addMessage(`Camera resolution: ${actualWidth}x${actualHeight}`, 'info');
 
         // Set adaptive JPEG quality based on actual resolution
         if (actualWidth > 1280 || actualHeight > 720) {
-          jpegQualityRef.current = 0.6;
-        } else if (actualWidth > 640 || actualHeight > 480) {
-          jpegQualityRef.current = 0.7;
+          jpegQualityRef.current = 0.65;
         } else {
-          jpegQualityRef.current = 0.8;
+          jpegQualityRef.current = 0.75;
         }
 
-        // If camera ignored max constraints, set up fallback processing canvas
-        if (isHighResRef.current) {
-          addMessage(`High-res camera detected (${actualWidth}x${actualHeight}), using downscaled processing`, 'info');
-          // Determine processing resolution
-          const processingWidth = actualWidth > 1920 ? 480 : 640;
-          const processingHeight = actualWidth > 1920 ? 360 : 480;
-
-          // Create offscreen processing canvas
-          const offscreenCanvas = document.createElement('canvas');
-          offscreenCanvas.width = processingWidth;
-          offscreenCanvas.height = processingHeight;
-          processingCanvasRef.current = offscreenCanvas;
-        } else {
-          processingCanvasRef.current = null;
-        }
+        // Always create a 854x480 processing canvas for sending to Python
+        // This ensures consistent 16:9 frames regardless of camera native res
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = 854;
+        offscreenCanvas.height = 480;
+        processingCanvasRef.current = offscreenCanvas;
       }
 
-      // Reset adaptive interval state
-      processingTimesRef.current = [];
-      currentIntervalRef.current = 100;
       frameTraceCounterRef.current = 0;
 
-      cameraActiveRef.current = true; // Set ref immediately for interval callback
+      cameraActiveRef.current = true;
       setCameraActive(true); // Set state for UI
 
       // Notify parent that camera started
@@ -312,8 +285,17 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       console.log('Camera active state set to TRUE');
       addMessage('Camera started successfully!', 'success');
 
-      // Start processing frames with adaptive interval (starts at ~10 FPS)
-      frameIntervalRef.current = setInterval(processFrame, currentIntervalRef.current);
+      // Start sequential frame processing loop
+      // Send a frame, wait for response, then immediately send the next.
+      // This naturally adapts to Python's speed -- no timers or watchdogs needed.
+      const loop = async () => {
+        if (!cameraActiveRef.current) return;
+        await processFrame();
+        if (cameraActiveRef.current) {
+          requestAnimationFrame(loop);
+        }
+      };
+      requestAnimationFrame(loop);
 
     } catch (error) {
       addMessage(`Error starting camera: ${error.message}`, 'error');
@@ -322,21 +304,14 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   };
 
   const stopCamera = async () => {
-    // Clean up watchdog timer
-    if (watchdogTimerRef.current) {
-      clearTimeout(watchdogTimerRef.current);
-      watchdogTimerRef.current = null;
-    }
-    processingRef.current = false;
-    processingStartTimeRef.current = 0;
+    // Stop the sequential loop by flipping the ref immediately
+    cameraActiveRef.current = false;
 
-    // Reset adaptive processing state
-    processingTimesRef.current = [];
-    currentIntervalRef.current = 100;
+    // Reset processing state
     processingCanvasRef.current = null;
     isHighResRef.current = false;
-    jpegQualityRef.current = 0.7;
-    cameraResolutionRef.current = { width: 640, height: 480 };
+    jpegQualityRef.current = 0.75;
+    cameraResolutionRef.current = { width: 854, height: 480 };
 
     // Record checkout time for all currently detected faces before clearing
     if (detectedFaces.length > 0) {
@@ -359,15 +334,6 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       addMessage(`Recorded checkout time: ${checkoutTime}`, 'info');
     }
 
-    // Stop camera IMMEDIATELY (set ref first to stop processFrame)
-    cameraActiveRef.current = false;
-
-    // Stop interval
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
-
     // Stop media stream
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop());
@@ -386,7 +352,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     setTimeout(() => {
       if (overlayRef.current) {
         const ctx = overlayRef.current.getContext('2d');
-        ctx.clearRect(0, 0, 640, 480);
+        ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
         console.log('Canvas cleared');
       }
     }, 50);
@@ -413,57 +379,11 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   };
 
   const processFrame = async () => {
-    // Watchdog: If processing has been stuck for >500ms, force reset
-    if (processingRef.current && processingStartTimeRef.current > 0) {
-      const stuckTime = Date.now() - processingStartTimeRef.current;
-      if (stuckTime > 500) {
-        console.warn(`Processing stuck for ${stuckTime}ms, forcing reset`);
-        processingRef.current = false;
-        processingStartTimeRef.current = 0;
-        frameSkipCounterRef.current = 0; // Reset skip counter
-        if (watchdogTimerRef.current) {
-          clearTimeout(watchdogTimerRef.current);
-          watchdogTimerRef.current = null;
-        }
-      }
-    }
-
     if (!videoRef.current || !canvasRef.current || !cameraActiveRef.current) {
       return; // Skip silently if not ready
     }
 
-    // Frame throttling: Skip frames if processing is slow
-    // If processing is active, skip every other frame to prevent queue buildup
-    if (processingRef.current) {
-      frameSkipCounterRef.current++;
-      // Skip up to 3 frames while processing
-      if (frameSkipCounterRef.current < 3) {
-        return;
-      }
-      // After 3 skipped frames, force reset to prevent infinite skipping
-      if (frameSkipCounterRef.current >= 3) {
-        console.warn('Too many frames skipped, forcing processing reset');
-        processingRef.current = false;
-        processingStartTimeRef.current = 0;
-        frameSkipCounterRef.current = 0;
-      }
-    } else {
-      frameSkipCounterRef.current = 0; // Reset counter when not processing
-    }
-
     try {
-      processingRef.current = true;
-      processingStartTimeRef.current = Date.now();
-      
-      // Set watchdog timer to reset if processing takes too long
-      watchdogTimerRef.current = setTimeout(() => {
-        if (processingRef.current) {
-          console.warn('Processing timeout: forcing reset after 5 seconds');
-          processingRef.current = false;
-          processingStartTimeRef.current = 0;
-        }
-      }, 5000);
-
       const video = videoRef.current;
       const ctx = canvasRef.current.getContext('2d');
 
@@ -472,10 +392,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         return;
       }
 
-      // Use fallback processing canvas for high-res cameras, otherwise use main canvas
+      // Always draw to 854x480 processing canvas for consistent frame size to Python
       let encodeCanvas;
-      if (isHighResRef.current && processingCanvasRef.current) {
-        // High-res fallback: draw to the downscaled processing canvas
+      if (processingCanvasRef.current) {
         const procCanvas = processingCanvasRef.current;
         const procCtx = procCanvas.getContext('2d');
         procCtx.imageSmoothingEnabled = true;
@@ -483,12 +402,12 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
         encodeCanvas = procCanvas;
       } else {
-        // Normal path: draw to the standard 640x480 canvas
-        ctx.drawImage(video, 0, 0, 640, 480);
+        // Fallback: draw to the hidden canvas
+        ctx.drawImage(video, 0, 0, canvasRef.current.width, canvasRef.current.height);
         encodeCanvas = canvasRef.current;
       }
 
-      // Encode with adaptive JPEG quality based on camera resolution
+      // Encode with JPEG quality
       const imageData = encodeCanvas.toDataURL('image/jpeg', jpegQualityRef.current);
       const base64Data = imageData.split(',')[1];
       frameTraceCounterRef.current += 1;
@@ -496,13 +415,13 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       const shouldTraceFrame = frameTraceId <= 5 || frameTraceId % 30 === 0;
       if (shouldTraceFrame) {
         console.log(
-          `[FrameTrace][Frontend] send #${frameTraceId} payload=${base64Data.length} interval=${currentIntervalRef.current}ms`
+          `[FrameTrace][Frontend] send #${frameTraceId} payload=${base64Data.length}`
         );
       }
 
       // Create fetch with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
       const startTime = Date.now();
       const response = await fetch('/api/facial-recognition/process-frame', {
@@ -514,41 +433,8 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       clearTimeout(timeoutId);
 
       const processingTime = Date.now() - startTime;
-      if (processingTime > 200) {
-        console.log(`Slow frame processing: ${processingTime}ms`);
-      }
-
-      // Track processing times for adaptive interval
-      processingTimesRef.current.push(processingTime);
-      if (processingTimesRef.current.length > 5) {
-        processingTimesRef.current.shift();
-      }
-
-      // Adaptive frame interval: adjust based on rolling average processing time
-      if (processingTimesRef.current.length >= 3) {
-        const avgTime = processingTimesRef.current.reduce((a, b) => a + b, 0) / processingTimesRef.current.length;
-        let newInterval = currentIntervalRef.current;
-
-        if (avgTime > 120) {
-          // Processing is slow, back off to 200ms (~5 FPS)
-          newInterval = Math.min(250, currentIntervalRef.current + 20);
-        } else if (avgTime > 80) {
-          // Moderate processing, use 150ms (~6.7 FPS)
-          newInterval = 150;
-        } else if (avgTime < 80) {
-          // Fast processing, speed up to 100ms (~10 FPS)
-          newInterval = Math.max(100, currentIntervalRef.current - 10);
-        }
-
-        // Only restart interval if it changed significantly (>15ms difference)
-        if (Math.abs(newInterval - currentIntervalRef.current) > 15 && cameraActiveRef.current) {
-          currentIntervalRef.current = newInterval;
-          if (frameIntervalRef.current) {
-            clearInterval(frameIntervalRef.current);
-          }
-          frameIntervalRef.current = setInterval(processFrame, newInterval);
-          console.log(`Adaptive interval adjusted to ${newInterval}ms (avg processing: ${avgTime.toFixed(0)}ms)`);
-        }
+      if (shouldTraceFrame) {
+        console.log(`[FrameTrace][Frontend] round-trip ${processingTime}ms`);
       }
 
       if (!response.ok) {
@@ -572,7 +458,6 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         // Update class engagement stats
         if (data.class_engagement) {
           setClassEngagement(data.class_engagement);
-          // Notify parent component of engagement changes
           if (onEngagementUpdate) {
             onEngagementUpdate(data.class_engagement);
           }
@@ -587,7 +472,6 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
           checkOutTime: null,
           status: face.is_confirmed ? 'Present' : 'Tentative',
           isConfirmed: face.is_confirmed,
-          // Engagement data
           engagementScore: face.engagement_score,
           engagementLevel: face.engagement_level,
           isSleeping: face.is_sleeping,
@@ -600,21 +484,11 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
       }
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.error('Frame processing timeout after 5 seconds');
-        addMessage('Frame processing timeout - camera may be too slow', 'error');
+        console.error('Frame processing timeout');
+        addMessage('Frame processing timeout - backend may be overloaded', 'error');
       } else {
         console.error('Frame processing error:', error);
         addMessage(`Frame error: ${error.message}`, 'error');
-      }
-    }
-    finally {
-      // Always cleanup, even on error
-      processingRef.current = false;
-      processingStartTimeRef.current = 0;
-      frameSkipCounterRef.current = 0; // Reset skip counter on completion
-      if (watchdogTimerRef.current) {
-        clearTimeout(watchdogTimerRef.current);
-        watchdogTimerRef.current = null;
       }
     }
   };
@@ -629,11 +503,21 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     }
   };
 
+  // Pick black or white text based on background luminance
+  const getTextColorForBg = (hexColor) => {
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+    // Perceived luminance formula
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000' : '#fff';
+  };
+
   const drawBoundingBoxes = (faces) => {
     if (!overlayRef.current || !cameraActiveRef.current) return;
 
     const ctx = overlayRef.current.getContext('2d');
-    ctx.clearRect(0, 0, 640, 480);
+    ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
 
     faces.forEach(face => {
       if (face.location) {
@@ -656,7 +540,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         ctx.fillStyle = borderColor;
         ctx.fillRect(left, top - 20, nameLabelWidth + 10, 20);
         
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = getTextColorForBg(borderColor);
         ctx.fillText(nameLabel, left + 5, top - 5);
         
         // Draw engagement indicator at bottom (for all detected faces)
@@ -681,7 +565,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         ctx.fillStyle = engagementColor;
         ctx.fillRect(left, bottom, engagementLabelWidth + 10, 18);
         
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = getTextColorForBg(engagementColor);
         ctx.fillText(engagementLabel, left + 5, bottom + 13);
       }
     });
@@ -736,8 +620,8 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
 
       <div className={styles.videoContainer}>
         <video ref={videoRef} className={styles.video} style={{ display: cameraActive ? 'block' : 'none' }} />
-        <canvas ref={canvasRef} width="640" height="480" style={{ display: 'none' }} />
-        <canvas ref={overlayRef} width="640" height="480" className={styles.overlay} />
+        <canvas ref={canvasRef} width="854" height="480" style={{ display: 'none' }} />
+        <canvas ref={overlayRef} width="854" height="480" className={styles.overlay} />
         {!cameraActive && <Text>Camera not active</Text>}
       </div>
 

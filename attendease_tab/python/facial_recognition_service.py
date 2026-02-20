@@ -355,7 +355,7 @@ PREDICTION_DECAY = 0.65
 RAPID_MOVEMENT_THRESHOLD = 60
 
 # Engagement Configuration (Behavioral) - Adjusted for 10 FPS
-ENGAGEMENT_ANALYSIS_INTERVAL = 1  # Analyze every frame for smooth behavior detection
+ENGAGEMENT_ANALYSIS_INTERVAL = 3  # Analyze every 3rd frame to reduce MediaPipe cost
 ENGAGEMENT_HISTORY_SIZE = 30
 EAR_THRESHOLD = 0.20        # Eye Aspect Ratio threshold (closing eyes) - lowered for testing
 MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
@@ -600,11 +600,11 @@ def analyze_face_behavior(face_img):
                 
                 mar = calculate_mar(landmarks)
                 
-                # Debug logging every frame during testing
+                # Debug logging (reduced frequency to avoid I/O overhead)
                 _behavior_debug_counter += 1
-                eyes_status = "CLOSED" if ear < EAR_THRESHOLD else "open"
-                mouth_status = "OPEN" if mar > MAR_THRESHOLD else "closed"
-                if _behavior_debug_counter % 1 == 0:  # Log every frame for debugging
+                if _behavior_debug_counter % 30 == 0:
+                    eyes_status = "CLOSED" if ear < EAR_THRESHOLD else "open"
+                    mouth_status = "OPEN" if mar > MAR_THRESHOLD else "closed"
                     print(f"[Engagement] EAR={ear:.3f} ({eyes_status}), MAR={mar:.3f} ({mouth_status})")
                 
                 return ear, mar
@@ -942,11 +942,11 @@ def match_faces_to_trackers(face_locations, frame_bgr):
                 ear, mar = analyze_face_behavior(face_crop)
                 tracker.update_behavior(ear, mar, has_raised_hand, matched_points)
             
-            # Re-identify (reduced frequency for stability)
+            # Re-identify (reduced frequency for stability and speed)
             if tracker.name == "Unknown":
-                should_identify = (tracker.identification_count % 10 == 0)  # ~1 second at 10 FPS - faster for unknown
+                should_identify = (tracker.identification_count % 15 == 0)  # ~1.5s at 10 FPS
             else:
-                should_identify = (tracker.identification_count % 40 == 0)  # ~4 seconds at 10 FPS
+                should_identify = (tracker.identification_count % 60 == 0)  # ~6s at 10 FPS
 
             if should_trace_match and tracker.name == "Unknown":
                 print(
@@ -1327,37 +1327,57 @@ def process_frame():
             )
         
         # Safety net: downscale if frontend somehow sends a larger-than-expected frame
-        if frame.shape[1] > 640 or frame.shape[0] > 480:
-            print(f"[WARN] Received oversized frame ({frame.shape[1]}x{frame.shape[0]}), downscaling to 640x480")
-            frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_AREA)
+        # Accept up to 854x480 (16:9 widescreen) without resizing
+        MAX_FRAME_W, MAX_FRAME_H = 854, 480
+        if frame.shape[1] > MAX_FRAME_W or frame.shape[0] > MAX_FRAME_H:
+            # Preserve aspect ratio while fitting within the max dimensions
+            scale = min(MAX_FRAME_W / frame.shape[1], MAX_FRAME_H / frame.shape[0])
+            new_w = int(frame.shape[1] * scale)
+            new_h = int(frame.shape[0] * scale)
+            print(f"[WARN] Received oversized frame ({frame.shape[1]}x{frame.shape[0]}), downscaling to {new_w}x{new_h}")
+            frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
+        # Skip-frame optimisation: only run expensive face detection every 3rd frame.
+        # On intermediate frames, reuse existing tracker positions and just
+        # increment missed-frames / run engagement on cached crops.
+        DETECTION_SKIP = 3
+        run_detection = (process_frame_count % DETECTION_SKIP == 1) or len(face_tracker) == 0
+
         try:
-            detected_faces_df = DeepFace.extract_faces(
-                img_path=frame,
-                detector_backend='opencv',
-                enforce_detection=False,
-                align=False
-            )
-            
-            face_locations = []
-            for face_obj in detected_faces_df:
-                if face_obj['confidence'] > 0.5:
-                    region = face_obj['facial_area']
-                    x, y, w, h = region['x'], region['y'], region['w'], region['h']
-                    # Filter out tiny false-positive detections
-                    if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
-                        continue
-                    # Full resolution (no 1/4 scaling)
-                    face_locations.append((y, x+w, y+h, x))
-            
-            face_locations = suppress_overlapping_faces(face_locations)
-            if should_trace_frame:
-                sys.stderr.write(
-                    f"[FrameTrace][Python] raw_detected={len(detected_faces_df)} "
-                    f"filtered_faces={len(face_locations)}\n"
+            if run_detection:
+                detected_faces_df = DeepFace.extract_faces(
+                    img_path=frame,
+                    detector_backend='opencv',
+                    enforce_detection=False,
+                    align=False
                 )
-                sys.stderr.flush()
-            hand_count = match_faces_to_trackers(face_locations, frame)
+                
+                face_locations = []
+                for face_obj in detected_faces_df:
+                    if face_obj['confidence'] > 0.5:
+                        region = face_obj['facial_area']
+                        x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                        # Filter out tiny false-positive detections
+                        if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
+                            continue
+                        face_locations.append((y, x+w, y+h, x))
+                
+                face_locations = suppress_overlapping_faces(face_locations)
+                if should_trace_frame:
+                    sys.stderr.write(
+                        f"[FrameTrace][Python] raw_detected={len(detected_faces_df)} "
+                        f"filtered_faces={len(face_locations)}\n"
+                    )
+                    sys.stderr.flush()
+                hand_count = match_faces_to_trackers(face_locations, frame)
+            else:
+                # Intermediate frame: skip detection, just tick existing trackers
+                hand_count = 0
+                for tracker_id in list(face_tracker.keys()):
+                    tracker = face_tracker[tracker_id]
+                    tracker.increment_missed_frames()
+                    if tracker.is_expired():
+                        del face_tracker[tracker_id]
             if should_trace_frame:
                 sys.stderr.write(
                     f"[FrameTrace][Python] post_match trackers={len(face_tracker)} "
