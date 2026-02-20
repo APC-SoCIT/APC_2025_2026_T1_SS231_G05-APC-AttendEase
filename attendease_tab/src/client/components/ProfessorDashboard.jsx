@@ -55,7 +55,7 @@ const useStyles = makeStyles({
     minHeight: '200px',
   },
 
-  /* ---- Top bar (matches Student Portal) ---- */
+  /* ---- Top bar ---- */
   topBar: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -91,6 +91,19 @@ const useStyles = makeStyles({
     fontSize: '24px',
     color: '#244670',
     '&:hover': { backgroundColor: '#f3f2f1', borderRadius: '4px' },
+  },
+
+  /* ---- Date / Session header ---- */
+  sessionHeader: {
+    ...shorthands.padding('16px', '30px'),
+    color: '#ffffff',
+    fontSize: '20px',
+    fontWeight: '700',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '@media (max-width: 768px)': {
+      fontSize: '16px',
+      ...shorthands.padding('12px', '20px'),
+    },
   },
 
   /* ---- Slide-in sidebar overlay (matches Student Portal) ---- */
@@ -185,8 +198,8 @@ const useStyles = makeStyles({
   /* ---- Dashboard view: two-column grid ---- */
   layout: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    ...shorthands.gap('24px'),
+    gridTemplateColumns: '55% 1fr',
+    ...shorthands.gap('20px'),
     alignItems: 'flex-start',
     width: '100%',
     '@media (max-width: 1200px)': {
@@ -204,7 +217,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     ...shorthands.gap('12px'),
     width: '100%',
-    // reuse base card spacing/appearance
     backgroundColor: '#ffffff',
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -218,13 +230,21 @@ const useStyles = makeStyles({
   rightPanel: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('20px')
+    ...shorthands.gap('16px')
+  },
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    ...shorthands.gap('16px'),
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: '1fr'
+    }
   },
   statsCard: {
     ...shorthands.padding('20px'),
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('16px'),
+    ...shorthands.gap('14px'),
     ...shorthands.border('none'),
     backgroundColor: '#ffffff',
     borderRadius: '12px',
@@ -233,74 +253,64 @@ const useStyles = makeStyles({
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    ...shorthands.gap('16px')
-  },
-  statItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    ...shorthands.gap('8px'),
-    ...shorthands.padding('12px'),
-    backgroundColor: '#f9fafb',
-    borderRadius: '8px',
-    ...shorthands.border('1px', 'solid', '#e1e4e8'),
-  },
-  participantDropdown: {
-    ...shorthands.padding('16px'),
-    ...shorthands.border('1px', 'solid', '#e1e4e8'),
-    borderRadius: '12px',
-    backgroundColor: '#ffffff',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-  },
-  participantHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    pointerEvents: 'auto',
-  },
-  participantToggleButton: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'transparent',
-    border: 'none',
-    padding: 0,
-    cursor: 'pointer',
-    textAlign: 'left',
-    pointerEvents: 'auto',
-    zIndex: 1,
-    '&:hover': {
-      backgroundColor: '#f9fafb',
-      borderRadius: '4px',
-    }
-  },
-  participantContent: {
-    marginTop: '16px',
-    display: 'flex',
-    flexDirection: 'column',
     ...shorthands.gap('12px')
   },
-  participantSection: {
+  statTile: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('8px')
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.padding('14px', '12px'),
+    borderRadius: '10px',
+    borderLeft: '5px solid transparent',
+    minHeight: '80px',
   },
-  participantList: {
-    maxHeight: '150px',
-    overflowY: 'auto',
-    ...shorthands.border('1px', 'solid', '#e6e6e6'),
-    borderRadius: '6px',
-    ...shorthands.padding('8px'),
-    backgroundColor: '#fafafa'
-  },
-  participantItem: {
-    ...shorthands.padding('6px', '8px'),
-    backgroundColor: '#fff',
-    borderRadius: '4px',
+  statTileNumber: {
+    fontSize: '28px',
+    fontWeight: '800',
+    lineHeight: '1',
     marginBottom: '4px',
-    fontSize: '13px'
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  statTileLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  participantCard: {
+    ...shorthands.padding('20px'),
+    borderRadius: '12px',
+    backgroundColor: '#ffffff',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+  },
+  participantContent: {
+    marginTop: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('0px')
+  },
+  participantRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...shorthands.padding('10px', '14px'),
+    backgroundColor: '#e8f4f8',
+    borderRadius: '6px',
+    marginBottom: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#1e3a5f',
+    borderLeft: '4px solid #1e3a5f',
+  },
+  presentBadge: {
+    ...shorthands.padding('4px', '14px'),
+    backgroundColor: '#1e3a5f',
+    color: '#ffffff',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: '600',
+    letterSpacing: '0.3px',
   },
   messagesCard: {
     ...shorthands.padding('16px'),
@@ -431,7 +441,7 @@ function ProfessorDashboard({ userContext }) {
   // Sidebar & view state
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'schedule' | 'export'
-  
+
   // Engagement tracking state
   const [classEngagement, setClassEngagement] = useState({
     average_score: 0,
@@ -439,7 +449,7 @@ function ProfessorDashboard({ userContext }) {
     present_count: 0,
     disengaged_count: 0
   });
-  
+
   // Debug status
   const [debugStatus, setDebugStatus] = useState({
     engagement_enabled: false,
@@ -650,24 +660,24 @@ function ProfessorDashboard({ userContext }) {
       try {
         const response = await fetch('/api/facial-recognition/debug/status');
         const data = await response.json();
-        
+
         if (data.status === 'success') {
           setDebugStatus(data);
-          
+
           // Extract debug messages from tracked faces
           const messages = [];
           messages.push(`Engagement Enabled: ${data.engagement_enabled}`);
           messages.push(`Face Mesh: ${data.face_mesh_detector}`);
           messages.push(`Hand Detector: ${data.hand_detector}`);
           messages.push(`Tracked Faces: ${data.total_faces_tracked}`);
-          
+
           Object.entries(data.tracked_faces || {}).forEach(([id, tracker]) => {
             if (tracker?.ear_history?.length > 0) {
               const lastEAR = tracker.ear_history[tracker.ear_history.length - 1];
               messages.push(`${tracker.name} (ID:${id}): EAR=${lastEAR.toFixed(3)}, Sleeping=${tracker.is_sleeping}`);
             }
           });
-          
+
           setDebugMessages(messages);
         }
       } catch (error) {
@@ -840,7 +850,7 @@ function ProfessorDashboard({ userContext }) {
       const stored = JSON.parse(localStorage.getItem('userData') || '{}');
       if (stored?.firstName) return String(stored.firstName).split(' ')[0];
       if (stored?.givenName) return String(stored.givenName).split(' ')[0];
-    } catch (e) {}
+    } catch (e) { }
     return 'Professor';
   };
 
@@ -920,8 +930,7 @@ function ProfessorDashboard({ userContext }) {
   /* ---- Dashboard View (Camera + Stats + Engagement + Participants) ---- */
   const renderDashboardView = () => (
     <div className={styles.layout}>
-      {/* Welcome header intentionally removed per UX requirement */}
-      {/* Left: Camera Feed and System Messages */}
+      {/* Left: Camera Feed */}
       <div className={styles.leftPanel}>
         <Card className={styles.cameraCard}>
           <div className={styles.cameraHeader}>
@@ -938,241 +947,85 @@ function ProfessorDashboard({ userContext }) {
             onEngagementUpdate={handleEngagementUpdate}
           />
         </Card>
-
-        {/* System Messages */}
-        <div className={styles.messagesCard}>
-          <Text weight="semibold" size={300} style={{ marginBottom: '8px', display: 'block' }}>
-            System Messages
-          </Text>
-          {systemMessages.length === 0 ? (
-            <Text size={200} style={{ color: '#999' }}>No messages yet</Text>
-          ) : (
-            systemMessages.slice(-5).map((msg, idx) => (
-              <div
-                key={idx}
-                style={{
-                  color: msg.type === 'error' ? '#d32f2f' : msg.type === 'success' ? '#2e7d32' : '#666',
-                  fontSize: '12px',
-                  marginBottom: '4px'
-                }}
-              >
-                [{msg.timestamp}] {msg.message}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Debug Information */}
-        <Card className={styles.statsCard}>
-          <Text weight="semibold" size={400}>Debug Information</Text>
-          <div style={{ fontSize: '12px', color: '#333', lineHeight: '1.8', maxHeight: '200px', overflowY: 'auto' }}>
-            {debugMessages.length === 0 ? (
-              <Text size={200} style={{ color: '#999' }}>Loading debug info...</Text>
-            ) : (
-              debugMessages.map((msg, idx) => (
-                <div key={idx} style={{ color: msg.includes('Error') ? '#d32f2f' : msg.includes('Sleeping=true') ? '#ff9800' : '#666' }}>
-                  {msg}
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
       </div>
 
       {/* Right: Stats, Engagement, Participants */}
       <div className={styles.rightPanel}>
-        {/* Stats Card */}
-        <Card className={styles.statsCard}>
-          <Text weight="semibold" size={400}>Live Statistics</Text>
-          <div className={styles.statsGrid}>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Total Classes</Text>
-              <Badge appearance="filled" color="brand" size="extra-large">
-                {totalClasses}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Total Present</Text>
-              <Badge appearance="filled" color="brand" size="extra-large">
-                {totalPresent}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Onsite</Text>
-              <Badge appearance="filled" color="informative" size="extra-large">
-                {onsiteAttendance.length}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Unknown</Text>
-              <Badge appearance="filled" color="important" size="extra-large">
-                {unknownFaces.length}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Total Students</Text>
-              <Badge appearance="filled" color="success" size="extra-large">
-                {totalStudentsOnsite}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Online</Text>
-              <Badge appearance="tint" color="subtle" size="extra-large">
-                N/A
-              </Badge>
-            </div>
-          </div>
-        </Card>
-
-        {/* Engagement Stats Card */}
-        <Card className={styles.statsCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text weight="semibold" size={400}>Class Engagement</Text>
-            <Badge 
-              appearance="filled" 
-              color={
-                classEngagement.average_score >= 70 ? 'success' : 
-                classEngagement.average_score >= 40 ? 'warning' : 
-                'danger'
-              }
-              size="large"
-            >
-              {classEngagement.average_score?.toFixed(0) || 0}% Average
-            </Badge>
-          </div>
-          <div className={styles.statsGrid}>
-            <div className={styles.statItem} style={{ backgroundColor: '#dcfce7' }}>
-              <Text size={300} style={{ color: '#166534' }}>Engaged</Text>
-              <Badge appearance="filled" color="success" size="extra-large">
-                {classEngagement.engaged_count}
-              </Badge>
-            </div>
-            <div className={styles.statItem} style={{ backgroundColor: '#fef3c7' }}>
-              <Text size={300} style={{ color: '#92400e' }}>Present</Text>
-              <Badge appearance="filled" color="warning" size="extra-large">
-                {classEngagement.present_count}
-              </Badge>
-            </div>
-            <div className={styles.statItem} style={{ backgroundColor: '#fee2e2', gridColumn: 'span 2' }}>
-              <Text size={300} style={{ color: '#991b1b' }}>Disengaged</Text>
-              <Badge appearance="filled" color="danger" size="extra-large">
-                {classEngagement.disengaged_count}
-              </Badge>
-            </div>
-          </div>
-          {onsiteAttendance.length === 0 && (
-            <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-              Start the camera to track engagement
-            </Text>
-          )}
-          <Divider style={{ margin: '12px 0 8px 0' }} />
-          <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.6' }}>
-            <div><strong style={{ color: '#166534' }}>Engaged:</strong> Speaking or raising hand</div>
-            <div><strong style={{ color: '#92400e' }}>Present:</strong> Attentive (neutral state)</div>
-            <div><strong style={{ color: '#991b1b' }}>Disengaged:</strong> Sleeping (eyes closed) or looking down</div>
-          </div>
-        </Card>
-
-        {/* Participant Dropdown */}
-        <Card className={styles.participantDropdown}>
-          <div className={styles.participantHeader}>
-            <button
-              type="button"
-              className={styles.participantToggleButton}
-              onClick={() => setParticipantsExpanded((prev) => !prev)}
-              aria-expanded={participantsExpanded}
-              aria-label="Toggle participants list"
-            >
-              <Text weight="semibold">View Participants</Text>
-              {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-            </button>
-          </div>
-
-          {participantsExpanded && (
-            <div className={styles.participantContent}>
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300}>
-                  Onsite ({onsiteAttendance.length})
-                </Text>
-                <div className={styles.participantList}>
-                  {onsiteAttendance.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      No onsite participants yet
-                    </Text>
-                  ) : (
-                    onsiteAttendance.map((p, idx) => (
-                      <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <Text size={300} weight="semibold">{p.name}</Text>
-                          {p.detectedTime && (
-                            <Text size={200} style={{ color: '#666', display: 'block' }}>
-                              {p.detectedTime}
-                            </Text>
-                          )}
-                          {p.dominantEmotion && (
-                            <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
-                              {p.dominantEmotion}
-                            </Text>
-                          )}
-                        </div>
-                        {p.engagementLevel && (
-                          <Badge 
-                            appearance="filled"
-                            color={
-                              p.engagementLevel === 'engaged' ? 'success' : 
-                              p.engagementLevel === 'present' ? 'warning' : 
-                              'danger'
-                            }
-                            size="small"
-                          >
-                            {Number.isFinite(Number(p.engagementScore))
-                              ? `${Number(p.engagementScore).toFixed(0)}%`
-                              : 'N/A'}
-                          </Badge>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
+        {/* Stats + Engagement side by side */}
+        <div className={styles.statsRow}>
+          {/* Live Statistics Card */}
+          <Card className={styles.statsCard}>
+            <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Live Statistics</Text>
+            <div className={styles.statsGrid}>
+              <div className={styles.statTile} style={{ backgroundColor: '#03346E' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{totalClasses}</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Total Student</span>
               </div>
-
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300}>
-                  Unknown ({unknownFaces.length})
-                </Text>
-                <div className={styles.participantList}>
-                  {unknownFaces.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      No unknown faces detected
-                    </Text>
-                  ) : (
-                    unknownFaces.map((p, idx) => (
-                      <div key={idx} className={styles.participantItem}>
-                        <Text size={300}>Unknown Face #{idx + 1}</Text>
-                        {p.detectedTime && (
-                          <Text size={200} style={{ color: '#666' }}>
-                            {p.detectedTime}
-                          </Text>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#021526' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{totalPresent}</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Total Present</span>
               </div>
-
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300} style={{ color: '#999' }}>
-                  Online (0)
-                </Text>
-                <div className={styles.participantList}>
-                  <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                    Online tracking paused
-                  </Text>
-                </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#EEF7FF' }}>
+                <span className={styles.statTileNumber} style={{ color: '#1e3a5f' }}>{onsiteAttendance.length}</span>
+                <span className={styles.statTileLabel} style={{ color: '#555' }}>Onsite Students</span>
+              </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#CDE8E5' }}>
+                <span className={styles.statTileNumber} style={{ color: '#1e3a5f' }}>{totalStudentsOnsite}</span>
+                <span className={styles.statTileLabel} style={{ color: '#555' }}>Online Students</span>
               </div>
             </div>
-          )}
-        </Card>
+          </Card>
+
+          {/* Class Engagement Card */}
+          <Card className={styles.statsCard}>
+            <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Class Engagement</Text>
+            <div className={styles.statsGrid}>
+              <div className={styles.statTile} style={{ backgroundColor: '#FEEE91' }}>
+                <span className={styles.statTileNumber} style={{ color: '#333' }}>{classEngagement.present_count}</span>
+                <span className={styles.statTileLabel} style={{ color: '#555' }}>Neutral</span>
+              </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#FCB53B' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.average_score?.toFixed(0) || 0}</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Engagement Rate</span>
+              </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#F1511B' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.disengaged_count}</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Disengaged</span>
+              </div>
+              <div className={styles.statTile} style={{ backgroundColor: '#36C752' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.engaged_count}</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Engaged</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* View Participants (always visible) */}
+        <div className={styles.participantCard}>
+          <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>View Participants</Text>
+          <div className={styles.participantContent}>
+            {onsiteAttendance.length === 0 && unknownFaces.length === 0 ? (
+              <Text size={200} style={{ color: '#999', textAlign: 'center', padding: '12px 0' }}>
+                No participants yet — start the camera
+              </Text>
+            ) : (
+              <>
+                {onsiteAttendance.map((p, idx) => (
+                  <div key={`onsite-${idx}`} className={styles.participantRow}>
+                    <span>{p.name}</span>
+                    <span className={styles.presentBadge}>Present</span>
+                  </div>
+                ))}
+                {unknownFaces.map((p, idx) => (
+                  <div key={`unknown-${idx}`} className={styles.participantRow} style={{ borderLeftColor: '#ffba08' }}>
+                    <span>Unknown Face #{idx + 1}</span>
+                    <span className={styles.presentBadge} style={{ backgroundColor: '#b8860b' }}>Tentative</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1352,6 +1205,13 @@ function ProfessorDashboard({ userContext }) {
     <div className={styles.container}>
       {renderTopBar()}
       {renderMenu()}
+
+      {/* Date / Session header */}
+      {currentView === 'dashboard' && (
+        <div className={styles.sessionHeader}>
+          {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | Live Session Feed
+        </div>
+      )}
 
       <div className={styles.contentWrapper}>
         {renderCurrentView()}
