@@ -15,6 +15,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 import threading
 import urllib.request
+import shutil
 
 # Load environment variables from parent directory
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.localConfigs')
@@ -358,9 +359,9 @@ RAPID_MOVEMENT_THRESHOLD = 60
 # Engagement Configuration (Behavioral) - Adjusted for 10 FPS
 ENGAGEMENT_ANALYSIS_INTERVAL = 3  # Analyze every 3rd frame to reduce MediaPipe cost
 ENGAGEMENT_HISTORY_SIZE = 30
-EAR_THRESHOLD = 0.20        # Eye Aspect Ratio threshold (closing eyes) - lowered for testing
+EAR_THRESHOLD = 0.18        # Eye Aspect Ratio threshold (closing eyes) - less sensitive to borderline cases
 MAR_THRESHOLD = 0.25        # Mouth Aspect Ratio threshold (opening mouth) - more sensitive
-SLEEP_FRAMES_THRESHOLD = 20 # ~2 seconds at 10 FPS for testing (was 15 = 1.5 seconds)
+SLEEP_FRAMES_THRESHOLD = 45 # ~4.5 seconds at 10 FPS - requires sustained closed eyes to prevent false positives
 SPEAK_FRAMES_THRESHOLD = 5  # ~0.5 seconds at 10 FPS (requires sustained mouth open)
 HAND_RAISE_FRAMES_THRESHOLD = 2  # Need 2+ consecutive frames to confirm hand raised
 HAND_DECAY_MISS_FRAMES = 2  # Require consecutive misses before lowering hand counter
@@ -418,6 +419,7 @@ class FaceTracker:
         self.is_speaking = False
         self.hand_raised = False
         self.sleep_counter = 0
+        self.consecutive_open_frames = 0  # Track consecutive frames with open eyes
         self.speak_counter = 0
         self.hand_raise_counter = 0
         self.hand_miss_streak = 0
@@ -510,11 +512,20 @@ class FaceTracker:
             self.ear_history.append(ear)
             if len(self.ear_history) > ENGAGEMENT_HISTORY_SIZE: self.ear_history.pop(0)
             
-            # Sleeping Logic
+            # Sleeping Logic with improved counter management
             if ear < EAR_THRESHOLD:
+                # Eyes are closed
                 self.sleep_counter += 1
+                self.consecutive_open_frames = 0
             else:
-                self.sleep_counter = max(0, self.sleep_counter - 1)
+                # Eyes are open - decay faster (decrement by 2) and track consecutive open frames
+                self.consecutive_open_frames += 1
+                # Only allow full reset if eyes have been open for at least 5 consecutive frames
+                if self.consecutive_open_frames >= 5:
+                    self.sleep_counter = max(0, self.sleep_counter - 2)
+                else:
+                    # Still decay but slower until we have confidence eyes are truly open
+                    self.sleep_counter = max(0, self.sleep_counter - 1)
             
             was_sleeping = self.is_sleeping
             self.is_sleeping = self.sleep_counter > SLEEP_FRAMES_THRESHOLD
@@ -524,6 +535,12 @@ class FaceTracker:
                 print(f"[{self.name}] SLEEPING detected (eyes closed for {self.sleep_counter} frames)")
             elif not self.is_sleeping and was_sleeping:
                 print(f"[{self.name}] AWAKE (eyes opened)")
+        else:
+            # MediaPipe failed - slow decay to prevent false positives
+            # Only decay every other frame to be conservative
+            if self.sleep_counter > 0 and self.sleep_counter % 2 == 0:
+                self.sleep_counter = max(0, self.sleep_counter - 1)
+            # Don't increment consecutive_open_frames on MediaPipe failures
             
         # Update MAR history
         if mar is not None:
@@ -813,35 +830,79 @@ def calculate_distance(loc1, loc2):
 
 
 def ensure_yunet_model():
-    """Ensure YuNet model is downloaded. Downloads it if missing."""
+    """Ensure YuNet model is available. Checks local project first, then user home, then downloads if needed."""
     yunet_url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
     
-    # Get the DeepFace weights directory
+    # Priority 1: Check local project models directory (best - included in repo)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    local_model_path = os.path.join(script_dir, 'models', 'face_detection_yunet_2023mar.onnx')
+    
+    # Get the DeepFace weights directory (where DeepFace expects to find it)
     home_dir = os.path.expanduser("~")
     weights_dir = os.path.join(home_dir, ".deepface", "weights")
-    model_path = os.path.join(weights_dir, "face_detection_yunet_2023mar.onnx")
-    
-    # Check if model already exists
-    if os.path.exists(model_path):
-        print(f"[OK] YuNet model found at {model_path}")
-        return True
+    deepface_model_path = os.path.join(weights_dir, "face_detection_yunet_2023mar.onnx")
     
     # Create weights directory if it doesn't exist
     os.makedirs(weights_dir, exist_ok=True)
     
-    # Download the model
-    print(f"[INFO] Downloading YuNet model from {yunet_url}...")
-    print(f"[INFO] This may take a minute. Saving to {model_path}")
+    # If local project model exists, copy it to DeepFace location (if not already there or outdated)
+    if os.path.exists(local_model_path):
+        print(f"[OK] YuNet model found in project: {local_model_path}")
+        
+        # Copy to DeepFace location if it doesn't exist or is older
+        copy_needed = False
+        if not os.path.exists(deepface_model_path):
+            copy_needed = True
+        else:
+            # Check if local is newer
+            local_mtime = os.path.getmtime(local_model_path)
+            deepface_mtime = os.path.getmtime(deepface_model_path)
+            if local_mtime > deepface_mtime:
+                copy_needed = True
+        
+        if copy_needed:
+            try:
+                shutil.copy2(local_model_path, deepface_model_path)
+                print(f"[OK] Copied YuNet model to DeepFace location: {deepface_model_path}")
+            except Exception as e:
+                print(f"[WARN] Could not copy model to DeepFace location: {e}")
+                print(f"[INFO] DeepFace may not find the model. Using local path may require configuration.")
+        else:
+            print(f"[OK] YuNet model already in DeepFace location (up to date)")
+        
+        return True
+    
+    # Priority 2: Check user's DeepFace weights directory (already downloaded)
+    if os.path.exists(deepface_model_path):
+        print(f"[OK] YuNet model found in user directory: {deepface_model_path}")
+        return True
+    
+    # Priority 3: Download to project directory (so it can be committed to repo)
+    print(f"[INFO] YuNet model not found. Downloading to project directory...")
+    print(f"[INFO] This will save it to: {local_model_path}")
+    
+    # Create models directory if it doesn't exist
+    os.makedirs(os.path.dirname(local_model_path), exist_ok=True)
+    
     try:
-        urllib.request.urlretrieve(yunet_url, model_path)
-        print(f"[OK] YuNet model downloaded successfully to {model_path}")
+        urllib.request.urlretrieve(yunet_url, local_model_path)
+        print(f"[OK] YuNet model downloaded to project: {local_model_path}")
+        
+        # Also copy to DeepFace location
+        try:
+            shutil.copy2(local_model_path, deepface_model_path)
+            print(f"[OK] Copied to DeepFace location: {deepface_model_path}")
+        except Exception as e:
+            print(f"[WARN] Could not copy to DeepFace location: {e}")
+        
+        print(f"[INFO] Consider committing this file to your repository for faster deployments")
         return True
     except Exception as e:
         print(f"[ERROR] Failed to download YuNet model: {e}")
         print(f"[INFO] Please manually download from:")
         print(f"       {yunet_url}")
         print(f"[INFO] And save to:")
-        print(f"       {model_path}")
+        print(f"       {local_model_path}")
         return False
 
 
