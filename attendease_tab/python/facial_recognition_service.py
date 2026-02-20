@@ -1530,7 +1530,7 @@ def get_frame():
             
             face_locations = []
             for face_obj in detected_faces_df:
-                if face_obj['confidence'] > 0.35:
+                if face_obj['confidence'] > 0.25:
                     region = face_obj['facial_area']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
                     # Filter out tiny false-positive detections
@@ -1695,8 +1695,8 @@ def process_frame():
             )
         
         # Safety net: downscale if frontend somehow sends a larger-than-expected frame
-        # Accept up to 854x480 (16:9 widescreen) without resizing
-        MAX_FRAME_W, MAX_FRAME_H = 854, 480
+        # Accept up to 1280x720 (HD 16:9) without resizing
+        MAX_FRAME_W, MAX_FRAME_H = 1280, 720
         if frame.shape[1] > MAX_FRAME_W or frame.shape[0] > MAX_FRAME_H:
             # Preserve aspect ratio while fitting within the max dimensions
             scale = min(MAX_FRAME_W / frame.shape[1], MAX_FRAME_H / frame.shape[0])
@@ -1721,7 +1721,7 @@ def process_frame():
                 
                 face_locations = []
                 for face_obj in detected_faces_df:
-                    if face_obj['confidence'] > 0.35:
+                    if face_obj['confidence'] > 0.25:
                         region = face_obj['facial_area']
                         x, y, w, h = region['x'], region['y'], region['w'], region['h']
                         # Filter out tiny false-positive detections

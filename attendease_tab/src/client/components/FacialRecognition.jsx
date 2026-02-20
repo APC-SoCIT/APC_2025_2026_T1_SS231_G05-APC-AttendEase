@@ -18,7 +18,7 @@ const useStyles = makeStyles({
   videoContainer: {
     position: 'relative',
     width: '100%',
-    maxWidth: '854px',
+    maxWidth: '1280px',
     aspectRatio: '16 / 9',
     ...shorthands.border('2px', 'solid', '#ccc'),
     backgroundColor: '#f0f0f0',
@@ -102,9 +102,10 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
   const overlayRef = useRef(null);
   const cameraActiveRef = useRef(false); // Use ref instead of state to avoid closure issues
   const processingCanvasRef = useRef(null); // Separate canvas for downscaling high-res frames
-  const cameraResolutionRef = useRef({ width: 854, height: 480 }); // Actual camera resolution
+  const cameraResolutionRef = useRef({ width: 1280, height: 720 }); // Actual camera resolution
+  const processingDimsRef = useRef({ width: 1280, height: 720 }); // Dims used for processing canvas
   const isHighResRef = useRef(false); // Whether camera is providing high-res frames
-  const jpegQualityRef = useRef(0.75); // Adaptive JPEG quality based on resolution
+  const jpegQualityRef = useRef(0.70); // Adaptive JPEG quality based on resolution
   const frameTraceCounterRef = useRef(0); // Lightweight live-feed trace counter
 
   const [cameras, setCameras] = useState([]);
@@ -248,25 +249,46 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         const actualWidth = videoRef.current.videoWidth;
         const actualHeight = videoRef.current.videoHeight;
         cameraResolutionRef.current = { width: actualWidth, height: actualHeight };
-        // High-res = anything above the 854x480 processing target
-        isHighResRef.current = actualWidth > 854 || actualHeight > 480;
+        // High-res = anything above the 1280x720 processing cap
+        isHighResRef.current = actualWidth > 1280 || actualHeight > 720;
 
-        console.log(`Camera actual resolution: ${actualWidth}x${actualHeight} (high-res: ${isHighResRef.current})`);
-        addMessage(`Camera resolution: ${actualWidth}x${actualHeight}`, 'info');
+        // Compute processing dimensions: use camera native res capped at 1280x720
+        const MAX_PROC_W = 1280;
+        const MAX_PROC_H = 720;
+        let procW = actualWidth;
+        let procH = actualHeight;
+        if (procW > MAX_PROC_W || procH > MAX_PROC_H) {
+          const scale = Math.min(MAX_PROC_W / procW, MAX_PROC_H / procH);
+          procW = Math.round(procW * scale);
+          procH = Math.round(procH * scale);
+        }
+        processingDimsRef.current = { width: procW, height: procH };
 
-        // Set adaptive JPEG quality based on actual resolution
-        if (actualWidth > 1280 || actualHeight > 720) {
-          jpegQualityRef.current = 0.65;
+        console.log(`Camera actual resolution: ${actualWidth}x${actualHeight} → processing: ${procW}x${procH}`);
+        addMessage(`Camera resolution: ${actualWidth}x${actualHeight} → processing: ${procW}x${procH}`, 'info');
+
+        // Set adaptive JPEG quality based on processing resolution
+        if (procW > 960) {
+          jpegQualityRef.current = 0.65;   // 1280x720 class
         } else {
-          jpegQualityRef.current = 0.75;
+          jpegQualityRef.current = 0.75;   // smaller frames
         }
 
-        // Always create a 854x480 processing canvas for sending to Python
-        // This ensures consistent 16:9 frames regardless of camera native res
+        // Create processing canvas at the computed dimensions
         const offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.width = 854;
-        offscreenCanvas.height = 480;
+        offscreenCanvas.width = procW;
+        offscreenCanvas.height = procH;
         processingCanvasRef.current = offscreenCanvas;
+
+        // Resize overlay + hidden canvas to match processing dims
+        if (canvasRef.current) {
+          canvasRef.current.width = procW;
+          canvasRef.current.height = procH;
+        }
+        if (overlayRef.current) {
+          overlayRef.current.width = procW;
+          overlayRef.current.height = procH;
+        }
       }
 
       frameTraceCounterRef.current = 0;
@@ -310,8 +332,9 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
     // Reset processing state
     processingCanvasRef.current = null;
     isHighResRef.current = false;
-    jpegQualityRef.current = 0.75;
-    cameraResolutionRef.current = { width: 854, height: 480 };
+    jpegQualityRef.current = 0.70;
+    cameraResolutionRef.current = { width: 1280, height: 720 };
+    processingDimsRef.current = { width: 1280, height: 720 };
 
     // Record checkout time for all currently detected faces before clearing
     if (detectedFaces.length > 0) {
@@ -392,7 +415,7 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
         return;
       }
 
-      // Always draw to 854x480 processing canvas for consistent frame size to Python
+      // Draw to processing canvas (dynamic resolution, capped at 1280x720)
       let encodeCanvas;
       if (processingCanvasRef.current) {
         const procCanvas = processingCanvasRef.current;
@@ -620,8 +643,8 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
 
       <div className={styles.videoContainer}>
         <video ref={videoRef} className={styles.video} style={{ display: cameraActive ? 'block' : 'none' }} />
-        <canvas ref={canvasRef} width="854" height="480" style={{ display: 'none' }} />
-        <canvas ref={overlayRef} width="854" height="480" className={styles.overlay} />
+        <canvas ref={canvasRef} width="1280" height="720" style={{ display: 'none' }} />
+        <canvas ref={overlayRef} width="1280" height="720" className={styles.overlay} />
         {!cameraActive && <Text>Camera not active</Text>}
       </div>
 
