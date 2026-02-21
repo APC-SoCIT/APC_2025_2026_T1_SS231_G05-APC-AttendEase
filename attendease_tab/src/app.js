@@ -4,7 +4,6 @@ import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import send from 'send';
-import QRCode from 'qrcode';
 import axios from 'axios';
 import { Client } from '@microsoft/microsoft-graph-client';
 import { ClientSecretCredential } from '@azure/identity';
@@ -41,60 +40,6 @@ const distPath = path.join(__dirname, "..", "dist");
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   console.log('✅ Serving React app from /dist');
-}
-
-// API endpoint to generate QR code
-app.post('/api/generate-qr', async (req, res) => {
-  try {
-    const { token, duration } = req.body;
-    
-    // Create QR code URL that points to scan endpoint
-    const scanUrl = `http://localhost:3333/scan?token=${token}`;
-    
-    // Generate QR code as data URL
-    const qrCodeDataUrl = await QRCode.toDataURL(scanUrl);
-    
-    console.log(`\n=== QR CODE GENERATED ===`);
-    console.log(`Token: ${token}`);
-    console.log(`Duration: ${duration} minutes`);
-    console.log(`Scan URL: ${scanUrl}`);
-    console.log(`Generated at: ${new Date().toISOString()}`);
-    console.log(`========================\n`);
-    
-    res.json({ qrCodeUrl: qrCodeDataUrl });
-  } catch (error) {
-    console.error('Error generating QR code:', error);
-    res.status(500).json({ error: 'Failed to generate QR code' });
-  }
-});
-
-// Scan endpoint (simulates someone scanning the QR code)
-app.get('/scan', (req, res) => {
-  const { token } = req.query;
-  
-  // Generate device ID (simplified for prototype)
-  const deviceId = generateDeviceId();
-  
-  // Log to professor's console (simulated)
-  console.log(`\n=== DEVICE SCANNED QR CODE ===`);
-  console.log(`Token: ${token}`);
-  console.log(`Device ID: ${deviceId}`);
-  console.log(`Scanned at: ${new Date().toISOString()}`);
-  console.log(`==============================\n`);
-  
-  res.send(`
-    <h1>QR Code Scanned Successfully!</h1>
-    <p>Token: ${token}</p>
-    <p>Device ID: ${deviceId}</p>
-    <p>Check the professor's console for attendance data.</p>
-  `);
-});
-
-// Simple device ID generator (for prototype)
-function generateDeviceId() {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 15);
-  return `device_${timestamp}_${random}`;
 }
 
 // Facial Recognition API endpoints
