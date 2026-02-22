@@ -13,13 +13,13 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('15px'),
-    marginTop: '15px'
+    marginTop: '0px'
   },
   videoContainer: {
     position: 'relative',
     width: '100%',
-    maxWidth: '640px',
-    height: '480px',
+    maxWidth: '1000px',
+    height: '525px',
     ...shorthands.border('2px', 'solid', '#ccc'),
     backgroundColor: '#f0f0f0',
     display: 'flex',

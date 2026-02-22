@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   Badge,
@@ -19,7 +19,9 @@ import {
   Edit24Regular,
   Delete24Regular,
   EyeOff20Regular,
-  Eye20Regular
+  Eye20Regular,
+  ArrowDownload20Regular,
+  Checkmark20Regular
 } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import ExportPanel from './ExportPanel';
@@ -95,13 +97,13 @@ const useStyles = makeStyles({
 
   /* ---- Date / Session header ---- */
   sessionHeader: {
-    ...shorthands.padding('16px', '30px'),
+    ...shorthands.padding('40px', '30px'),
     color: '#ffffff',
-    fontSize: '20px',
-    fontWeight: '700',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: '36px',
+    fontWeight: '800',
+    marginBottom: '8px',
     '@media (max-width: 768px)': {
-      fontSize: '16px',
+      fontSize: '28px',
       ...shorthands.padding('12px', '20px'),
     },
   },
@@ -225,7 +227,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('6px'),
-    marginBottom: '8px'
+    marginBottom: '5px'
   },
   rightPanel: {
     display: 'flex',
@@ -312,123 +314,279 @@ const useStyles = makeStyles({
     fontWeight: '600',
     letterSpacing: '0.3px',
   },
-  messagesCard: {
-    ...shorthands.padding('16px'),
-    backgroundColor: '#ffffff',
-    ...shorthands.border('1px', 'solid', '#e1e4e8'),
-    borderRadius: '12px',
-    maxHeight: '200px',
-    overflowY: 'auto',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-  },
 
   /* ---- Schedule view ---- */
   scheduleCard: {
-    ...shorthands.padding('20px'),
+    ...shorthands.padding('24px', '32px'),
     backgroundColor: '#ffffff',
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('16px'),
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
   scheduleHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: '24px',
+  },
+  scheduleMainTitle: {
+    fontSize: '40px',
+    fontWeight: '800',
+    color: '#2b2e63',
+    ...shorthands.margin(0),
+    lineHeight: '1.2',
+    letterSpacing: '-1px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  scheduleSubtitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+  },
+  scheduleTableHeader: {
+    display: 'grid',
+    gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 120px', 
+    alignItems: 'center',
+    backgroundColor: '#f4f6f8', 
+    borderRadius: '8px',        
+    ...shorthands.padding('16px', '24px'), 
+    marginBottom: '12px',
+  },
+  tableHeaderText: {
+    color: '#8ba0b2',           
+    fontSize: '13px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  tableHeaderCenter: {
+    color: '#8ba0b2',           
+    fontSize: '13px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    textAlign: 'center',
   },
   scheduleList: {
     display: 'flex',
     flexDirection: 'column',
-    ...shorthands.gap('12px'),
     maxHeight: '600px',
-    overflowY: 'auto'
+    overflowY: 'auto',
   },
   scheduleItem: {
-    ...shorthands.padding('12px'),
-    ...shorthands.border('1px', 'solid', '#e0e0e0'),
-    borderRadius: '6px',
-    backgroundColor: '#fafafa',
-    display: 'flex',
-    flexDirection: 'column',
-    ...shorthands.gap('6px'),
-    position: 'relative',
-    '&:hover': {
-      backgroundColor: '#f0f0f0'
-    }
-  },
-  scheduleItemActive: {
-    ...shorthands.border('2px', 'solid', '#107c10'),
-    backgroundColor: '#e8f5e9'
-  },
-  scheduleColorBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: '4px',
-    borderTopLeftRadius: '6px',
-    borderBottomLeftRadius: '6px'
-  },
-  scheduleItemContent: {
-    marginLeft: '12px'
-  },
-  scheduleItemRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  scheduleDays: {
-    display: 'flex',
-    flexDirection: 'row',
+    display: 'grid',
+    gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 120px',
     alignItems: 'center',
-    ...shorthands.gap('6px'),
-    flexWrap: 'nowrap',
-    overflowX: 'auto'
+    ...shorthands.padding('16px', '24px'), 
+    ...shorthands.borderBottom('1px', 'solid', '#f9f9f9'),
+    transition: 'background-color 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#fcfcfc',
+    },
   },
-  dayBadge: {
-    fontSize: '11px',
-    padding: '2px 6px',
-    display: 'inline-flex',
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+  classIdentityWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    ...shorthands.gap('12px'),
+  },
+  classColorDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  scheduleItemText: {
+    color: '#2b2e63', 
+    fontSize: '14px',
+    fontWeight: 'bold',
+  },
+  scheduleItemTextCenter: {
+    color: '#2b2e63', 
+    fontSize: '14px',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  scheduleActions: {
+    display: 'flex',
+    ...shorthands.gap('16px'),
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  enterActionText: {
+    color: '#ffffff',
+    backgroundColor: '#2b2e63', 
+    fontWeight: '600',
+    fontSize: '12px',
+    letterSpacing: '0.5px',
+    ...shorthands.padding('6px', '16px'),
+    borderRadius: '20px',       
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#1e214d', 
+    },
+  },
+  actionIcon: {
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
   },
 
-  /* ---- Export / Schedule view wrapper ---- */
+  /* ---- View wrappers ---- */
   viewWrapper: {
     width: '100%',
-    maxWidth: '900px',
+    maxWidth: '1200px',
     marginLeft: 'auto',
     marginRight: 'auto',
     display: 'flex',
     flexDirection: 'column',
     ...shorthands.gap('20px'),
   },
-  viewTitle: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: '4px',
+
+  /* ---- CLASS RECORDS VIEW (NEW STYLES) ---- */
+  exportMainCard: {
+    ...shorthands.padding('40px'),
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('12px'),
+  },
+  exportMainTitle: {
+    fontSize: '40px',
+    fontWeight: '800',
+    color: '#2b2e63',
+    ...shorthands.margin(0),
+    lineHeight: '1.2',
+    letterSpacing: '-1px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
-  scheduleTitle: {
+  exportSubtitle: {
     fontSize: '20px',
     fontWeight: '700',
-    color: '#244670',
-    margin: 0,
-    textAlign: 'left',
-    lineHeight: '1.2',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    '@media (max-width: 768px)': {
-      fontSize: '18px',
-      marginBottom: '8px',
-      lineHeight: '1.2',
-      ...shorthands.padding('0', '10px')
+    color: '#000000',
+    marginTop: '16px',
+    marginBottom: '4px',
+  },
+  exportDescText: {
+    fontSize: '14px',
+    color: '#333333',
+  },
+  exportGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    ...shorthands.gap('24px'),
+    marginTop: '24px',
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: '1fr'
     }
   },
+  classExportCard: {
+    ...shorthands.padding('24px'),
+    ...shorthands.border('1px', 'solid', '#d1d5db'),
+    borderRadius: '16px',
+    backgroundColor: '#ffffff',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('20px'),
+  },
+  classExportHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  classExportTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#2b2e63',
+    textTransform: 'uppercase',
+  },
+  classExportActions: {
+    display: 'flex',
+    ...shorthands.gap('8px'),
+  },
+  downloadIconBtn: {
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fdfbfa',
+    ...shorthands.border('1px', 'solid', '#f3f2f1'),
+    borderRadius: '4px',
+    color: '#2b2e63',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#f3f2f1',
+    }
+  },
+  meetingList: {
+    display: 'flex',
+    flexDirection: 'column',
+    ...shorthands.gap('16px'),
+  },
+  meetingItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    ...shorthands.padding('16px', '20px'),
+    ...shorthands.border('1px', 'solid', '#da8300'),
+    borderRadius: '12px',
+    backgroundColor: '#ffffff',
+  },
+  meetingInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    ...shorthands.gap('24px'),
+    '@media (max-width: 600px)': {
+      ...shorthands.gap('12px'),
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+    }
+  },
+  meetingName: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#2b2e63',
+    minWidth: '90px',
+  },
+  meetingDate: {
+    fontSize: '12px',
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  meetingTime: {
+    fontSize: '12px',
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  checkboxOutline: {
+    width: '20px',
+    height: '20px',
+    ...shorthands.border('2px', 'solid', '#e5e7eb'),
+    borderRadius: '4px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+  }
 });
 
 const DEFAULT_UNKNOWN = [];
+
+// Change to real data from database
+const getMeetingsForClass = (schedule) => {
+  if (!schedule) return [];
+  return [
+    { id: 1, name: 'Meeting #3', date: new Date().toLocaleDateString(), time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+    { id: 2, name: 'Meeting #2', date: '02-17-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+    { id: 3, name: 'Meeting #1', date: '02-12-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+  ];
+};
 
 function ProfessorDashboard({ userContext }) {
   const styles = useStyles();
@@ -440,7 +598,7 @@ function ProfessorDashboard({ userContext }) {
 
   // Sidebar & view state
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'schedule' | 'export'
+  const [currentView, setCurrentView] = useState('schedule');
 
   // Engagement tracking state
   const [classEngagement, setClassEngagement] = useState({
@@ -448,14 +606,6 @@ function ProfessorDashboard({ userContext }) {
     engaged_count: 0,
     present_count: 0,
     disengaged_count: 0
-  });
-
-  // Debug status
-  const [debugStatus, setDebugStatus] = useState({
-    engagement_enabled: false,
-    face_mesh_detector: 'unknown',
-    hand_detector: 'unknown',
-    tracked_faces: {}
   });
 
   // Track camera session start/stop times
@@ -468,9 +618,15 @@ function ProfessorDashboard({ userContext }) {
   const [upcomingClasses, setUpcomingClasses] = useState([]);
   const [profFirstName, setProfFirstName] = useState(null);
 
+  // State to track selected checkboxes for export: { [classId]: [meetingId1, meetingId2] }
+  const [selectedMeetings, setSelectedMeetings] = useState({});
+
+  // Ref to track if the user manually selected a class
+  const isManualOverrideRef = useRef(false);
+
   // Modal state
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-  const [scheduleModalMode, setScheduleModalMode] = useState('create'); // 'create' or 'edit'
+  const [scheduleModalMode, setScheduleModalMode] = useState('create');
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingSchedule, setDeletingSchedule] = useState(null);
@@ -481,7 +637,6 @@ function ProfessorDashboard({ userContext }) {
     const loadProfileFirstName = async () => {
       if (!supabase) return;
       try {
-        // Prefer email from userContext when available
         if (userContext?.email) {
           const { data, error } = await supabase.from('user_profiles').select('first_name').eq('email', userContext.email).limit(1).maybeSingle();
           if (!mounted) return;
@@ -490,8 +645,6 @@ function ProfessorDashboard({ userContext }) {
             return;
           }
         }
-
-        // Fallback: try auth user id if available
         if (supabase.auth && supabase.auth.getUser) {
           const { data: authData } = await supabase.auth.getUser();
           const user = authData?.user;
@@ -510,7 +663,6 @@ function ProfessorDashboard({ userContext }) {
     return () => { mounted = false; };
   }, [userContext]);
 
-  // Load schedules and compute current/upcoming classes
   useEffect(() => {
     let mounted = true;
 
@@ -531,21 +683,30 @@ function ProfessorDashboard({ userContext }) {
         const loadedSchedules = await getAllSchedules();
         if (!mounted) return;
         setSchedules(loadedSchedules);
+        
         const { current, upcoming } = computeCurrentAndUpcoming(loadedSchedules);
-        setCurrentClass(current);
         setUpcomingClasses(upcoming);
+        
+        if (!isManualOverrideRef.current) {
+          setCurrentClass(current);
+        }
+
       } catch (err) {
         console.error('Error loading schedules:', err);
       }
     };
 
     load();
-
     const intervalId = setInterval(load, 60000);
     return () => { mounted = false; clearInterval(intervalId); };
   }, []);
 
-  // CRUD handlers for schedules
+  const handleEnterClass = (schedule) => {
+    setCurrentClass(schedule);
+    isManualOverrideRef.current = true;
+    setCurrentView('dashboard');
+  };
+
   const handleCreateSchedule = async (scheduleData) => {
     try {
       const newSchedule = await createSchedule(scheduleData);
@@ -611,7 +772,6 @@ function ProfessorDashboard({ userContext }) {
     }
   };
 
-  // Modal handlers
   const handleOpenCreateModal = () => {
     setScheduleModalMode('create');
     setEditingSchedule(null);
@@ -649,46 +809,21 @@ function ProfessorDashboard({ userContext }) {
     setSystemMessages(messages);
   };
 
-  // Handle engagement updates from facial recognition
   const handleEngagementUpdate = (engagementData) => {
     setClassEngagement(engagementData);
   };
 
-  // Fetch debug status periodically
-  useEffect(() => {
-    const fetchDebugStatus = async () => {
-      try {
-        const response = await fetch('/api/facial-recognition/debug/status');
-        const data = await response.json();
-
-        if (data.status === 'success') {
-          setDebugStatus(data);
-
-          // Extract debug messages from tracked faces
-          const messages = [];
-          messages.push(`Engagement Enabled: ${data.engagement_enabled}`);
-          messages.push(`Face Mesh: ${data.face_mesh_detector}`);
-          messages.push(`Hand Detector: ${data.hand_detector}`);
-          messages.push(`Tracked Faces: ${data.total_faces_tracked}`);
-
-          Object.entries(data.tracked_faces || {}).forEach(([id, tracker]) => {
-            if (tracker?.ear_history?.length > 0) {
-              const lastEAR = tracker.ear_history[tracker.ear_history.length - 1];
-              messages.push(`${tracker.name} (ID:${id}): EAR=${lastEAR.toFixed(3)}, Sleeping=${tracker.is_sleeping}`);
-            }
-          });
-
-          setDebugMessages(messages);
-        }
-      } catch (error) {
-        setDebugMessages([`Debug Error: ${error.message}`]);
+  // Toggle checkbox state for meetings
+  const handleToggleMeeting = (classId, meetingId) => {
+    setSelectedMeetings((prev) => {
+      const classSelections = prev[classId] || [];
+      if (classSelections.includes(meetingId)) {
+        return { ...prev, [classId]: classSelections.filter(id => id !== meetingId) };
+      } else {
+        return { ...prev, [classId]: [...classSelections, meetingId] };
       }
-    };
-
-    const interval = setInterval(fetchDebugStatus, 1000); // Update every second
-    fetchDebugStatus(); // Initial fetch
-    return () => clearInterval(interval);
-  }, []);
+    });
+  };
 
   const csvSafe = (value) => {
     const normalized = value === null || value === undefined || value === '' ? 'N/A' : String(value);
@@ -715,19 +850,23 @@ function ProfessorDashboard({ userContext }) {
     ...unknownFaces.map((student) => ({ ...student, mode: 'Unknown' }))
   ]);
 
-  const notifyEmptyExport = () => {
-    setSystemMessages((prev) => [...prev, {
-      type: 'info',
-      message: 'No data yet. Exported CSV with headers only.',
-      timestamp: new Date().toLocaleTimeString()
-    }]);
-  };
-
-  const handleExportAttendanceReport = () => {
-    const combinedData = getCombinedExportData();
-    if (combinedData.length === 0) {
-      notifyEmptyExport();
+  // Updated Attendance Export targeting Checked Meetings
+  const handleExportAttendanceReport = (targetClass) => {
+    if (!targetClass) return;
+    
+    const selectedIds = selectedMeetings[targetClass.id] || [];
+    if (selectedIds.length === 0) {
+      alert("Please check at least one meeting to export its data.");
+      return;
     }
+
+    // Retrieve full meeting objects based on selected IDs
+    const allMeetings = getMeetingsForClass(targetClass);
+    const selectedMeetingObjects = allMeetings.filter(m => selectedIds.includes(m.id));
+
+    // Get live data if available, otherwise generate dummy data to show structure
+    const baseData = getCombinedExportData();
+    const dataToExport = baseData.length > 0 ? baseData : [{ id: 'N/A', name: 'No Live Data (Demo)', mode: 'Unknown', status: 'N/A', confidenceScore: 'N/A' }];
 
     const headers = [
       'Attendance_ID',
@@ -735,54 +874,56 @@ function ProfessorDashboard({ userContext }) {
       'Student Name',
       'Course_ID',
       'Course Name',
+      'Session Name',
       'Date',
       'Time In',
       'Time Out',
       'SetUp',
       'Status',
-      'Check-in Time',
       'Confidence Score'
     ];
 
-    const sessionDate = new Date().toLocaleDateString();
-    const courseId = currentClass?.id || 'N/A';
-    const courseName = currentClass?.name || 'N/A';
-    const timeIn = cameraStartTime || 'N/A';
-    const timeOut = cameraStopTime || 'N/A';
-    const scheduledTime = currentClass ? `${currentClass.startTime} - ${currentClass.endTime}` : 'N/A';
+    const courseId = targetClass?.id || 'N/A';
+    const courseName = targetClass?.name || 'N/A';
 
-    const rows = combinedData.map((student, index) => {
-      const attendanceId = student.id || index + 1;
-      const studentId = student.studentId || student.id || 'N/A';
-      const studentName = student.name || 'Unknown';
-      const setUp = student.mode || 'Onsite';
-      const status = student.status || 'Present';
-      const confidenceScore = student.confidence || student.confidenceScore || 'N/A';
-
-      return [
-        attendanceId,
-        studentId,
-        studentName,
-        courseId,
-        courseName,
-        sessionDate,
-        timeIn,
-        timeOut,
-        setUp,
-        status,
-        scheduledTime,
-        confidenceScore
-      ];
+    const rows = [];
+    selectedMeetingObjects.forEach((meeting) => {
+      dataToExport.forEach((student, index) => {
+        rows.push([
+          student.id || index + 1,
+          student.studentId || student.id || 'N/A',
+          student.name || 'Unknown',
+          courseId,
+          courseName,
+          meeting.name,     // Inject selected meeting info
+          meeting.date,     // Inject selected meeting date
+          cameraStartTime || 'N/A',
+          cameraStopTime || 'N/A',
+          student.mode || 'Onsite',
+          student.status || 'Present',
+          student.confidence || student.confidenceScore || 'N/A'
+        ]);
+      });
     });
 
-    downloadCsv(headers, rows, 'attendance_report');
+    downloadCsv(headers, rows, `${courseName.replace(/\s+/g, '_')}_attendance_report`);
   };
 
-  const handleExportEngagementReport = () => {
-    const combinedData = getCombinedExportData();
-    if (combinedData.length === 0) {
-      notifyEmptyExport();
+  // Updated Engagement Export targeting Checked Meetings
+  const handleExportEngagementReport = (targetClass) => {
+    if (!targetClass) return;
+
+    const selectedIds = selectedMeetings[targetClass.id] || [];
+    if (selectedIds.length === 0) {
+      alert("Please check at least one meeting to export its data.");
+      return;
     }
+
+    const allMeetings = getMeetingsForClass(targetClass);
+    const selectedMeetingObjects = allMeetings.filter(m => selectedIds.includes(m.id));
+
+    const baseData = getCombinedExportData();
+    const dataToExport = baseData.length > 0 ? baseData : [{ id: 'N/A', name: 'No Live Data (Demo)', mode: 'Unknown', status: 'N/A', engagementScore: 'N/A', engagementLevel: 'N/A', isSleeping: 'N/A', isSpeaking: 'N/A', handRaised: 'N/A' }];
 
     const headers = [
       'Record_ID',
@@ -791,6 +932,7 @@ function ProfessorDashboard({ userContext }) {
       'Mode',
       'Course_ID',
       'Course Name',
+      'Session Name',
       'Date',
       'Session Start',
       'Session End',
@@ -802,58 +944,43 @@ function ProfessorDashboard({ userContext }) {
       'Status'
     ];
 
-    const sessionDate = new Date().toLocaleDateString();
-    const courseId = currentClass?.id || 'N/A';
-    const courseName = currentClass?.name || 'N/A';
-    const sessionStart = cameraStartTime || 'N/A';
-    const sessionEnd = cameraStopTime || 'N/A';
+    const courseId = targetClass?.id || 'N/A';
+    const courseName = targetClass?.name || 'N/A';
 
-    const rows = combinedData.map((student, index) => {
-      const numericScore = Number(student.engagementScore);
-      const engagementScore = Number.isFinite(numericScore) ? numericScore.toFixed(1) : 'N/A';
-      const isSleeping = typeof student.isSleeping === 'boolean' ? (student.isSleeping ? 'Yes' : 'No') : 'N/A';
-      const isSpeaking = typeof student.isSpeaking === 'boolean' ? (student.isSpeaking ? 'Yes' : 'No') : 'N/A';
-      const handRaised = typeof student.handRaised === 'boolean' ? (student.handRaised ? 'Yes' : 'No') : 'N/A';
+    const rows = [];
+    selectedMeetingObjects.forEach((meeting) => {
+      dataToExport.forEach((student, index) => {
+        const numericScore = Number(student.engagementScore);
+        const engagementScore = Number.isFinite(numericScore) ? numericScore.toFixed(1) : 'N/A';
+        const isSleeping = typeof student.isSleeping === 'boolean' ? (student.isSleeping ? 'Yes' : 'No') : 'N/A';
+        const isSpeaking = typeof student.isSpeaking === 'boolean' ? (student.isSpeaking ? 'Yes' : 'No') : 'N/A';
+        const handRaised = typeof student.handRaised === 'boolean' ? (student.handRaised ? 'Yes' : 'No') : 'N/A';
 
-      return [
-        student.id || index + 1,
-        student.studentId || student.id || 'N/A',
-        student.name || 'Unknown',
-        student.mode || 'Unknown',
-        courseId,
-        courseName,
-        sessionDate,
-        sessionStart,
-        sessionEnd,
-        engagementScore,
-        student.engagementLevel || 'N/A',
-        isSleeping,
-        isSpeaking,
-        handRaised,
-        student.status || (student.mode === 'Unknown' ? 'Tentative' : 'Present')
-      ];
+        rows.push([
+          student.id || index + 1,
+          student.studentId || student.id || 'N/A',
+          student.name || 'Unknown',
+          student.mode || 'Unknown',
+          courseId,
+          courseName,
+          meeting.name,   // Inject selected meeting info
+          meeting.date,   // Inject selected meeting date
+          cameraStartTime || 'N/A',
+          cameraStopTime || 'N/A',
+          engagementScore,
+          student.engagementLevel || 'N/A',
+          isSleeping,
+          isSpeaking,
+          handRaised,
+          student.status || (student.mode === 'Unknown' ? 'Tentative' : 'Present')
+        ]);
+      });
     });
 
-    downloadCsv(headers, rows, 'engagement_report');
+    downloadCsv(headers, rows, `${courseName.replace(/\s+/g, '_')}_engagement_report`);
   };
 
   const totalPresent = onsiteAttendance.length;
-
-  // Helper: get authoritative first name from userContext or profile storage
-  const getFirstName = () => {
-    // Prefer Supabase profile first name when available
-    if (profFirstName) return String(profFirstName).split(' ')[0];
-    // Then prefer explicit first name fields from userContext (no email fallback)
-    const first = userContext?.firstName || userContext?.givenName || userContext?.profile?.first_name || userContext?.name || '';
-    if (first) return String(first).split(' ')[0];
-    try {
-      const stored = JSON.parse(localStorage.getItem('userData') || '{}');
-      if (stored?.firstName) return String(stored.firstName).split(' ')[0];
-      if (stored?.givenName) return String(stored.givenName).split(' ')[0];
-    } catch (e) { }
-    return 'Professor';
-  };
-
   const totalStudentsOnsite = onsiteAttendance.length + unknownFaces.length;
   const totalClasses = schedules.length;
 
@@ -869,7 +996,22 @@ function ProfessorDashboard({ userContext }) {
     window.location.href = '/';
   };
 
-  /* ---- Top Bar ---- */
+  // Extract the professor's first name, returning empty string if not found
+  const getFirstName = () => {
+    if (profFirstName) return String(profFirstName).split(' ')[0];
+    const first = userContext?.firstName || userContext?.givenName || userContext?.profile?.first_name || userContext?.name || '';
+    if (first) return String(first).split(' ')[0];
+    try {
+      const stored = JSON.parse(localStorage.getItem('userData') || '{}');
+      if (stored?.firstName) return String(stored.firstName).split(' ')[0];
+      if (stored?.givenName) return String(stored.givenName).split(' ')[0];
+    } catch (e) { }
+    return '';
+  };
+
+  const firstName = getFirstName();
+  const displayGreeting = firstName ? `Welcome, Professor ${firstName}!` : 'Welcome, Professor!';
+
   const renderTopBar = () => (
     <div className={styles.topBar}>
       <div className={styles.logo}>
@@ -885,7 +1027,6 @@ function ProfessorDashboard({ userContext }) {
     </div>
   );
 
-  /* ---- Slide-in Sidebar Menu ---- */
   const renderMenu = () => {
     if (!isMenuOpen) return null;
     return (
@@ -900,22 +1041,22 @@ function ProfessorDashboard({ userContext }) {
           </div>
           <div className={styles.menuItems}>
             <button
+              className={`${styles.menuItem} ${currentView === 'schedule' ? styles.menuItemActive : ''}`}
+              onClick={() => handleMenuItemClick('schedule')}
+            >
+              Class Schedule
+            </button>
+            <button
               className={`${styles.menuItem} ${currentView === 'dashboard' ? styles.menuItemActive : ''}`}
               onClick={() => handleMenuItemClick('dashboard')}
             >
               Dashboard
             </button>
             <button
-              className={`${styles.menuItem} ${currentView === 'schedule' ? styles.menuItemActive : ''}`}
-              onClick={() => handleMenuItemClick('schedule')}
-            >
-              Schedule
-            </button>
-            <button
               className={`${styles.menuItem} ${currentView === 'export' ? styles.menuItemActive : ''}`}
               onClick={() => handleMenuItemClick('export')}
             >
-              Generate Reports
+              Class Records
             </button>
             <div className={styles.menuDivider} />
             <button className={styles.menuItem} onClick={handleLogout}>
@@ -927,14 +1068,12 @@ function ProfessorDashboard({ userContext }) {
     );
   };
 
-  /* ---- Dashboard View (Camera + Stats + Engagement + Participants) ---- */
   const renderDashboardView = () => (
     <div className={styles.layout}>
-      {/* Left: Camera Feed */}
       <div className={styles.leftPanel}>
         <Card className={styles.cameraCard}>
           <div className={styles.cameraHeader}>
-            <Text weight="semibold" size={500}>Onsite Camera Feed</Text>
+            <Text weight="semibold" size={700} style={{ color: '#1e3a5f' }}>Onsite Camera Feed</Text>
           </div>
           <FacialRecognition
             onAttendanceUpdate={(records) => {
@@ -949,11 +1088,8 @@ function ProfessorDashboard({ userContext }) {
         </Card>
       </div>
 
-      {/* Right: Stats, Engagement, Participants */}
       <div className={styles.rightPanel}>
-        {/* Stats + Engagement side by side */}
         <div className={styles.statsRow}>
-          {/* Live Statistics Card */}
           <Card className={styles.statsCard}>
             <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Live Statistics</Text>
             <div className={styles.statsGrid}>
@@ -976,7 +1112,6 @@ function ProfessorDashboard({ userContext }) {
             </div>
           </Card>
 
-          {/* Class Engagement Card */}
           <Card className={styles.statsCard}>
             <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Class Engagement</Text>
             <div className={styles.statsGrid}>
@@ -1000,7 +1135,6 @@ function ProfessorDashboard({ userContext }) {
           </Card>
         </div>
 
-        {/* View Participants (always visible) */}
         <div className={styles.participantCard}>
           <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>View Participants</Text>
           <div className={styles.participantContent}>
@@ -1030,51 +1164,41 @@ function ProfessorDashboard({ userContext }) {
     </div>
   );
 
-
   /* ---- Schedule View ---- */
   const renderScheduleView = () => (
     <div className={styles.viewWrapper}>
       <Card className={styles.scheduleCard}>
-        <div className={styles.scheduleHeader} style={{ marginBottom: '12px' }}>
-          <Text className={styles.scheduleTitle}>Class Schedule</Text>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-          {currentClass && (
-            <Badge appearance="filled" color="success">
-              In Session
-            </Badge>
-          )}
-          <Button
-            appearance="subtle"
-            icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
-            onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
-            size="small"
-            title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
-          >
-            {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
-          </Button>
-          <Button
-            appearance="primary"
-            icon={<Add24Regular />}
-            onClick={handleOpenCreateModal}
-          >
-            Add Class
-          </Button>
+        <div className={styles.scheduleHeader}>
+          <Text className={styles.scheduleMainTitle}>Class Schedule</Text>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Button
+              appearance="subtle"
+              icon={showInactiveSchedules ? <Eye20Regular /> : <EyeOff20Regular />}
+              onClick={() => setShowInactiveSchedules(!showInactiveSchedules)}
+              size="small"
+              title={showInactiveSchedules ? "Hide inactive classes" : "Show inactive classes"}
+            >
+              {showInactiveSchedules ? "Hide Inactive" : "Show Inactive"}
+            </Button>
+            <Button
+              appearance="primary"
+              icon={<Add24Regular />}
+              onClick={handleOpenCreateModal}
+              style={{ backgroundColor: '#2b2e63', color: '#fff' }}
+            >
+              Add Class
+            </Button>
+          </div>
         </div>
 
-        {currentClass && (
-          <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '8px' }}>
-            <Text size={200} weight="semibold" style={{ color: '#107c10', display: 'block', marginBottom: '4px' }}>
-              🎓 Currently Teaching:
-            </Text>
-            <Text size={400} weight="bold" style={{ display: 'block' }}>
-              {currentClass.name}
-            </Text>
-            <Text size={200} style={{ color: '#666' }}>
-              {currentClass.room} • {currentClass.startTime} - {currentClass.endTime}
-            </Text>
-          </div>
-        )}
+        {/* Table Header Section */}
+        <div className={styles.scheduleTableHeader}>
+          <Text className={styles.tableHeaderText}>CLASSES</Text>
+          <Text className={styles.tableHeaderCenter}>DATE</Text>
+          <Text className={styles.tableHeaderCenter}>ROOM</Text>
+          <Text className={styles.tableHeaderCenter}>TIME</Text>
+          <div></div> 
+        </div>
 
         <div className={styles.scheduleList}>
           {schedules.length === 0 ? (
@@ -1085,110 +1209,144 @@ function ProfessorDashboard({ userContext }) {
             schedules
               .filter(schedule => showInactiveSchedules ? true : schedule.isActive)
               .map((schedule) => {
-                const isActive = currentClass?.id === schedule.id;
                 const isInactive = !schedule.isActive;
+                const daysLabel = schedule.days?.map(day => String(day).replace(/\*/g, '').trim()).join(', ') || 'N/A';
+                
                 return (
                   <div
                     key={schedule.id}
-                    className={`${styles.scheduleItem} ${isActive ? styles.scheduleItemActive : ''}`}
+                    className={styles.scheduleItem}
                     style={isInactive ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
                   >
-                    <div
-                      className={styles.scheduleColorBar}
-                      style={{ backgroundColor: schedule.color }}
-                    />
-                    <div className={styles.scheduleItemContent}>
-                      <div className={styles.scheduleItemRow}>
-                        <Text weight="semibold" size={300}>
-                          {schedule.name}
-                        </Text>
-                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                          {isActive && (
-                            <Badge appearance="filled" color="success" size="small">
-                              Active
-                            </Badge>
-                          )}
-                          {isInactive && (
-                            <Badge appearance="tint" color="warning" size="small">
-                              Inactive
-                            </Badge>
-                          )}
-                          <Button
-                            icon={<Edit24Regular />}
-                            appearance="subtle"
-                            size="small"
-                            onClick={() => handleOpenEditModal(schedule)}
-                            title="Edit class"
-                            aria-label={`Edit ${schedule.name}`}
-                          />
-                          <Button
-                            icon={<Delete24Regular />}
-                            appearance="subtle"
-                            size="small"
-                            onClick={() => handleOpenDeleteDialog(schedule)}
-                            title="Delete class"
-                            aria-label={`Delete ${schedule.name}`}
-                            style={{ color: '#d32f2f' }}
-                          />
-                        </div>
+                    <div className={styles.classIdentityWrapper}>
+                      <div 
+                        className={styles.classColorDot} 
+                        style={{ backgroundColor: schedule.color || '#cccccc' }} 
+                      />
+                      <Text className={styles.scheduleItemText}>
+                        {schedule.name}
+                      </Text>
+                    </div>
+                    <Text className={styles.scheduleItemTextCenter}>
+                      {daysLabel}
+                    </Text>
+                    <Text className={styles.scheduleItemTextCenter}>
+                      {schedule.room}
+                    </Text>
+                    <Text className={styles.scheduleItemTextCenter}>
+                      {schedule.startTime} - {schedule.endTime}
+                    </Text>
+                    <div className={styles.scheduleActions}>
+                      <span 
+                        className={styles.enterActionText} 
+                        onClick={() => handleEnterClass(schedule)}
+                      >
+                        ENTER
+                      </span>
+                      <div className={styles.actionIcon} onClick={() => handleOpenEditModal(schedule)} title="Edit class">
+                        <Edit24Regular style={{ color: '#9e9e9e' }} />
                       </div>
-
-                      <div className={styles.scheduleDays}>
-                        {schedule.days.map((day, idx) => {
-                          const label = String(day).replace(/\*/g, '').trim();
-                          return (
-                            <Badge
-                              key={idx}
-                              appearance="tint"
-                              color="informative"
-                              className={styles.dayBadge}
-                            >
-                              {label}
-                            </Badge>
-                          );
-                        })}
+                      <div className={styles.actionIcon} onClick={() => handleOpenDeleteDialog(schedule)} title="Delete class">
+                        <Delete24Regular style={{ color: '#e57373' }} />
                       </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                        <Text size={200} style={{ color: '#666' }}>
-                          <strong>Room:</strong> {schedule.room}
-                        </Text>
-                        <Text size={200} style={{ color: '#666' }}>
-                          <strong>Time:</strong> {schedule.startTime} - {schedule.endTime}
-                        </Text>
-                      </div>
-
-                      {/* description intentionally hidden per UX request */}
                     </div>
                   </div>
                 );
               })
           )}
         </div>
-
-        {upcomingClasses.length > 0 && (
-          <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
-            <Text size={200} weight="semibold" style={{ color: '#856404' }}>
-              ⏰ Next: {upcomingClasses[0].name} at {upcomingClasses[0].startTime}
-            </Text>
-          </div>
-        )}
       </Card>
     </div>
   );
 
-  /* ---- Export View ---- */
-  const renderExportView = () => (
-    <div className={styles.viewWrapper}>
-      <div className={styles.viewTitle}>Export Reports</div>
-      <ExportPanel
-        onExportAttendance={handleExportAttendanceReport}
-        onExportEngagement={handleExportEngagementReport}
-      />
-    </div>
-  );
+  /* ---- Export / Class Records View ---- */
+  const renderExportView = () => {
+    return (
+      <div className={styles.viewWrapper} style={{ maxWidth: '1100px' }}>
+        <Card className={styles.exportMainCard}>
+          <div>
+            <Text className={styles.exportMainTitle}>Class Records</Text>
+            <div>
+              <Text className={styles.exportSubtitle} block>Export Options</Text>
+              <Text className={styles.exportDescText} block>
+                Download attendance and engagement reports as separate CSV files.
+              </Text>
+              <Text className={styles.exportDescText} block>
+                Attendance CSV focuses on participation records, while Engagement CSV captures engagement state metrics for each session.
+              </Text>
+            </div>
+          </div>
 
-  /* ---- Render selected view ---- */
+          <div className={styles.exportGrid}>
+            {schedules.length === 0 ? (
+              <Text size={200} style={{ color: '#999', padding: '20px' }}>
+                No active classes available to export. Create a class first!
+              </Text>
+            ) : (
+              schedules.map((cls) => {
+                const classMeetings = getMeetingsForClass(cls);
+                const classSelections = selectedMeetings[cls.id] || [];
+
+                return (
+                  <div key={cls.id} className={styles.classExportCard}>
+                    <div className={styles.classExportHeader}>
+                      <Text className={styles.classExportTitle}>{cls.name}</Text>
+                      <div className={styles.classExportActions}>
+                        <div 
+                          className={styles.downloadIconBtn} 
+                          onClick={() => handleExportAttendanceReport(cls)} 
+                          title="Download Attendance CSV"
+                        >
+                          <ArrowDownload20Regular />
+                        </div>
+                        <div 
+                          className={styles.downloadIconBtn} 
+                          onClick={() => handleExportEngagementReport(cls)} 
+                          title="Download Engagement CSV"
+                        >
+                          <ArrowDownload20Regular />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className={styles.meetingList}>
+                      {classMeetings.map((meeting) => {
+                        const isSelected = classSelections.includes(meeting.id);
+
+                        return (
+                          <div key={meeting.id} className={styles.meetingItem}>
+                            <div className={styles.meetingInfo}>
+                              <Text className={styles.meetingName}>{meeting.name}</Text>
+                              <Text className={styles.meetingDate}>{meeting.date}</Text>
+                              <Text className={styles.meetingTime}>{meeting.time}</Text>
+                            </div>
+                            
+                            {/* Functional Checkbox */}
+                            <div 
+                              className={styles.checkboxOutline} 
+                              onClick={() => handleToggleMeeting(cls.id, meeting.id)}
+                              style={{
+                                backgroundColor: isSelected ? '#ffb900' : 'transparent',
+                                borderColor: isSelected ? '#ffb900' : '#e5e7eb',
+                              }}
+                            >
+                              {isSelected && <Checkmark20Regular style={{ color: '#fff', width: '16px', height: '16px' }} />}
+                            </div>
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'schedule':
@@ -1206,10 +1364,15 @@ function ProfessorDashboard({ userContext }) {
       {renderTopBar()}
       {renderMenu()}
 
-      {/* Date / Session header */}
+      {/* Conditionally rendered session header depending on view */}
       {currentView === 'dashboard' && (
         <div className={styles.sessionHeader}>
-          {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | Live Session Feed
+          {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | {currentClass ? `${currentClass.name} - Live Session` : 'Live Session Feed'}
+        </div>
+      )}
+      {currentView === 'schedule' && (
+        <div className={styles.sessionHeader} style={{ paddingBottom: '0', textAlign: 'center', width: '100%', fontSize: '36px', fontWeight: '800', color: '#ffffff', marginBottom: '8px', lineHeight: '1.2' }}>
+          {displayGreeting}
         </div>
       )}
 
