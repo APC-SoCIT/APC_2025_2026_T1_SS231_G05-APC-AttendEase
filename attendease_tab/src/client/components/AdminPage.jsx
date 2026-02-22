@@ -337,12 +337,13 @@ const adminActions = [
 function AdminPage() {
     const styles = useStyles();
     const navigate = useNavigate();
+    const location = useLocation();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const handleLogout = () => {
         setAdminSession(false);
         localStorage.removeItem('adminSession');
         localStorage.removeItem('userEmail');
-        navigate('/');
+        window.location.href = '/';
     };
     /* ---- Render helpers ---- */
     const renderTopBar = () => (
@@ -366,20 +367,19 @@ function AdminPage() {
                 <div className={styles.menuBackdrop} onClick={() => setIsMenuOpen(false)} />
                 <div className={styles.menuPanel}>
                     <div className={styles.menuHeader}>
-                        <Text className={styles.menuTitle}>Admin Menu</Text>
+                        <Text className={styles.menuTitle}>Menu</Text>
                         <button className={styles.closeButton} onClick={() => setIsMenuOpen(false)} aria-label="Close">
                             <Dismiss24Regular />
                         </button>
                     </div>
                     <div className={styles.menuItems}>
-                        {adminActions.map((action) => (
+                        {MENU_ITEMS.map((item) => (
                             <button
-                                key={action.title}
-                                className={styles.menuItem}
-                                onClick={() => { setIsMenuOpen(false); navigate(action.path); }}
+                                key={item.title}
+                                className={`${styles.menuItem} ${location.pathname === item.path ? styles.menuItemActive : ''}`}
+                                onClick={() => { setIsMenuOpen(false); navigate(item.path); }}
                             >
-                                {React.cloneElement(action.icon, { style: { color: action.color, flexShrink: 0 } })}
-                                {action.title}
+                                {item.title}
                             </button>
                         ))}
                         <div className={styles.menuDivider} />
