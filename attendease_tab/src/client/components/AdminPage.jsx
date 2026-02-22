@@ -349,7 +349,7 @@ function AdminPage() {
         <div className={styles.menuBackdrop} onClick={() => setIsMenuOpen(false)} />
         <div className={styles.menuPanel}>
           <div className={styles.menuHeader}>
-            <Text className={styles.menuTitle}>Admin Menu</Text>
+            <Text className={styles.menuTitle}>Menu</Text>
             <button className={styles.closeButton} onClick={() => setIsMenuOpen(false)} aria-label="Close">
               <Dismiss24Regular />
             </button>
