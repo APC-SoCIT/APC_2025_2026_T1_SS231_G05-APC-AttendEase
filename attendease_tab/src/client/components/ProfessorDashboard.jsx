@@ -99,11 +99,11 @@ const useStyles = makeStyles({
   sessionHeader: {
     ...shorthands.padding('40px', '30px'),
     color: '#ffffff',
-    fontSize: '35px',
-    fontWeight: '700',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: '36px',
+    fontWeight: '800',
+    marginBottom: '8px',
     '@media (max-width: 768px)': {
-      fontSize: '16px',
+      fontSize: '28px',
       ...shorthands.padding('12px', '20px'),
     },
   },
@@ -331,30 +331,40 @@ const useStyles = makeStyles({
     marginBottom: '24px',
   },
   scheduleMainTitle: {
-    fontSize: '32px',
-    fontWeight: 'bold',
+    fontSize: '40px',
+    fontWeight: '800',
     color: '#2b2e63',
     ...shorthands.margin(0),
+    lineHeight: '1.2',
+    letterSpacing: '-1px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  scheduleSubtitle: {
+    fontSize: '20px',
+    fontWeight: '700',
   },
   scheduleTableHeader: {
     display: 'grid',
     gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 120px', 
     alignItems: 'center',
-    paddingBottom: '8px',
-    ...shorthands.borderBottom('1px', 'solid', '#f0f0f0'),
-    marginBottom: '16px',
+    backgroundColor: '#f4f6f8', 
+    borderRadius: '8px',        
+    ...shorthands.padding('16px', '24px'), 
+    marginBottom: '12px',
   },
   tableHeaderText: {
-    color: '#ffb900', 
-    fontSize: '18px',
-    fontWeight: '600',
+    color: '#8ba0b2',           
+    fontSize: '13px',
+    fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: '0.5px',
   },
   tableHeaderCenter: {
-    color: '#ffb900', 
-    fontSize: '18px',
-    fontWeight: '600',
+    color: '#8ba0b2',           
+    fontSize: '13px',
+    fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: '0.5px',
     textAlign: 'center',
   },
   scheduleList: {
@@ -367,8 +377,9 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 120px',
     alignItems: 'center',
-    ...shorthands.padding('12px', '0'),
+    ...shorthands.padding('16px', '24px'), 
     ...shorthands.borderBottom('1px', 'solid', '#f9f9f9'),
+    transition: 'background-color 0.2s ease',
     '&:hover': {
       backgroundColor: '#fcfcfc',
     },
@@ -402,10 +413,18 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
   },
   enterActionText: {
-    color: '#ffb900',
-    fontWeight: 'bold',
+    color: '#ffffff',
+    backgroundColor: '#2b2e63', 
+    fontWeight: '600',
     fontSize: '12px',
+    letterSpacing: '0.5px',
+    ...shorthands.padding('6px', '16px'),
+    borderRadius: '20px',       
     cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
+    '&:hover': {
+      backgroundColor: '#1e214d', 
+    },
   },
   actionIcon: {
     cursor: 'pointer',
@@ -416,7 +435,7 @@ const useStyles = makeStyles({
   /* ---- View wrappers ---- */
   viewWrapper: {
     width: '100%',
-    maxWidth: '900px',
+    maxWidth: '1200px',
     marginLeft: 'auto',
     marginRight: 'auto',
     display: 'flex',
@@ -424,7 +443,7 @@ const useStyles = makeStyles({
     ...shorthands.gap('20px'),
   },
 
-  /* ---- EXPORT / CLASS RECORDS VIEW (NEW STYLES) ---- */
+  /* ---- CLASS RECORDS VIEW (NEW STYLES) ---- */
   exportMainCard: {
     ...shorthands.padding('40px'),
     backgroundColor: '#ffffff',
@@ -435,7 +454,7 @@ const useStyles = makeStyles({
     ...shorthands.gap('12px'),
   },
   exportMainTitle: {
-    fontSize: '48px',
+    fontSize: '40px',
     fontWeight: '800',
     color: '#2b2e63',
     ...shorthands.margin(0),
@@ -497,7 +516,7 @@ const useStyles = makeStyles({
     backgroundColor: '#fdfbfa',
     ...shorthands.border('1px', 'solid', '#f3f2f1'),
     borderRadius: '4px',
-    color: '#ffb900',
+    color: '#2b2e63',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     '&:hover': {
@@ -514,7 +533,7 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     alignItems: 'center',
     ...shorthands.padding('16px', '20px'),
-    ...shorthands.border('1px', 'solid', '#ffb900'),
+    ...shorthands.border('1px', 'solid', '#da8300'),
     borderRadius: '12px',
     backgroundColor: '#ffffff',
   },
@@ -559,13 +578,13 @@ const useStyles = makeStyles({
 
 const DEFAULT_UNKNOWN = [];
 
-// Helper to generate the meetings (Can be replaced with a real DB fetch later)
+// Change to real data from database
 const getMeetingsForClass = (schedule) => {
   if (!schedule) return [];
   return [
-    { id: 1, name: 'Current Session', date: new Date().toLocaleDateString(), time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
-    { id: 2, name: 'Previous Session 1', date: '02-17-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
-    { id: 3, name: 'Previous Session 2', date: '02-12-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+    { id: 1, name: 'Meeting #3', date: new Date().toLocaleDateString(), time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+    { id: 2, name: 'Meeting #2', date: '02-17-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
+    { id: 3, name: 'Meeting #1', date: '02-12-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
   ];
 };
 
@@ -1351,9 +1370,8 @@ function ProfessorDashboard({ userContext }) {
           {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | {currentClass ? `${currentClass.name} - Live Session` : 'Live Session Feed'}
         </div>
       )}
-
       {currentView === 'schedule' && (
-        <div className={styles.sessionHeader} style={{ paddingBottom: '0', textAlign: 'center', width: '100%' }}>
+        <div className={styles.sessionHeader} style={{ paddingBottom: '0', textAlign: 'center', width: '100%', fontSize: '36px', fontWeight: '800', color: '#ffffff', marginBottom: '8px', lineHeight: '1.2' }}>
           {displayGreeting}
         </div>
       )}
