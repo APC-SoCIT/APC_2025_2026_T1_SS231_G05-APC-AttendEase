@@ -265,6 +265,129 @@ app.get('/api/attendance/graph-status', (req, res) => {
   }
 });
 
+// Alias used by ExportPanel
+app.get('/api/graph/status', (req, res) => {
+  res.json({ initialized: !!graphClient });
+});
+
+// ---- App-Only Graph API Endpoints ----
+// These use the server-side graphClient (no user token needed).
+
+// List professor's online meetings using app-only token
+// Requires ?email= query param (the professor's M365/UPN email)
+app.get('/api/graph/app/meetings', async (req, res) => {
+  try {
+    if (!graphClient) {
+      return res.status(503).json({ status: 'error', message: 'Graph API not configured. Check environment variables.' });
+    }
+
+    const email = (req.query.email || '').trim();
+    if (!email) {
+      return res.status(400).json({ status: 'error', message: 'Missing required query parameter: email (Microsoft 365 email / UPN).' });
+    }
+
+    // App-only flow: list online meetings for a specific user
+    // Requires OnlineMeetings.Read.All application permission in Azure AD
+    const meetingsResponse = await graphClient
+      .api(`/users/${encodeURIComponent(email)}/onlineMeetings`)
+      .get();
+
+    const meetings = (meetingsResponse.value || []).map(m => ({
+      id: m.id,
+      subject: m.subject || '(No subject)',
+      startDateTime: m.startDateTime,
+      endDateTime: m.endDateTime,
+      joinUrl: m.joinWebUrl,
+      createdDateTime: m.creationDateTime,
+    }));
+
+    // Sort newest first (manual sort since $orderby may not be supported)
+    meetings.sort((a, b) => new Date(b.startDateTime || b.createdDateTime || 0) - new Date(a.startDateTime || a.createdDateTime || 0));
+
+    res.json({ status: 'success', meetings });
+  } catch (error) {
+    console.error('Error listing meetings (app-only):', error?.message || error);
+
+    if (error.statusCode === 403 || error.statusCode === 401) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'App-only meeting listing requires OnlineMeetings.Read.All permission. Please grant this in Azure AD.',
+      });
+    }
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        status: 'error',
+        message: `User not found in Azure AD: ${req.query.email}. Make sure this is a valid Microsoft 365 email.`,
+      });
+    }
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get attendance for a specific meeting (app-only, no user token needed)
+// Requires ?email= query param (the professor's M365/UPN email)
+app.get('/api/graph/app/attendance/:meetingId', async (req, res) => {
+  try {
+    if (!graphClient) {
+      return res.status(503).json({ status: 'error', message: 'Graph API not configured.' });
+    }
+
+    const email = (req.query.email || '').trim();
+    if (!email) {
+      return res.status(400).json({ status: 'error', message: 'Missing required query parameter: email.' });
+    }
+
+    const { meetingId } = req.params;
+    console.log(`\n=== FETCHING ATTENDANCE (APP-ONLY) for user: ${email}, meeting: ${meetingId} ===`);
+
+    const basePath = `/users/${encodeURIComponent(email)}/onlineMeetings/${meetingId}`;
+
+    const attendanceReports = await graphClient
+      .api(`${basePath}/attendanceReports`)
+      .get();
+
+    if (!attendanceReports.value || attendanceReports.value.length === 0) {
+      return res.json({
+        status: 'no_data',
+        students: [],
+        message: 'No attendance data available yet. Meeting may not have ended.',
+      });
+    }
+
+    const latestReport = attendanceReports.value[0];
+
+    // Fetch full attendance records for the report
+    const recordsResponse = await graphClient
+      .api(`${basePath}/attendanceReports/${latestReport.id}/attendanceRecords`)
+      .get();
+
+    const attendanceRecords = recordsResponse.value || [];
+
+    const students = attendanceRecords.map(record => {
+      const joinDateTime = record.attendanceIntervals?.[0]?.joinDateTime;
+      const leaveDateTime = record.attendanceIntervals?.[record.attendanceIntervals.length - 1]?.leaveDateTime;
+      return {
+        name: record.identity?.displayName || 'Unknown',
+        email: record.emailAddress,
+        joinTime: joinDateTime,
+        leaveTime: leaveDateTime,
+        status: leaveDateTime ? 'left' : 'present',
+        duration: record.totalAttendanceInSeconds,
+        role: record.role,
+      };
+    });
+
+    console.log(`Found ${students.length} attendee(s)`);
+    res.json({ status: 'success', students, totalCount: students.length });
+  } catch (error) {
+    console.error('Error fetching attendance (app-only):', error?.message || error);
+    if (error.statusCode === 404) {
+      return res.status(404).json({ status: 'error', message: 'Meeting not found.' });
+    }
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // ---- Delegated Graph API Proxy Endpoints ----
 // These use a Graph Explorer access token passed in the Authorization header.
 
