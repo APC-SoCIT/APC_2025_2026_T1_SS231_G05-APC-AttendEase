@@ -10,8 +10,6 @@ import {
 } from '@fluentui/react-components';
 import {
   Dismiss24Regular,
-  ChevronDown20Regular,
-  ChevronUp20Regular,
   Add20Regular,
   Add24Regular,
   Edit20Regular,
@@ -22,7 +20,6 @@ import {
   Eye20Regular
 } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
-import OnlineAttendance from './OnlineAttendance';
 import ExportPanel from './ExportPanel';
 import ScheduleModal from './modals/ScheduleModal';
 import DeleteConfirmDialog from './modals/DeleteConfirmDialog';
@@ -426,7 +423,6 @@ function ProfessorDashboard({ userContext }) {
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
   const [unknownFaces, setUnknownFaces] = useState(DEFAULT_UNKNOWN);
   const [onlineStudents, setOnlineStudents] = useState([]);
-  const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const [systemMessages, setSystemMessages] = useState([]);
   const [debugMessages, setDebugMessages] = useState([]);
 
@@ -729,48 +725,27 @@ function ProfessorDashboard({ userContext }) {
     }
 
     const headers = [
-      'Attendance_ID',
-      'Student_ID',
       'Student Name',
       'Course_ID',
-      'Course Name',
-      'Date',
-      'Time In',
-      'Time Out',
-      'SetUp',
       'Status',
-      'Check-in Time',
-      'Confidence Score'
+      'Time In',
+      'Time Out'
     ];
 
-    const sessionDate = new Date().toLocaleDateString();
     const courseId = currentClass?.id || 'N/A';
-    const courseName = currentClass?.name || 'N/A';
     const timeIn = cameraStartTime || 'N/A';
     const timeOut = cameraStopTime || 'N/A';
-    const scheduledTime = currentClass ? `${currentClass.startTime} - ${currentClass.endTime}` : 'N/A';
 
-    const rows = combinedData.map((student, index) => {
-      const attendanceId = student.id || index + 1;
-      const studentId = student.studentId || student.id || 'N/A';
+    const rows = combinedData.map((student) => {
       const studentName = student.name || 'Unknown';
-      const setUp = student.mode || 'Onsite';
       const status = student.status || 'Present';
-      const confidenceScore = student.confidence || student.confidenceScore || 'N/A';
 
       return [
-        attendanceId,
-        studentId,
         studentName,
         courseId,
-        courseName,
-        sessionDate,
-        timeIn,
-        timeOut,
-        setUp,
         status,
-        scheduledTime,
-        confidenceScore
+        timeIn,
+        timeOut
       ];
     });
 
@@ -784,30 +759,22 @@ function ProfessorDashboard({ userContext }) {
     }
 
     const headers = [
-      'Record_ID',
-      'Student_ID',
       'Student Name',
-      'Mode',
       'Course_ID',
-      'Course Name',
-      'Date',
       'Session Start',
       'Session End',
       'Engagement Score',
       'Engagement Level',
       'Is Sleeping',
       'Is Speaking',
-      'Hand Raised',
-      'Status'
+      'Hand Raised'
     ];
 
-    const sessionDate = new Date().toLocaleDateString();
     const courseId = currentClass?.id || 'N/A';
-    const courseName = currentClass?.name || 'N/A';
     const sessionStart = cameraStartTime || 'N/A';
     const sessionEnd = cameraStopTime || 'N/A';
 
-    const rows = combinedData.map((student, index) => {
+    const rows = combinedData.map((student) => {
       const numericScore = Number(student.engagementScore);
       const engagementScore = Number.isFinite(numericScore) ? numericScore.toFixed(1) : 'N/A';
       const isSleeping = typeof student.isSleeping === 'boolean' ? (student.isSleeping ? 'Yes' : 'No') : 'N/A';
@@ -815,21 +782,15 @@ function ProfessorDashboard({ userContext }) {
       const handRaised = typeof student.handRaised === 'boolean' ? (student.handRaised ? 'Yes' : 'No') : 'N/A';
 
       return [
-        student.id || index + 1,
-        student.studentId || student.id || 'N/A',
         student.name || 'Unknown',
-        student.mode || 'Unknown',
         courseId,
-        courseName,
-        sessionDate,
         sessionStart,
         sessionEnd,
         engagementScore,
         student.engagementLevel || 'N/A',
         isSleeping,
         isSpeaking,
-        handRaised,
-        student.status || (student.mode === 'Unknown' ? 'Tentative' : 'Present')
+        handRaised
       ];
     });
 
@@ -1001,13 +962,7 @@ function ProfessorDashboard({ userContext }) {
               </Badge>
             </div>
             <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Total Present</Text>
-              <Badge appearance="filled" color="brand" size="extra-large">
-                {totalPresent}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Onsite</Text>
+              <Text size={300} style={{ color: '#666' }}>Onsite Students</Text>
               <Badge appearance="filled" color="informative" size="extra-large">
                 {onsiteAttendance.length}
               </Badge>
@@ -1018,22 +973,7 @@ function ProfessorDashboard({ userContext }) {
                 {unknownFaces.length}
               </Badge>
             </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Total Students</Text>
-              <Badge appearance="filled" color="success" size="extra-large">
-                {totalStudentsOnsite}
-              </Badge>
-            </div>
-            <div className={styles.statItem}>
-              <Text size={300} style={{ color: '#666' }}>Online</Text>
-              <Badge
-                appearance={onlineStudents.length > 0 ? 'filled' : 'tint'}
-                color={onlineStudents.length > 0 ? 'success' : 'subtle'}
-                size="extra-large"
-              >
-                {onlineStudents.length}
-              </Badge>
-            </div>
+
           </div>
         </Card>
 
@@ -1086,148 +1026,7 @@ function ProfessorDashboard({ userContext }) {
           </div>
         </Card>
 
-        {/* Online Attendance Panel */}
-        <Card className={styles.statsCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text weight="semibold" size={400}>Online Attendance (Teams)</Text>
-            {onlineStudents.length > 0 && (
-              <Badge appearance="filled" color="success" size="small">
-                {onlineStudents.length} online
-              </Badge>
-            )}
-          </div>
-          <OnlineAttendance
-            onOnlineStudentsUpdate={(students) => setOnlineStudents(students)}
-          />
-        </Card>
 
-        {/* Participant Dropdown */}
-        <Card className={styles.participantDropdown}>
-          <div className={styles.participantHeader}>
-            <button
-              type="button"
-              className={styles.participantToggleButton}
-              onClick={() => setParticipantsExpanded((prev) => !prev)}
-              aria-expanded={participantsExpanded}
-              aria-label="Toggle participants list"
-            >
-              <Text weight="semibold">View Participants</Text>
-              {participantsExpanded ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-            </button>
-          </div>
-
-          {participantsExpanded && (
-            <div className={styles.participantContent}>
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300}>
-                  Onsite ({onsiteAttendance.length})
-                </Text>
-                <div className={styles.participantList}>
-                  {onsiteAttendance.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      No onsite participants yet
-                    </Text>
-                  ) : (
-                    onsiteAttendance.map((p, idx) => (
-                      <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <Text size={300} weight="semibold">{p.name}</Text>
-                          {p.detectedTime && (
-                            <Text size={200} style={{ color: '#666', display: 'block' }}>
-                              {p.detectedTime}
-                            </Text>
-                          )}
-                          {p.dominantEmotion && (
-                            <Text size={100} style={{ color: '#888', fontStyle: 'italic' }}>
-                              {p.dominantEmotion}
-                            </Text>
-                          )}
-                        </div>
-                        {p.engagementLevel && (
-                          <Badge 
-                            appearance="filled"
-                            color={
-                              p.engagementLevel === 'engaged' ? 'success' : 
-                              p.engagementLevel === 'present' ? 'warning' : 
-                              'danger'
-                            }
-                            size="small"
-                          >
-                            {Number.isFinite(Number(p.engagementScore))
-                              ? `${Number(p.engagementScore).toFixed(0)}%`
-                              : 'N/A'}
-                          </Badge>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300}>
-                  Unknown ({unknownFaces.length})
-                </Text>
-                <div className={styles.participantList}>
-                  {unknownFaces.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      No unknown faces detected
-                    </Text>
-                  ) : (
-                    unknownFaces.map((p, idx) => (
-                      <div key={idx} className={styles.participantItem}>
-                        <Text size={300}>Unknown Face #{idx + 1}</Text>
-                        {p.detectedTime && (
-                          <Text size={200} style={{ color: '#666' }}>
-                            {p.detectedTime}
-                          </Text>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className={styles.participantSection}>
-                <Text weight="semibold" size={300} style={{ color: onlineStudents.length > 0 ? '#333' : '#999' }}>
-                  Online ({onlineStudents.length})
-                </Text>
-                <div className={styles.participantList}>
-                  {onlineStudents.length === 0 ? (
-                    <Text size={200} style={{ color: '#999', textAlign: 'center' }}>
-                      Connect Graph API below to track online attendance
-                    </Text>
-                  ) : (
-                    onlineStudents.map((p, idx) => (
-                      <div key={idx} className={styles.participantItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <Text size={300} weight="semibold">{p.name || p.fullName}</Text>
-                          {p.email && (
-                            <Text size={200} style={{ color: '#666', display: 'block' }}>
-                              {p.email}
-                            </Text>
-                          )}
-                        </div>
-                        {p.engagementScore != null && (
-                          <Badge
-                            appearance="filled"
-                            color={
-                              p.engagementScore >= 80 ? 'success' :
-                              p.engagementScore >= 50 ? 'warning' : 'danger'
-                            }
-                            size="small"
-                          >
-                            {p.engagementScore}%
-                          </Badge>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
       </div>
     </div>
   );
