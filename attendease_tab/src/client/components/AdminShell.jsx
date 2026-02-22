@@ -5,30 +5,24 @@ import {
   Text,
 } from '@fluentui/react-components';
 import {
-  People24Regular,
-  BookOpen24Regular,
-  Grid24Regular,
-  ClipboardTaskListLtr24Regular,
-  DocumentBulletList24Regular,
-  Settings24Regular,
   Dismiss24Regular,
   ArrowLeft24Regular,
 } from '@fluentui/react-icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { setAdminSession } from '../utils/auth';
 
 /* ------------------------------------------------------------------ */
 /*  Sidebar navigation items                                          */
 /* ------------------------------------------------------------------ */
 const NAV_ITEMS = [
-  { title: 'Dashboard', icon: <Grid24Regular />, path: '/admin', color: '#6366f1' },
-  { title: 'Manage Users', icon: <People24Regular />, path: '/admin/users', color: '#3b82f6' },
-  { title: 'Manage Courses', icon: <BookOpen24Regular />, path: '/admin/courses', color: '#8b5cf6' },
-  { title: 'Manage Sections', icon: <Grid24Regular />, path: '/admin/sections', color: '#06b6d4' },
-  { title: 'Manage Programs', icon: <BookOpen24Regular />, path: '/admin/programs', color: '#10b981' },
-  { title: 'Activity Logs', icon: <ClipboardTaskListLtr24Regular />, path: '/admin/logs', color: '#f59e0b' },
-  { title: 'View Reports', icon: <DocumentBulletList24Regular />, path: '/admin/reports', color: '#ef4444' },
-  { title: 'System Settings', icon: <Settings24Regular />, path: '/admin/settings', color: '#6366f1' },
+  { title: 'Dashboard', path: '/admin' },
+  { title: 'Manage Users', path: '/admin/users' },
+  { title: 'Manage Courses', path: '/admin/courses' },
+  { title: 'Manage Sections', path: '/admin/sections' },
+  { title: 'Manage Programs', path: '/admin/programs' },
+  { title: 'Activity Logs', path: '/admin/logs' },
+  { title: 'View Reports', path: '/admin/reports' },
+  { title: 'About System', path: '/admin/settings' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -66,6 +60,7 @@ const useStyles = makeStyles({
     fontWeight: '800',
     color: '#244670',
     cursor: 'default',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '@media (max-width: 768px)': { fontSize: '24px' },
   },
   logoHighlight: { color: '#FFB900' },
@@ -80,7 +75,10 @@ const useStyles = makeStyles({
     ...shorthands.border('none'),
     fontSize: '24px',
     color: '#244670',
-    '&:hover': { backgroundColor: '#f3f2f1', borderRadius: '4px' },
+    '&:hover': {
+      backgroundColor: '#f3f2f1',
+      borderRadius: '4px',
+    },
   },
 
   /* ---- Slide-in sidebar overlay ---- */
@@ -115,7 +113,12 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  menuTitle: { fontSize: '18px', fontWeight: '600', color: '#244670' },
+  menuTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#244670',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
   closeButton: {
     width: '32px',
     height: '32px',
@@ -133,7 +136,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     ...shorthands.padding('10px'),
     flex: 1,
-    overflowY: 'auto',
   },
   menuItem: {
     ...shorthands.padding('14px', '16px'),
@@ -145,9 +147,15 @@ const useStyles = makeStyles({
     borderRadius: '4px',
     textAlign: 'left',
     width: '100%',
-    // Match Student Portal menu item styling exactly (inline content)
-    '& svg': { marginRight: '8px', verticalAlign: 'middle' },
-    '&:hover': { backgroundColor: '#f3f2f1' },
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    '&:hover': {
+      backgroundColor: '#f3f2f1',
+    },
+  },
+  menuItemActive: {
+    backgroundColor: '#e8f4f8',
+    color: '#244670',
+    fontWeight: '600',
   },
   menuDivider: {
     ...shorthands.margin('10px', '0'),
@@ -205,13 +213,14 @@ const useStyles = makeStyles({
 export default function AdminShell({ children, showBack = true }) {
   const styles = useStyles();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = () => {
     setAdminSession(false);
     localStorage.removeItem('adminSession');
     localStorage.removeItem('userEmail');
-    navigate('/');
+    window.location.href = '/';
   };
 
   return (
@@ -236,7 +245,7 @@ export default function AdminShell({ children, showBack = true }) {
           <div className={styles.menuBackdrop} onClick={() => setIsMenuOpen(false)} />
           <div className={styles.menuPanel}>
             <div className={styles.menuHeader}>
-              <Text className={styles.menuTitle}>Admin Menu</Text>
+              <Text className={styles.menuTitle}>Menu</Text>
               <button className={styles.closeButton} onClick={() => setIsMenuOpen(false)} aria-label="Close">
                 <Dismiss24Regular />
               </button>
@@ -245,10 +254,9 @@ export default function AdminShell({ children, showBack = true }) {
               {NAV_ITEMS.map((item) => (
                 <button
                   key={item.title}
-                  className={styles.menuItem}
+                  className={`${styles.menuItem} ${location.pathname === item.path ? styles.menuItemActive : ''}`}
                   onClick={() => { setIsMenuOpen(false); navigate(item.path); }}
                 >
-                  {React.cloneElement(item.icon, { style: { color: item.color, flexShrink: 0 } })}
                   {item.title}
                 </button>
               ))}
