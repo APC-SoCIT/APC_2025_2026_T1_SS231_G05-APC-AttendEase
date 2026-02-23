@@ -6,7 +6,8 @@ import {
   makeStyles,
   shorthands,
   Text,
-  Divider
+  Divider,
+  Input
 } from '@fluentui/react-components';
 import {
   Dismiss24Regular,
@@ -19,7 +20,9 @@ import {
   EyeOff20Regular,
   Eye20Regular,
   ArrowDownload20Regular,
-  Checkmark20Regular
+  Checkmark20Regular,
+  People24Regular,
+  ChartMultiple24Regular
 } from '@fluentui/react-icons';
 import FacialRecognition from './FacialRecognition';
 import ExportPanel from './ExportPanel';
@@ -617,6 +620,9 @@ function ProfessorDashboard({ userContext }) {
   // Ref to track if the user manually selected a class
   const isManualOverrideRef = useRef(false);
 
+  // Temporary Meeting Join URL for testing
+  const [meetingJoinUrl, setMeetingJoinUrl] = useState('');
+
   // Modal state
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [scheduleModalMode, setScheduleModalMode] = useState('create');
@@ -1161,21 +1167,17 @@ function ProfessorDashboard({ userContext }) {
           <Card className={styles.statsCard}>
             <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Live Statistics</Text>
             <div className={styles.statsGrid}>
-              <div className={styles.statTile} style={{ backgroundColor: '#03346E' }}>
+              <div className={styles.statTile} style={{ backgroundColor: '#2B579A' }}>
                 <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{totalClasses}</span>
-                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Total Student</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Total Classes</span>
               </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#021526' }}>
-                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{totalPresent}</span>
-                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Total Present</span>
-              </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#EEF7FF' }}>
+              <div className={styles.statTile} style={{ backgroundColor: '#E8F4F8' }}>
                 <span className={styles.statTileNumber} style={{ color: '#1e3a5f' }}>{onsiteAttendance.length}</span>
                 <span className={styles.statTileLabel} style={{ color: '#555' }}>Onsite Students</span>
               </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#CDE8E5' }}>
-                <span className={styles.statTileNumber} style={{ color: '#1e3a5f' }}>{totalStudentsOnsite}</span>
-                <span className={styles.statTileLabel} style={{ color: '#555' }}>Online Students</span>
+              <div className={styles.statTile} style={{ backgroundColor: '#F4E4D7' }}>
+                <span className={styles.statTileNumber} style={{ color: '#1e3a5f' }}>{unknownFaces.length}</span>
+                <span className={styles.statTileLabel} style={{ color: '#555' }}>Unknown</span>
               </div>
             </div>
           </Card>
@@ -1183,19 +1185,19 @@ function ProfessorDashboard({ userContext }) {
           <Card className={styles.statsCard}>
             <Text weight="semibold" size={400} style={{ color: '#1e3a5f' }}>Class Engagement</Text>
             <div className={styles.statsGrid}>
-              <div className={styles.statTile} style={{ backgroundColor: '#FEEE91' }}>
+              <div className={styles.statTile} style={{ backgroundColor: '#FDD835' }}>
                 <span className={styles.statTileNumber} style={{ color: '#333' }}>{classEngagement.present_count}</span>
-                <span className={styles.statTileLabel} style={{ color: '#555' }}>Neutral</span>
+                <span className={styles.statTileLabel} style={{ color: '#555' }}>Present</span>
               </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#FCB53B' }}>
-                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.average_score?.toFixed(0) || 0}</span>
-                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Engagement Rate</span>
+              <div className={styles.statTile} style={{ backgroundColor: '#FB8C00' }}>
+                <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.average_score?.toFixed(0) || 0}%</span>
+                <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Engagement</span>
               </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#F1511B' }}>
+              <div className={styles.statTile} style={{ backgroundColor: '#E53935' }}>
                 <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.disengaged_count}</span>
                 <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Disengaged</span>
               </div>
-              <div className={styles.statTile} style={{ backgroundColor: '#36C752' }}>
+              <div className={styles.statTile} style={{ backgroundColor: '#43A047' }}>
                 <span className={styles.statTileNumber} style={{ color: '#ffffff' }}>{classEngagement.engaged_count}</span>
                 <span className={styles.statTileLabel} style={{ color: '#ffffff' }}>Engaged</span>
               </div>
@@ -1331,6 +1333,36 @@ function ProfessorDashboard({ userContext }) {
   const renderExportView = () => {
     return (
       <div className={styles.viewWrapper} style={{ maxWidth: '1100px' }}>
+        {/* Temporary Meeting Join URL input for accessibility testing */}
+        <Card style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Text weight="semibold" size={300} style={{ color: '#1e3a5f', whiteSpace: 'nowrap' }}>Meeting Join URL</Text>
+              <Badge appearance="filled" color="warning" size="small">Testing</Badge>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Input
+                placeholder="Paste Teams Meeting Join URL here..."
+                value={meetingJoinUrl}
+                onChange={(e, data) => setMeetingJoinUrl(data.value)}
+                style={{ flex: 1 }}
+                size="small"
+              />
+              <Button
+                appearance="primary"
+                size="small"
+                disabled={!meetingJoinUrl.trim()}
+                style={{ backgroundColor: '#244670', whiteSpace: 'nowrap' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(meetingJoinUrl);
+                }}
+              >
+                Copy URL
+              </Button>
+            </div>
+          </div>
+        </Card>
+
         <Card className={styles.exportMainCard}>
           <div>
             <Text className={styles.exportMainTitle}>Class Records</Text>
@@ -1347,9 +1379,32 @@ function ProfessorDashboard({ userContext }) {
 
           <div className={styles.exportGrid}>
             {schedules.length === 0 ? (
-              <Text size={200} style={{ color: '#999', padding: '20px' }}>
-                No active classes available to export. Create a class first!
-              </Text>
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div key={`skeleton-${i}`} className={styles.classExportCard}>
+                    <div className={styles.classExportHeader}>
+                      <div style={{ width: '60%', height: '20px', backgroundColor: '#e8e8e8', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
+                      <div className={styles.classExportActions}>
+                        <div className={styles.downloadIconBtn} style={{ backgroundColor: '#f0f0f0' }}>
+                          <People24Regular />
+                        </div>
+                        <div className={styles.downloadIconBtn} style={{ backgroundColor: '#f0f0f0' }}>
+                          <ChartMultiple24Regular />
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                      <div style={{ width: '100%', height: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
+                      <div style={{ width: '70%', height: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
+                    </div>
+                    {i === 2 && (
+                      <Text size={200} style={{ color: '#999', textAlign: 'center', marginTop: '8px' }}>
+                        No classes yet — create one from Class Schedule
+                      </Text>
+                    )}
+                  </div>
+                ))}
+              </>
             ) : (
               schedules.map((cls) => {
                 const classMeetings = getMeetingsForClass(cls);
@@ -1365,45 +1420,58 @@ function ProfessorDashboard({ userContext }) {
                           onClick={() => handleExportAttendanceReport(cls)}
                           title="Download Attendance CSV"
                         >
-                          <ArrowDownload20Regular />
+                          <People24Regular />
                         </div>
                         <div
                           className={styles.downloadIconBtn}
                           onClick={() => handleExportEngagementReport(cls)}
                           title="Download Engagement CSV"
                         >
-                          <ArrowDownload20Regular />
+                          <ChartMultiple24Regular />
                         </div>
                       </div>
                     </div>
 
                     <div className={styles.meetingList}>
-                      {classMeetings.map((meeting) => {
-                        const isSelected = classSelections.includes(meeting.id);
-
-                        return (
-                          <div key={meeting.id} className={styles.meetingItem}>
+                      {classMeetings.length === 0 ? (
+                        // Skeleton meeting items showing structure
+                        [1, 2].map((i) => (
+                          <div key={`skeleton-meeting-${i}`} className={styles.meetingItem} style={{ opacity: 0.5 }}>
                             <div className={styles.meetingInfo}>
-                              <Text className={styles.meetingName}>{meeting.name}</Text>
-                              <Text className={styles.meetingDate}>{meeting.date}</Text>
-                              <Text className={styles.meetingTime}>{meeting.time}</Text>
+                              <div style={{ width: '120px', height: '14px', backgroundColor: '#e8e8e8', borderRadius: '4px', marginBottom: '4px', animation: 'pulse 2s infinite' }} />
+                              <div style={{ width: '100px', height: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
                             </div>
-
-                            {/* Functional Checkbox */}
-                            <div
-                              className={styles.checkboxOutline}
-                              onClick={() => handleToggleMeeting(cls.id, meeting.id)}
-                              style={{
-                                backgroundColor: isSelected ? '#ffb900' : 'transparent',
-                                borderColor: isSelected ? '#ffb900' : '#e5e7eb',
-                              }}
-                            >
-                              {isSelected && <Checkmark20Regular style={{ color: '#fff', width: '16px', height: '16px' }} />}
-                            </div>
-
+                            <div className={styles.checkboxOutline} style={{ backgroundColor: '#f0f0f0', borderColor: '#e8e8e8', cursor: 'default' }} />
                           </div>
-                        );
-                      })}
+                        ))
+                      ) : (
+                        classMeetings.map((meeting) => {
+                          const isSelected = classSelections.includes(meeting.id);
+
+                          return (
+                            <div key={meeting.id} className={styles.meetingItem}>
+                              <div className={styles.meetingInfo}>
+                                <Text className={styles.meetingName}>{meeting.name}</Text>
+                                <Text className={styles.meetingDate}>{meeting.date}</Text>
+                                <Text className={styles.meetingTime}>{meeting.time}</Text>
+                              </div>
+
+                              {/* Functional Checkbox */}
+                              <div
+                                className={styles.checkboxOutline}
+                                onClick={() => handleToggleMeeting(cls.id, meeting.id)}
+                                style={{
+                                  backgroundColor: isSelected ? '#ffb900' : 'transparent',
+                                  borderColor: isSelected ? '#ffb900' : '#e5e7eb',
+                                }}
+                              >
+                                {isSelected && <Checkmark20Regular style={{ color: '#fff', width: '16px', height: '16px' }} />}
+                              </div>
+
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 );
@@ -1471,6 +1539,10 @@ function ProfessorDashboard({ userContext }) {
         @keyframes slideInRight {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
         }
       `}</style>
     </div>

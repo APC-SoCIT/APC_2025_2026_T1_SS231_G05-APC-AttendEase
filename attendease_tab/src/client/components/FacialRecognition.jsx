@@ -18,8 +18,7 @@ const useStyles = makeStyles({
   videoContainer: {
     position: 'relative',
     width: '100%',
-    maxWidth: '1000px',
-    height: '525px',
+    aspectRatio: '16 / 9',
     ...shorthands.border('2px', 'solid', '#ccc'),
     backgroundColor: '#f0f0f0',
     display: 'flex',
