@@ -270,6 +270,27 @@ app.get('/api/graph/status', (req, res) => {
   res.json({ initialized: !!graphClient });
 });
 
+// Diagnostic: verify User.Read.All works from the app's credential
+app.get('/api/graph/test-user', async (req, res) => {
+  try {
+    if (!graphClient) {
+      return res.status(503).json({ status: 'error', message: 'Graph client not initialised.' });
+    }
+    const email = (req.query.email || '').trim();
+    if (!email) {
+      return res.status(400).json({ status: 'error', message: 'Pass ?email=someone@domain' });
+    }
+    const user = await graphClient
+      .api(`/users/${encodeURIComponent(email)}`)
+      .select('displayName,mail,userPrincipalName,id')
+      .get();
+    res.json({ status: 'success', user });
+  } catch (err) {
+    console.error('test-user error:', err?.message || err);
+    res.status(err.statusCode || 500).json({ status: 'error', code: err.statusCode, message: err.message });
+  }
+});
+
 // ---- App-Only Graph API Endpoints ----
 // These use the server-side graphClient (no user token needed).
 
