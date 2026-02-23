@@ -340,7 +340,6 @@ function AdminPage() {
     const location = useLocation();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const handleLogout = () => {
-        setAdminSession(false);
         localStorage.removeItem('adminSession');
         localStorage.removeItem('userEmail');
         window.location.href = '/';
