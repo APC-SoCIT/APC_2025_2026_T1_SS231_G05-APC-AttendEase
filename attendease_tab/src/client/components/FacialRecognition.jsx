@@ -640,14 +640,14 @@ function FacialRecognition({ onAttendanceUpdate, onMessagesUpdate, onEngagementU
           onClick={startCamera}
           disabled={cameraActive || !selectedCamera}
         >
-          Start Camera
+          Start Session
         </Button>
 
         <Button
           onClick={stopCamera}
           disabled={!cameraActive}
         >
-          Stop Camera
+          End Session
         </Button>
 
         <Button onClick={loadCameras} disabled={cameraActive}>
