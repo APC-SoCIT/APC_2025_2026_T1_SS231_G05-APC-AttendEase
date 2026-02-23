@@ -10,7 +10,7 @@ import { supabase } from '../../config/supabase.config.js';
  */
 export async function recordAttendance(sessionId, studentId, type, metadata = {}) {
   try {
-    const { data, error} = await supabase
+    const { data, error } = await supabase
       .from('attendance_records')
       .insert({
         session_id: sessionId,
@@ -25,7 +25,7 @@ export async function recordAttendance(sessionId, studentId, type, metadata = {}
       .single();
 
     if (error) throw error;
-    
+
     console.log(`✅ Attendance recorded: ${data.users.full_name} - ${type}`);
     return { success: true, attendance: data };
   } catch (error) {
@@ -49,7 +49,7 @@ export async function getSessionAttendance(sessionId) {
       .order('check_in_time', { ascending: true });
 
     if (error) throw error;
-    
+
     return { success: true, attendance: data };
   } catch (error) {
     console.error('❌ Error getting attendance:', error);
@@ -76,7 +76,7 @@ export async function getStudentAttendanceHistory(studentId, limit = 50) {
       .limit(limit);
 
     if (error) throw error;
-    
+
     return { success: true, attendance: data };
   } catch (error) {
     console.error('❌ Error getting student attendance history:', error);
@@ -97,9 +97,9 @@ export async function checkAttendanceExists(sessionId, studentId) {
       .limit(1);
 
     if (error) throw error;
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       exists: data.length > 0,
       record: data[0] || null
     };
@@ -122,7 +122,7 @@ export async function updateAttendance(attendanceId, updates) {
       .single();
 
     if (error) throw error;
-    
+
     console.log(`✅ Attendance updated: ${attendanceId}`);
     return { success: true, attendance: data };
   } catch (error) {
@@ -142,7 +142,7 @@ export async function deleteAttendance(attendanceId) {
       .eq('id', attendanceId);
 
     if (error) throw error;
-    
+
     console.log(`✅ Attendance deleted: ${attendanceId}`);
     return { success: true };
   } catch (error) {
@@ -182,8 +182,8 @@ export async function getSessionAttendanceSummary(sessionId) {
     // Calculate summary
     const totalEnrolled = session.courses.course_enrollments[0]?.count || 0;
     const totalPresent = attendance.length;
-    const onsiteCount = attendance.filter(a => a.attendance_type === 'onsite').length;
-    const onlineCount = attendance.filter(a => a.attendance_type === 'online').length;
+    const onsiteCount = attendance.filter(a => (a.status || '').toLowerCase() === 'onsite').length;
+    const onlineCount = attendance.filter(a => (a.status || '').toLowerCase() === 'online').length;
     const absentCount = totalEnrolled - totalPresent;
 
     return {
@@ -260,7 +260,8 @@ export async function getAllAttendanceRecords(filters = {}) {
       query = query.eq('status', filters.status);
     }
     if (filters.mode && filters.mode !== 'all') {
-      query = query.eq('attendance_type', filters.mode);
+      // UI refers to onsite/online as mode, DB uses status
+      query = query.eq('status', filters.mode);
     }
     if (filters.sessionId) {
       query = query.eq('session_id', filters.sessionId);
@@ -300,7 +301,7 @@ export async function getAttendanceStats(filters = {}) {
   try {
     let query = supabase
       .from('attendance_records')
-      .select('status, attendance_type, session_id, check_in_time');
+      .select('status, session_id, check_in_time');
 
     if (filters.startDate) query = query.gte('check_in_time', filters.startDate);
     if (filters.endDate) query = query.lte('check_in_time', filters.endDate);
@@ -311,16 +312,15 @@ export async function getAttendanceStats(filters = {}) {
 
     const records = data || [];
     const totalRecords = records.length;
-    const presentCount = records.filter(r => r.status === 'present').length;
-    const lateCount = records.filter(r => r.status === 'late').length;
-    const absentCount = records.filter(r => r.status === 'absent').length;
-    const unknownCount = records.filter(r => r.status === 'unknown').length;
-    const onsiteCount = records.filter(r => r.attendance_type === 'onsite').length;
-    const onlineCount = records.filter(r => r.attendance_type === 'online').length;
+    const presentCount = records.length; // Every record is a present student
+    const absentCount = 0; // Cannot calculate without course enrollments
+    const onsiteCount = records.filter(r => (r.status || '').toLowerCase() === 'onsite').length;
+    const onlineCount = records.filter(r => (r.status || '').toLowerCase() === 'online').length;
     const uniqueSessions = [...new Set(records.map(r => r.session_id))].length;
     const attendanceRate = totalRecords > 0
-      ? Math.round(((presentCount + lateCount) / totalRecords) * 100)
+      ? 100 // We don't have absent, so this metric is less meaningful
       : 0;
+
 
     // Latest session date
     let latestSession = null;
@@ -335,9 +335,7 @@ export async function getAttendanceStats(filters = {}) {
         totalSessions: uniqueSessions,
         totalRecords,
         presentCount,
-        lateCount,
         absentCount,
-        unknownCount,
         onsiteCount,
         onlineCount,
         attendanceRate,
@@ -372,11 +370,11 @@ export async function getAttendanceTrend(days = 30) {
     (data || []).forEach(record => {
       const dateKey = new Date(record.check_in_time).toLocaleDateString();
       if (!dailyStats[dateKey]) {
-        dailyStats[dateKey] = { date: dateKey, present: 0, late: 0, absent: 0 };
+        dailyStats[dateKey] = { date: dateKey, present: 0, onsite: 0, online: 0 };
       }
-      if (record.status === 'present') dailyStats[dateKey].present++;
-      else if (record.status === 'late') dailyStats[dateKey].late++;
-      else if (record.status === 'absent') dailyStats[dateKey].absent++;
+      dailyStats[dateKey].present++;
+      if ((record.status || '').toLowerCase() === 'onsite') dailyStats[dateKey].onsite++;
+      else if ((record.status || '').toLowerCase() === 'online') dailyStats[dateKey].online++;
     });
 
     return { success: true, data: Object.values(dailyStats), error: null };
@@ -409,7 +407,7 @@ export async function getCourseAttendanceReport(courseId) {
     // Get all attendance records for these sessions
     const { data: records, error: recErr } = await supabase
       .from('attendance_records')
-      .select('session_id, student_id, status, attendance_type')
+      .select('session_id, student_id, status')
       .in('session_id', sessionIds);
 
     if (recErr) throw recErr;
@@ -419,29 +417,24 @@ export async function getCourseAttendanceReport(courseId) {
     // Per-session breakdown
     const sessionBreakdown = sessions.map(session => {
       const sRecords = allRecords.filter(r => r.session_id === session.id);
-      const present = sRecords.filter(r => r.status === 'present').length;
-      const late = sRecords.filter(r => r.status === 'late').length;
-      const absent = sRecords.filter(r => r.status === 'absent').length;
-      const total = sRecords.length;
-      const rate = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
+      const present = sRecords.length;
+      const onsite = sRecords.filter(r => (r.status || '').toLowerCase() === 'onsite').length;
+      const online = sRecords.filter(r => (r.status || '').toLowerCase() === 'online').length;
 
       return {
         session_id: session.id,
         session_date: session.session_date,
         start_time: session.start_time,
         status: session.status,
-        totalRecords: total,
+        totalRecords: present,
         present,
-        late,
-        absent,
-        rate,
+        onsite,
+        online,
       };
     });
 
     // Course totals
-    const totalPresent = allRecords.filter(r => r.status === 'present').length;
-    const totalLate = allRecords.filter(r => r.status === 'late').length;
-    const totalAbsent = allRecords.filter(r => r.status === 'absent').length;
+    const totalPresent = allRecords.length;
     const uniqueStudents = [...new Set(allRecords.map(r => r.student_id))].length;
 
     return {
@@ -452,11 +445,9 @@ export async function getCourseAttendanceReport(courseId) {
           totalSessions: sessions.length,
           totalRecords: allRecords.length,
           totalPresent,
-          totalLate,
-          totalAbsent,
           uniqueStudents,
           avgRate: allRecords.length > 0
-            ? Math.round(((totalPresent + totalLate) / allRecords.length) * 100)
+            ? Math.round((totalPresent / allRecords.length) * 100)
             : 0,
         },
       },
@@ -502,16 +493,16 @@ export async function getStudentAttendanceReport(studentId) {
           description: r.sessions?.courses?.description || '',
           totalRecords: 0,
           present: 0,
-          late: 0,
-          absent: 0,
+          onsite: 0,
+          online: 0,
           sessionsAttended: new Set(),
           latestDate: null,
         };
       }
       courseMap[courseId].totalRecords++;
-      if (r.status === 'present') courseMap[courseId].present++;
-      else if (r.status === 'late') courseMap[courseId].late++;
-      else if (r.status === 'absent') courseMap[courseId].absent++;
+      courseMap[courseId].present++;
+      if ((r.status || '').toLowerCase() === 'onsite') courseMap[courseId].onsite++;
+      else if ((r.status || '').toLowerCase() === 'online') courseMap[courseId].online++;
       courseMap[courseId].sessionsAttended.add(r.session_id);
       const checkIn = new Date(r.check_in_time);
       if (!courseMap[courseId].latestDate || checkIn > courseMap[courseId].latestDate) {
@@ -523,12 +514,11 @@ export async function getStudentAttendanceReport(studentId) {
       ...c,
       sessionsAttended: c.sessionsAttended.size,
       latestDate: c.latestDate?.toISOString() || null,
-      rate: c.totalRecords > 0 ? Math.round(((c.present + c.late) / c.totalRecords) * 100) : 0,
+      rate: c.totalRecords > 0 ? Math.round((c.present / c.totalRecords) * 100) : 0,
     }));
 
     // Overall
-    const totalPresent = records.filter(r => r.status === 'present').length;
-    const totalLate = records.filter(r => r.status === 'late').length;
+    const totalPresent = records.length;
 
     return {
       success: true,
@@ -539,7 +529,7 @@ export async function getStudentAttendanceReport(studentId) {
           totalRecords: records.length,
           totalSessions: [...new Set(records.map(r => r.session_id))].length,
           overallRate: records.length > 0
-            ? Math.round(((totalPresent + totalLate) / records.length) * 100)
+            ? Math.round((totalPresent / records.length) * 100)
             : 0,
         },
       },
@@ -606,7 +596,7 @@ export async function getAttendanceForExport(filters = {}) {
     if (filters.startDate) query = query.gte('check_in_time', filters.startDate);
     if (filters.endDate) query = query.lte('check_in_time', filters.endDate);
     if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
-    if (filters.mode && filters.mode !== 'all') query = query.eq('attendance_type', filters.mode);
+    if (filters.mode && filters.mode !== 'all') query = query.eq('status', filters.mode);
 
     const { data, error } = await query;
     if (error) throw error;

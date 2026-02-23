@@ -276,9 +276,8 @@ export default function ReportStudents() {
     const courseChartData = reportData?.courses?.map(c => ({
         name: c.course_code,
         present: c.present,
-        late: c.late,
-        absent: c.absent,
-        rate: c.rate,
+        onsite: c.onsite,
+        online: c.online,
     })) || [];
 
     return (
@@ -371,12 +370,6 @@ export default function ReportStudents() {
                             <span className={styles.summaryLabel}>Total Records</span>
                             <span className={styles.summaryValue}>{reportData.totals.totalRecords}</span>
                         </div>
-                        <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Overall Rate</span>
-                            <span className={styles.summaryValue} style={{ color: reportData.totals.overallRate >= 80 ? '#166534' : reportData.totals.overallRate >= 60 ? '#92400e' : '#991b1b' }}>
-                                {reportData.totals.overallRate}%
-                            </span>
-                        </div>
                     </div>
 
                     {/* Course Attendance Chart */}
@@ -384,7 +377,7 @@ export default function ReportStudents() {
                         <div className={styles.chartCard}>
                             <div>
                                 <div className={styles.chartTitle}>Attendance by Course</div>
-                                <div className={styles.chartSubtitle}>Present, late, and absent counts per course</div>
+                                <div className={styles.chartSubtitle}>Onsite and online counts per course</div>
                             </div>
                             <ResponsiveContainer width="100%" height={280}>
                                 <BarChart data={courseChartData} barGap={2} barCategoryGap="20%">
@@ -392,9 +385,8 @@ export default function ReportStudents() {
                                     <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
                                     <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="present" fill="#36C752" name="Present" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="late" fill="#FCB53B" name="Late" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="absent" fill="#F1511B" name="Absent" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="onsite" fill="#36C752" name="Onsite" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="online" fill="#F1511B" name="Online" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -409,11 +401,9 @@ export default function ReportStudents() {
                                     <tr>
                                         <th className={styles.tableHeader}>Course</th>
                                         <th className={styles.tableHeader}>Description</th>
-                                        <th className={styles.tableHeader}>Sessions</th>
-                                        <th className={styles.tableHeader}>Present</th>
-                                        <th className={styles.tableHeader}>Late</th>
-                                        <th className={styles.tableHeader}>Absent</th>
-                                        <th className={styles.tableHeader}>Rate</th>
+                                        <th className={styles.tableHeader}>Sessions Attended</th>
+                                        <th className={styles.tableHeader}>Onsite</th>
+                                        <th className={styles.tableHeader}>Online</th>
                                         <th className={styles.tableHeader}>Latest</th>
                                     </tr>
                                 </thead>
@@ -425,20 +415,8 @@ export default function ReportStudents() {
                                             </td>
                                             <td className={styles.tableCell} style={{ color: '#64748b' }}>{c.description || '—'}</td>
                                             <td className={styles.tableCell}>{c.sessionsAttended}</td>
-                                            <td className={styles.tableCell}>{c.present}</td>
-                                            <td className={styles.tableCell}>{c.late}</td>
-                                            <td className={styles.tableCell}>{c.absent}</td>
-                                            <td className={styles.tableCell}>
-                                                <span style={{
-                                                    ...rateStyle(c.rate),
-                                                    padding: '3px 10px',
-                                                    borderRadius: '12px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 600,
-                                                }}>
-                                                    {c.rate}%
-                                                </span>
-                                            </td>
+                                            <td className={styles.tableCell}>{c.onsite}</td>
+                                            <td className={styles.tableCell}>{c.online}</td>
                                             <td className={styles.tableCell} style={{ color: '#64748b' }}>{formatDate(c.latestDate)}</td>
                                         </tr>
                                     ))}

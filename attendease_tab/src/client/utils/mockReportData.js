@@ -20,8 +20,7 @@ const students = [
     'Christopher Green', 'Ella Adams'
 ];
 
-const statuses = ['Present', 'Absent', 'Late', 'Unknown'];
-const modes = ['Onsite', 'Online'];
+const statuses = ['Present', 'Absent'];
 
 // Generate random date within last N days
 function getRandomDate(daysAgo) {
@@ -57,15 +56,13 @@ function generateMockSessions(numberOfDays = 30) {
 
             for (let i = 0; i < numStudents; i++) {
                 const student = students[Math.floor(Math.random() * students.length)];
-                const mode = modes[Math.floor(Math.random() * modes.length)];
+                const mode = Math.random() < 0.6 ? 'Onsite' : 'Online';
 
-                // Higher probability of being present (70%)
+                // Higher probability of being present (80%)
                 let status;
                 const rand = Math.random();
-                if (rand < 0.7) status = 'Present';
-                else if (rand < 0.85) status = 'Late';
-                else if (rand < 0.95) status = 'Absent';
-                else status = 'Unknown';
+                if (rand < 0.8) status = 'Present';
+                else status = 'Absent';
 
                 const checkInTime = status !== 'Absent' ? getCheckInTime(sessionDate) : null;
                 const duration = status !== 'Absent' ? Math.floor(Math.random() * 50) + 30 : 0; // 30-80 minutes
@@ -145,9 +142,7 @@ export function calculateStats(sessions) {
 
     let totalRecords = 0;
     let presentCount = 0;
-    let lateCount = 0;
     let absentCount = 0;
-    let unknownCount = 0;
     let onsiteCount = 0;
     let onlineCount = 0;
 
@@ -155,9 +150,7 @@ export function calculateStats(sessions) {
         session.records.forEach(record => {
             totalRecords++;
             if (record.status === 'Present') presentCount++;
-            else if (record.status === 'Late') lateCount++;
             else if (record.status === 'Absent') absentCount++;
-            else if (record.status === 'Unknown') unknownCount++;
 
             if (record.mode === 'Onsite') onsiteCount++;
             else if (record.mode === 'Online') onlineCount++;
@@ -165,16 +158,14 @@ export function calculateStats(sessions) {
     });
 
     const attendanceRate = totalRecords > 0
-        ? Math.round(((presentCount + lateCount) / totalRecords) * 100)
+        ? Math.round((presentCount / totalRecords) * 100)
         : 0;
 
     return {
         totalSessions,
         totalRecords,
         presentCount,
-        lateCount,
         absentCount,
-        unknownCount,
         onsiteCount,
         onlineCount,
         attendanceRate

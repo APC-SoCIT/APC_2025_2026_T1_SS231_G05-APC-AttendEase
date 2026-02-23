@@ -171,21 +171,12 @@ const useStyles = makeStyles({
 });
 
 /* ------------------------------------------------------------------ */
-/*  Colors                                                            */
+/*  Colors — 3 categories                                             */
 /* ------------------------------------------------------------------ */
 const COLORS = {
-    hand_raised: '#36C752',
     engaged: '#294972',
-    speaking: '#0ea5e9',
-    sleeping: '#F1511B',
+    present: '#36C752',
     disengaged: '#FCB53B',
-};
-
-const scoreBadgeStyle = (score) => {
-    const n = Number(score);
-    if (n >= 70) return { backgroundColor: '#dcfce7', color: '#166534' };
-    if (n >= 40) return { backgroundColor: '#fef3c7', color: '#92400e' };
-    return { backgroundColor: '#fee2e2', color: '#991b1b' };
 };
 
 /* ------------------------------------------------------------------ */
@@ -209,6 +200,18 @@ function CustomTooltip({ active, payload, label }) {
     }
     return null;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Engagement badge style                                            */
+/* ------------------------------------------------------------------ */
+const engagementBadgeStyle = (type) => {
+    switch (type) {
+        case 'engaged': return { backgroundColor: '#dbeafe', color: '#1e40af' };
+        case 'present': return { backgroundColor: '#dcfce7', color: '#166534' };
+        case 'disengaged': return { backgroundColor: '#fef3c7', color: '#92400e' };
+        default: return { backgroundColor: '#f1f5f9', color: '#64748b' };
+    }
+};
 
 /* ------------------------------------------------------------------ */
 /*  Main Export                                                       */
@@ -264,11 +267,9 @@ function PerSessionView({ styles }) {
     const selectedSessionInfo = sessions.find(s => s.id === selectedSession);
 
     const chartData = summary ? [
-        { name: 'Hand Raised', value: summary.handRaises, fill: COLORS.hand_raised },
-        { name: 'Engaged', value: summary.engagedEvents, fill: COLORS.engaged },
-        { name: 'Speaking', value: summary.speakingEvents, fill: COLORS.speaking },
-        { name: 'Sleeping', value: summary.sleepingEvents, fill: COLORS.sleeping },
-        { name: 'Disengaged', value: summary.disengagedEvents, fill: COLORS.disengaged },
+        { name: 'Engaged', value: summary.engagedCount, fill: COLORS.engaged },
+        { name: 'Present', value: summary.presentCount, fill: COLORS.present },
+        { name: 'Disengaged', value: summary.disengagedCount, fill: COLORS.disengaged },
     ] : [];
 
     return (
@@ -312,7 +313,7 @@ function PerSessionView({ styles }) {
                 <div className={styles.emptyState}>
                     <div className={styles.emptyIcon}>📈</div>
                     <Text weight="semibold" size={400} style={{ color: '#334155' }}>No engagement data for this session</Text>
-                    <Text size={200} style={{ color: '#94a3b8' }}>Engagement events will appear once facial recognition captures hand raises, sleeping, etc.</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>Engagement events will appear once captured during sessions.</Text>
                 </div>
             ) : (
                 <>
@@ -322,26 +323,22 @@ function PerSessionView({ styles }) {
                             <span className={styles.summaryValue}>{summary.totalEvents}</span>
                         </div>
                         <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Hand Raises</span>
-                            <span className={styles.summaryValue} style={{ color: COLORS.hand_raised }}>{summary.handRaises}</span>
+                            <span className={styles.summaryLabel}>Engaged</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.engaged }}>{summary.engagedCount}</span>
                         </div>
                         <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Sleeping</span>
-                            <span className={styles.summaryValue} style={{ color: COLORS.sleeping }}>{summary.sleepingEvents}</span>
+                            <span className={styles.summaryLabel}>Present</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.present }}>{summary.presentCount}</span>
                         </div>
                         <div className={styles.summaryCard}>
                             <span className={styles.summaryLabel}>Disengaged</span>
-                            <span className={styles.summaryValue} style={{ color: COLORS.disengaged }}>{summary.disengagedEvents}</span>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Avg Score</span>
-                            <span className={styles.summaryValue}>{summary.avgEngagementScore || '—'}</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.disengaged }}>{summary.disengagedCount}</span>
                         </div>
                     </div>
 
                     <div className={styles.chartCard}>
                         <div>
-                            <div className={styles.chartTitle}>Event Distribution</div>
+                            <div className={styles.chartTitle}>Engagement Distribution</div>
                             <div className={styles.chartSubtitle}>Engagement events captured during this session</div>
                         </div>
                         <ResponsiveContainer width="100%" height={280}>
@@ -367,36 +364,18 @@ function PerSessionView({ styles }) {
                                     <thead>
                                         <tr>
                                             <th className={styles.tableHeader}>Student ID</th>
-                                            <th className={styles.tableHeader}>Hand Raised</th>
                                             <th className={styles.tableHeader}>Engaged</th>
-                                            <th className={styles.tableHeader}>Speaking</th>
-                                            <th className={styles.tableHeader}>Sleeping</th>
+                                            <th className={styles.tableHeader}>Present</th>
                                             <th className={styles.tableHeader}>Disengaged</th>
-                                            <th className={styles.tableHeader}>Avg Score</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {summary.studentBreakdown.map((s, i) => (
                                             <tr key={s.student_id || i}>
                                                 <td className={styles.tableCell} style={{ fontWeight: 600, color: '#294972' }}>{s.student_id}</td>
-                                                <td className={styles.tableCell}>{s.hand_raised}</td>
                                                 <td className={styles.tableCell}>{s.engaged}</td>
-                                                <td className={styles.tableCell}>{s.speaking}</td>
-                                                <td className={styles.tableCell}>{s.sleeping}</td>
+                                                <td className={styles.tableCell}>{s.present}</td>
                                                 <td className={styles.tableCell}>{s.disengaged}</td>
-                                                <td className={styles.tableCell}>
-                                                    {s.avg_score != null ? (
-                                                        <span style={{
-                                                            ...scoreBadgeStyle(s.avg_score),
-                                                            padding: '3px 10px',
-                                                            borderRadius: '12px',
-                                                            fontSize: '11px',
-                                                            fontWeight: 600,
-                                                        }}>
-                                                            {s.avg_score}
-                                                        </span>
-                                                    ) : '—'}
-                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -443,11 +422,9 @@ function PerCourseView({ styles }) {
 
     const trendChartData = reportData?.sessions?.map(s => ({
         date: formatDate(s.session_date),
-        handRaises: s.handRaises,
-        sleeping: s.sleepingEvents,
-        disengaged: s.disengagedEvents,
-        engaged: s.engagedEvents,
-        avgScore: s.avgScore ? Number(s.avgScore) : 0,
+        engaged: s.engagedCount,
+        present: s.presentCount,
+        disengaged: s.disengagedCount,
     })) || [];
 
     return (
@@ -501,16 +478,16 @@ function PerCourseView({ styles }) {
                             <span className={styles.summaryValue}>{reportData.totals.totalEvents}</span>
                         </div>
                         <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Hand Raises</span>
-                            <span className={styles.summaryValue} style={{ color: COLORS.hand_raised }}>{reportData.totals.handRaises}</span>
+                            <span className={styles.summaryLabel}>Engaged</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.engaged }}>{reportData.totals.engagedCount}</span>
                         </div>
                         <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Sleeping</span>
-                            <span className={styles.summaryValue} style={{ color: COLORS.sleeping }}>{reportData.totals.sleepingEvents}</span>
+                            <span className={styles.summaryLabel}>Present</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.present }}>{reportData.totals.presentCount}</span>
                         </div>
                         <div className={styles.summaryCard}>
-                            <span className={styles.summaryLabel}>Avg Score</span>
-                            <span className={styles.summaryValue}>{reportData.totals.avgScore || '—'}</span>
+                            <span className={styles.summaryLabel}>Disengaged</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.disengaged }}>{reportData.totals.disengagedCount}</span>
                         </div>
                     </div>
 
@@ -527,9 +504,8 @@ function PerCourseView({ styles }) {
                                     <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend />
-                                    <Bar dataKey="handRaises" fill={COLORS.hand_raised} name="Hand Raised" radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="engaged" fill={COLORS.engaged} name="Engaged" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="sleeping" fill={COLORS.sleeping} name="Sleeping" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="present" fill={COLORS.present} name="Present" radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="disengaged" fill={COLORS.disengaged} name="Disengaged" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -545,11 +521,9 @@ function PerCourseView({ styles }) {
                                         <tr>
                                             <th className={styles.tableHeader}>Date</th>
                                             <th className={styles.tableHeader}>Events</th>
-                                            <th className={styles.tableHeader}>Hand Raised</th>
                                             <th className={styles.tableHeader}>Engaged</th>
-                                            <th className={styles.tableHeader}>Sleeping</th>
+                                            <th className={styles.tableHeader}>Present</th>
                                             <th className={styles.tableHeader}>Disengaged</th>
-                                            <th className={styles.tableHeader}>Avg Score</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -557,23 +531,9 @@ function PerCourseView({ styles }) {
                                             <tr key={s.session_id || i}>
                                                 <td className={styles.tableCell} style={{ fontWeight: 600 }}>{formatDate(s.session_date)}</td>
                                                 <td className={styles.tableCell}>{s.totalEvents}</td>
-                                                <td className={styles.tableCell}>{s.handRaises}</td>
-                                                <td className={styles.tableCell}>{s.engagedEvents}</td>
-                                                <td className={styles.tableCell}>{s.sleepingEvents}</td>
-                                                <td className={styles.tableCell}>{s.disengagedEvents}</td>
-                                                <td className={styles.tableCell}>
-                                                    {s.avgScore != null ? (
-                                                        <span style={{
-                                                            ...scoreBadgeStyle(s.avgScore),
-                                                            padding: '3px 10px',
-                                                            borderRadius: '12px',
-                                                            fontSize: '11px',
-                                                            fontWeight: 600,
-                                                        }}>
-                                                            {s.avgScore}
-                                                        </span>
-                                                    ) : '—'}
-                                                </td>
+                                                <td className={styles.tableCell}>{s.engagedCount}</td>
+                                                <td className={styles.tableCell}>{s.presentCount}</td>
+                                                <td className={styles.tableCell}>{s.disengagedCount}</td>
                                             </tr>
                                         ))}
                                     </tbody>

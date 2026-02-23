@@ -19,9 +19,6 @@ export async function recordEngagementEvent(eventData) {
         session_id: eventData.session_id,
         student_id: eventData.student_id,
         event_type: eventData.event_type,
-        engagement_score: eventData.engagement_score || null,
-        duration_seconds: eventData.duration_seconds || null,
-        metadata: eventData.metadata || null,
       })
       .select()
       .single();
@@ -86,53 +83,57 @@ export async function getSessionEngagementSummary(sessionId) {
   try {
     const { data, error } = await supabase
       .from('engagement_logs')
-      .select('event_type, engagement_score, student_id, duration_seconds')
+      .select('event_type, student_id')
       .eq('session_id', sessionId);
 
     if (error) throw error;
 
     const events = data || [];
-    const handRaises = events.filter(e => e.event_type === 'hand_raised').length;
-    const sleepingEvents = events.filter(e => e.event_type === 'sleeping').length;
-    const speakingEvents = events.filter(e => e.event_type === 'speaking').length;
-    const disengagedEvents = events.filter(e => e.event_type === 'disengaged').length;
-    const engagedEvents = events.filter(e => e.event_type === 'engaged').length;
 
-    const scores = events.filter(e => e.engagement_score != null).map(e => Number(e.engagement_score));
-    const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null;
+    // Map event types to simplified categories
+    const mapCategory = (eventType) => {
+      switch (eventType) {
+        case 'hand_raised':
+        case 'speaking':
+        case 'engaged':
+          return 'engaged';
+        case 'sleeping':
+        case 'disengaged':
+          return 'disengaged';
+        case 'present':
+        default:
+          return 'present';
+      }
+    };
+
+    const engagedCount = events.filter(e => mapCategory(e.event_type) === 'engaged').length;
+    const presentCount = events.filter(e => mapCategory(e.event_type) === 'present').length;
+    const disengagedCount = events.filter(e => mapCategory(e.event_type) === 'disengaged').length;
 
     // Per-student breakdown
     const studentMap = {};
     events.forEach(e => {
       if (!studentMap[e.student_id]) {
-        studentMap[e.student_id] = { hand_raised: 0, sleeping: 0, speaking: 0, disengaged: 0, engaged: 0, scores: [] };
+        studentMap[e.student_id] = { engaged: 0, present: 0, disengaged: 0 };
       }
-      studentMap[e.student_id][e.event_type] = (studentMap[e.student_id][e.event_type] || 0) + 1;
-      if (e.engagement_score != null) studentMap[e.student_id].scores.push(Number(e.engagement_score));
+      const cat = mapCategory(e.event_type);
+      studentMap[e.student_id][cat] = (studentMap[e.student_id][cat] || 0) + 1;
     });
 
     const studentBreakdown = Object.entries(studentMap).map(([studentId, stats]) => ({
       student_id: studentId,
-      hand_raised: stats.hand_raised,
-      sleeping: stats.sleeping,
-      speaking: stats.speaking,
-      disengaged: stats.disengaged,
       engaged: stats.engaged,
-      avg_score: stats.scores.length > 0
-        ? (stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length).toFixed(1)
-        : null,
+      present: stats.present,
+      disengaged: stats.disengaged,
     }));
 
     return {
       success: true,
       data: {
         totalEvents: events.length,
-        handRaises,
-        sleepingEvents,
-        speakingEvents,
-        disengagedEvents,
-        engagedEvents,
-        avgEngagementScore: avgScore,
+        engagedCount,
+        presentCount,
+        disengagedCount,
         studentBreakdown,
       },
       error: null,
@@ -169,39 +170,49 @@ export async function getCourseEngagementSummary(courseId) {
 
     const { data: events, error: evtErr } = await supabase
       .from('engagement_logs')
-      .select('session_id, event_type, engagement_score')
+      .select('session_id, event_type')
       .in('session_id', sessionIds);
 
     if (evtErr) throw evtErr;
 
+    // Map event types to simplified categories
+    const mapCategory = (eventType) => {
+      switch (eventType) {
+        case 'hand_raised':
+        case 'speaking':
+        case 'engaged':
+          return 'engaged';
+        case 'sleeping':
+        case 'disengaged':
+          return 'disengaged';
+        case 'present':
+        default:
+          return 'present';
+      }
+    };
+
     // Per-session aggregation
     const sessionSummaries = sessions.map(session => {
       const sEvents = (events || []).filter(e => e.session_id === session.id);
-      const scores = sEvents.filter(e => e.engagement_score != null).map(e => Number(e.engagement_score));
       return {
         session_id: session.id,
         session_date: session.session_date,
         start_time: session.start_time,
         totalEvents: sEvents.length,
-        handRaises: sEvents.filter(e => e.event_type === 'hand_raised').length,
-        sleepingEvents: sEvents.filter(e => e.event_type === 'sleeping').length,
-        disengagedEvents: sEvents.filter(e => e.event_type === 'disengaged').length,
-        engagedEvents: sEvents.filter(e => e.event_type === 'engaged').length,
-        avgScore: scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null,
+        engagedCount: sEvents.filter(e => mapCategory(e.event_type) === 'engaged').length,
+        presentCount: sEvents.filter(e => mapCategory(e.event_type) === 'present').length,
+        disengagedCount: sEvents.filter(e => mapCategory(e.event_type) === 'disengaged').length,
       };
     });
 
     // Totals
     const allEvents = events || [];
-    const allScores = allEvents.filter(e => e.engagement_score != null).map(e => Number(e.engagement_score));
     const totals = {
       totalSessions: sessions.length,
       totalEvents: allEvents.length,
-      handRaises: allEvents.filter(e => e.event_type === 'hand_raised').length,
-      sleepingEvents: allEvents.filter(e => e.event_type === 'sleeping').length,
-      disengagedEvents: allEvents.filter(e => e.event_type === 'disengaged').length,
-      engagedEvents: allEvents.filter(e => e.event_type === 'engaged').length,
-      avgScore: allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : null,
+      engagedCount: allEvents.filter(e => mapCategory(e.event_type) === 'engaged').length,
+      presentCount: allEvents.filter(e => mapCategory(e.event_type) === 'present').length,
+      disengagedCount: allEvents.filter(e => mapCategory(e.event_type) === 'disengaged').length,
     };
 
     return { success: true, data: { sessions: sessionSummaries, totals }, error: null };

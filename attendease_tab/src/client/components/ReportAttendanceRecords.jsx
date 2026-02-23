@@ -34,7 +34,7 @@ const useStyles = makeStyles({
         display: 'flex',
         flexWrap: 'wrap',
         ...shorthands.gap('12px'),
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
         ...shorthands.padding('20px'),
         backgroundColor: '#ffffff',
         borderRadius: '14px',
@@ -53,6 +53,12 @@ const useStyles = makeStyles({
         color: '#64748b',
         textTransform: 'uppercase',
         letterSpacing: '0.5px',
+    },
+    dateRangeLabel: {
+        fontSize: '11px',
+        color: '#94a3b8',
+        fontStyle: 'italic',
+        marginTop: '2px', // Add slight spacing from dropdown
     },
     /* Table card */
     tableCard: {
@@ -143,31 +149,25 @@ const useStyles = makeStyles({
 });
 
 /* ------------------------------------------------------------------ */
-/*  Status badge color helper                                         */
+/*  Status badge style helper (Onsite / Online)                       */
 /* ------------------------------------------------------------------ */
-const statusColor = (status) => {
-    switch (status) {
-        case 'present': return 'success';
-        case 'late': return 'warning';
-        case 'absent': return 'danger';
-        default: return 'subtle';
-    }
+const statusStyle = (type) => {
+    const t = (type || '').toLowerCase();
+    if (t === 'onsite') return { backgroundColor: '#dbeafe', color: '#1e40af' };
+    if (t === 'online') return { backgroundColor: '#f3e8ff', color: '#6b21a8' };
+    return { backgroundColor: '#f1f5f9', color: '#64748b' };
 };
 
-const statusStyle = (status) => {
-    const map = {
-        present: { backgroundColor: '#dcfce7', color: '#166534' },
-        late: { backgroundColor: '#fef3c7', color: '#92400e' },
-        absent: { backgroundColor: '#fee2e2', color: '#991b1b' },
-    };
-    return map[status] || { backgroundColor: '#f1f5f9', color: '#64748b' };
-};
-
-const modeStyle = (mode) => {
-    return mode === 'onsite'
-        ? { backgroundColor: '#dbeafe', color: '#1e40af' }
-        : { backgroundColor: '#f3e8ff', color: '#6b21a8' };
-};
+/* ------------------------------------------------------------------ */
+/*  Date-range helper                                                 */
+/* ------------------------------------------------------------------ */
+function computeDateRange(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - Number(days));
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    return `${fmt(start)} — ${fmt(end)}`;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -179,7 +179,6 @@ export default function ReportAttendanceRecords() {
     const [dateRange, setDateRange] = useState('30');
     const [selectedCourse, setSelectedCourse] = useState('all');
     const [selectedStatus, setSelectedStatus] = useState('all');
-    const [selectedMode, setSelectedMode] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
     // Data
@@ -200,7 +199,7 @@ export default function ReportAttendanceRecords() {
     useEffect(() => {
         setCurrentPage(1);
         loadRecords();
-    }, [dateRange, selectedCourse, selectedStatus, selectedMode]);
+    }, [dateRange, selectedCourse, selectedStatus]);
 
     useEffect(() => { loadRecords(); }, [currentPage]);
 
@@ -218,8 +217,7 @@ export default function ReportAttendanceRecords() {
         const result = await getAllAttendanceRecords({
             startDate: startDate.toISOString(),
             courseId: selectedCourse,
-            status: selectedStatus,
-            mode: selectedMode,
+            mode: selectedStatus, // maps to attendance_type (onsite/online)
             search: searchQuery,
             page: currentPage,
             pageSize,
@@ -239,8 +237,8 @@ export default function ReportAttendanceRecords() {
         return records.filter(r => {
             const name = `${r.user_profiles?.first_name || ''} ${r.user_profiles?.last_name || ''}`.toLowerCase();
             const code = (r.sessions?.courses?.course_code || '').toLowerCase();
-            const num = (r.user_profiles?.student_number || '').toLowerCase();
-            return name.includes(q) || code.includes(q) || num.includes(q);
+            const desc = (r.sessions?.courses?.description || '').toLowerCase();
+            return name.includes(q) || code.includes(q) || desc.includes(q);
         });
     }, [records, searchQuery]);
 
@@ -250,11 +248,17 @@ export default function ReportAttendanceRecords() {
         return [...filteredRecords].sort((a, b) => {
             let aVal, bVal;
             switch (sortConfig.key) {
-                case 'date': aVal = a.check_in_time; bVal = b.check_in_time; break;
-                case 'course': aVal = a.sessions?.courses?.course_code || ''; bVal = b.sessions?.courses?.course_code || ''; break;
-                case 'student': aVal = `${a.user_profiles?.last_name} ${a.user_profiles?.first_name}`; bVal = `${b.user_profiles?.last_name} ${b.user_profiles?.first_name}`; break;
-                case 'mode': aVal = a.attendance_type; bVal = b.attendance_type; break;
-                case 'status': aVal = a.status; bVal = b.status; break;
+                case 'class':
+                    aVal = `${a.sessions?.courses?.course_code || ''} ${a.sessions?.courses?.description || ''}`;
+                    bVal = `${b.sessions?.courses?.course_code || ''} ${b.sessions?.courses?.description || ''}`;
+                    break;
+                case 'student':
+                    aVal = `${a.user_profiles?.last_name} ${a.user_profiles?.first_name}`;
+                    bVal = `${b.user_profiles?.last_name} ${b.user_profiles?.first_name}`;
+                    break;
+                case 'timeIn': aVal = a.check_in_time; bVal = b.check_in_time; break;
+                case 'timeOut': aVal = a.check_out_time; bVal = b.check_out_time; break;
+                case 'status': aVal = a.attendance_type; bVal = b.attendance_type; break;
                 default: return 0;
             }
             if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -272,7 +276,7 @@ export default function ReportAttendanceRecords() {
         }));
     };
 
-    const formatDate = (date) => {
+    const formatTimestamp = (date) => {
         if (!date) return '—';
         return new Date(date).toLocaleString('en-US', {
             month: 'short', day: '2-digit', year: 'numeric',
@@ -289,7 +293,6 @@ export default function ReportAttendanceRecords() {
         setDateRange('30');
         setSelectedCourse('all');
         setSelectedStatus('all');
-        setSelectedMode('all');
         setSearchQuery('');
     };
 
@@ -311,6 +314,7 @@ export default function ReportAttendanceRecords() {
                         <Option value="30">Last 30 Days</Option>
                         <Option value="90">Last 90 Days</Option>
                     </Dropdown>
+                    <span className={styles.dateRangeLabel}>{computeDateRange(dateRange)}</span>
                 </div>
 
                 <div className={styles.filterGroup}>
@@ -330,40 +334,31 @@ export default function ReportAttendanceRecords() {
                 <div className={styles.filterGroup}>
                     <span className={styles.filterLabel}>Status</span>
                     <Dropdown
-                        value={selectedStatus === 'all' ? 'All Statuses' : selectedStatus}
+                        value={selectedStatus === 'all' ? 'All Statuses' : selectedStatus === 'onsite' ? 'Onsite' : 'Online'}
                         onOptionSelect={(e, d) => setSelectedStatus(d.optionValue)}
                         style={{ minWidth: '130px' }}
                     >
                         <Option value="all">All Statuses</Option>
-                        <Option value="present">Present</Option>
-                        <Option value="late">Late</Option>
-                        <Option value="absent">Absent</Option>
-                    </Dropdown>
-                </div>
-
-                <div className={styles.filterGroup}>
-                    <span className={styles.filterLabel}>Mode</span>
-                    <Dropdown
-                        value={selectedMode === 'all' ? 'All Modes' : selectedMode}
-                        onOptionSelect={(e, d) => setSelectedMode(d.optionValue)}
-                        style={{ minWidth: '120px' }}
-                    >
-                        <Option value="all">All Modes</Option>
                         <Option value="onsite">Onsite</Option>
                         <Option value="online">Online</Option>
                     </Dropdown>
                 </div>
 
-                <Button appearance="subtle" onClick={handleReset} size="small" style={{ color: '#64748b' }}>
-                    Reset
-                </Button>
+                <div className={styles.filterGroup}>
+                    <span className={styles.filterLabel} style={{ visibility: 'hidden' }}>Action</span>
+                    <div>
+                        <Button appearance="subtle" onClick={handleReset} size="small" style={{ color: '#64748b' }}>
+                            Reset
+                        </Button>
+                    </div>
+                </div>
             </div>
 
             {/* Data Table */}
             <div className={styles.tableCard}>
                 <div className={styles.controls}>
                     <Input
-                        placeholder="Search by name, course, or student #..."
+                        placeholder="Search by name or course..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -393,68 +388,54 @@ export default function ReportAttendanceRecords() {
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
-                                        <th className={styles.tableHeader} onClick={() => handleSort('date')}>
-                                            Date{sortIndicator('date')}
-                                        </th>
-                                        <th className={styles.tableHeader} onClick={() => handleSort('course')}>
-                                            Course{sortIndicator('course')}
+                                        <th className={styles.tableHeader} onClick={() => handleSort('class')}>
+                                            Class Name{sortIndicator('class')}
                                         </th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('student')}>
-                                            Student{sortIndicator('student')}
+                                            Student Name{sortIndicator('student')}
                                         </th>
-                                        <th className={styles.tableHeader}>Student #</th>
-                                        <th className={styles.tableHeader} onClick={() => handleSort('mode')}>
-                                            Mode{sortIndicator('mode')}
+                                        <th className={styles.tableHeader} onClick={() => handleSort('timeIn')}>
+                                            Time In{sortIndicator('timeIn')}
+                                        </th>
+                                        <th className={styles.tableHeader} onClick={() => handleSort('timeOut')}>
+                                            Time Out{sortIndicator('timeOut')}
                                         </th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('status')}>
                                             Status{sortIndicator('status')}
                                         </th>
-                                        <th className={styles.tableHeader}>Confidence</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {sortedRecords.map((record, index) => (
                                         <tr key={record.id || index}>
-                                            <td className={styles.tableCell}>{formatDate(record.check_in_time)}</td>
                                             <td className={styles.tableCell}>
                                                 <span style={{ fontWeight: 600, color: '#294972' }}>
                                                     {record.sessions?.courses?.course_code || '—'}
                                                 </span>
+                                                {record.sessions?.courses?.description && (
+                                                    <span style={{ color: '#94a3b8', fontSize: '11px', display: 'block' }}>
+                                                        {record.sessions.courses.description}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className={styles.tableCell}>
-                                                {record.user_profiles?.last_name}, {record.user_profiles?.first_name}
+                                                {record.user_profiles
+                                                    ? `${record.user_profiles.first_name || ''} ${record.user_profiles.last_name || ''}`.trim()
+                                                    : '—'}
                                             </td>
-                                            <td className={styles.tableCell} style={{ color: '#64748b' }}>
-                                                {record.user_profiles?.student_number || '—'}
-                                            </td>
+                                            <td className={styles.tableCell}>{formatTimestamp(record.check_in_time)}</td>
+                                            <td className={styles.tableCell}>{formatTimestamp(record.check_out_time)}</td>
                                             <td className={styles.tableCell}>
                                                 <span style={{
-                                                    ...modeStyle(record.attendance_type),
+                                                    ...statusStyle(record.attendance_type),
                                                     padding: '3px 10px',
                                                     borderRadius: '12px',
                                                     fontSize: '11px',
                                                     fontWeight: 600,
                                                     textTransform: 'capitalize',
                                                 }}>
-                                                    {record.attendance_type}
+                                                    {record.attendance_type || '—'}
                                                 </span>
-                                            </td>
-                                            <td className={styles.tableCell}>
-                                                <span style={{
-                                                    ...statusStyle(record.status),
-                                                    padding: '3px 10px',
-                                                    borderRadius: '12px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 600,
-                                                    textTransform: 'capitalize',
-                                                }}>
-                                                    {record.status}
-                                                </span>
-                                            </td>
-                                            <td className={styles.tableCell}>
-                                                {record.confidence_score != null
-                                                    ? <span style={{ fontWeight: 600 }}>{Number(record.confidence_score).toFixed(0)}%</span>
-                                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
                                             </td>
                                         </tr>
                                     ))}

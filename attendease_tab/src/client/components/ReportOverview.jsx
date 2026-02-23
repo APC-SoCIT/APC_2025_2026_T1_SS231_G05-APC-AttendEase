@@ -28,8 +28,6 @@ import {
     Tooltip,
     Legend,
     ResponsiveContainer,
-    AreaChart,
-    Area,
 } from 'recharts';
 import { getAttendanceStats, getAttendanceTrend } from '../../services/supabase/attendanceService.js';
 
@@ -212,69 +210,26 @@ const useStyles = makeStyles({
         flexShrink: 0,
     },
 
-    /* No data overlay */
-    noDataOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+    /* Empty state */
+    emptyState: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        ...shorthands.padding('60px', '20px'),
+        ...shorthands.gap('8px'),
+    },
+    emptyIcon: {
+        width: '64px',
+        height: '64px',
+        borderRadius: '50%',
+        backgroundColor: '#f8fafc',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        borderRadius: '14px',
-        zIndex: 2,
-    },
-    noDataBadge: {
-        backgroundColor: '#f1f5f9',
-        color: '#64748b',
-        fontSize: '12px',
-        fontWeight: '600',
-        ...shorthands.padding('6px', '16px'),
-        borderRadius: '20px',
+        marginBottom: '8px',
+        fontSize: '28px',
     },
 });
-
-/* ------------------------------------------------------------------ */
-/*  Placeholder data (shown when no real data exists)                 */
-/* ------------------------------------------------------------------ */
-const PLACEHOLDER_TREND = [
-    { date: 'Mon', present: 24, late: 3, absent: 5 },
-    { date: 'Tue', present: 28, late: 2, absent: 4 },
-    { date: 'Wed', present: 22, late: 4, absent: 6 },
-    { date: 'Thu', present: 30, late: 1, absent: 3 },
-    { date: 'Fri', present: 26, late: 3, absent: 5 },
-    { date: 'Sat', present: 18, late: 2, absent: 2 },
-    { date: 'Sun', present: 20, late: 1, absent: 3 },
-];
-
-const PLACEHOLDER_MONTHLY = [
-    { month: 'Jan', sessions: 12, avgAttendance: 78 },
-    { month: 'Feb', sessions: 15, avgAttendance: 82 },
-    { month: 'Mar', sessions: 14, avgAttendance: 80 },
-    { month: 'Apr', sessions: 16, avgAttendance: 85 },
-    { month: 'May', sessions: 13, avgAttendance: 79 },
-    { month: 'Jun', sessions: 10, avgAttendance: 75 },
-    { month: 'Jul', sessions: 8, avgAttendance: 70 },
-    { month: 'Aug', sessions: 14, avgAttendance: 83 },
-    { month: 'Sep', sessions: 17, avgAttendance: 88 },
-    { month: 'Oct', sessions: 16, avgAttendance: 86 },
-    { month: 'Nov', sessions: 18, avgAttendance: 90 },
-    { month: 'Dec', sessions: 15, avgAttendance: 84 },
-];
-
-const PLACEHOLDER_MODE = [
-    { name: 'Onsite', value: 65 },
-    { name: 'Online', value: 35 },
-];
-
-const PLACEHOLDER_STATUS = [
-    { name: 'Present', value: 72 },
-    { name: 'Late', value: 15 },
-    { name: 'Absent', value: 10 },
-    { name: 'Unknown', value: 3 },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Color palette                                                     */
@@ -283,14 +238,23 @@ const COLORS = {
     primary: '#294972',
     gold: '#FFB900',
     present: '#36C752',
-    late: '#FCB53B',
     absent: '#F1511B',
-    unknown: '#94a3b8',
     onsite: '#294972',
     online: '#FFB900',
 };
 
-const PIE_COLORS = [COLORS.present, COLORS.late, COLORS.absent, COLORS.unknown];
+const PIE_COLORS = [COLORS.present, COLORS.absent];
+
+/* ------------------------------------------------------------------ */
+/*  Date range helper                                                 */
+/* ------------------------------------------------------------------ */
+function computeDateRange(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - Number(days));
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    return `${fmt(start)} — ${fmt(end)}`;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Donut mini-chart component                                        */
@@ -401,35 +365,24 @@ export default function ReportOverview() {
     const hasData = stats && stats.totalRecords > 0;
     const hasTrend = trendData && trendData.length > 0;
 
-    // Computed values (real or placeholder)
+    // Computed values
     const totalSessions = hasData ? stats.totalSessions : 0;
     const totalRecords = hasData ? stats.totalRecords : 0;
     const attendanceRate = hasData ? stats.attendanceRate : 0;
-    const lateSessions = hasData ? (stats.lateCount || 0) : 0;
-    const lateRate = hasData && stats.totalRecords > 0
-        ? Math.round((stats.lateCount / stats.totalRecords) * 100)
-        : 0;
+    const onsiteCount = hasData ? stats.onsiteCount : 0;
+    const onlineCount = hasData ? stats.onlineCount : 0;
+    const onsiteRate = totalRecords > 0 ? Math.round((onsiteCount / totalRecords) * 100) : 0;
 
-    const activeTrend = hasTrend ? trendData : PLACEHOLDER_TREND;
     const sparklineData = hasTrend
         ? trendData.map(d => d.present || 0)
-        : PLACEHOLDER_TREND.map(d => d.present);
-
-    const statusData = hasData
-        ? [
-            { name: 'Present', value: stats.presentCount },
-            { name: 'Late', value: stats.lateCount },
-            { name: 'Absent', value: stats.absentCount },
-            { name: 'Unknown', value: stats.unknownCount },
-        ]
-        : PLACEHOLDER_STATUS;
+        : [];
 
     const modeData = hasData
         ? [
             { name: 'Onsite', value: stats.onsiteCount },
             { name: 'Online', value: stats.onlineCount },
-        ]
-        : PLACEHOLDER_MODE;
+        ].filter(d => d.value > 0)
+        : [];
 
     if (isLoading) {
         return (
@@ -449,9 +402,7 @@ export default function ReportOverview() {
                         Analytics Overview
                     </Text>
                     <Text size={200} style={{ color: '#94a3b8' }}>
-                        {hasData
-                            ? `Showing data from the last ${dateRange} days`
-                            : 'No data yet — charts below show sample data as placeholders'}
+                        {computeDateRange(dateRange)}
                     </Text>
                 </div>
                 <div className={styles.topBarActions}>
@@ -475,191 +426,154 @@ export default function ReportOverview() {
                 </div>
             </div>
 
-            {/* ---- Summary Cards ---- */}
-            <div className={styles.summaryRow}>
-                {/* Total Sessions */}
-                <div className={styles.summaryCard}>
-                    <div className={styles.summaryCardTop}>
-                        <span className={styles.summaryLabel}>Total Sessions</span>
-                        <div className={styles.summaryIcon} style={{ backgroundColor: '#eef2ff' }}>
-                            <CalendarLtr24Regular style={{ color: '#6366f1' }} />
-                        </div>
-                    </div>
-                    <span className={styles.summaryValue}>{totalSessions}</span>
-                    <Sparkline data={sparklineData} color="#6366f1" />
+            {!hasData ? (
+                <div className={styles.emptyState}>
+                    <div className={styles.emptyIcon}>📊</div>
+                    <Text weight="semibold" size={400} style={{ color: '#334155' }}>No attendance data available</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>Attendance records will appear here once sessions are completed.</Text>
                 </div>
+            ) : (
+                <>
+                    {/* ---- Summary Cards ---- */}
+                    <div className={styles.summaryRow}>
+                        {/* Total Sessions */}
+                        <div className={styles.summaryCard}>
+                            <div className={styles.summaryCardTop}>
+                                <span className={styles.summaryLabel}>Total Sessions</span>
+                                <div className={styles.summaryIcon} style={{ backgroundColor: '#eef2ff' }}>
+                                    <CalendarLtr24Regular style={{ color: '#6366f1' }} />
+                                </div>
+                            </div>
+                            <span className={styles.summaryValue}>{totalSessions}</span>
+                            {sparklineData.length > 0 && <Sparkline data={sparklineData} color="#6366f1" />}
+                        </div>
 
-                {/* Total Records */}
-                <div className={styles.summaryCard}>
-                    <div className={styles.summaryCardTop}>
-                        <span className={styles.summaryLabel}>Total Records</span>
-                        <div className={styles.summaryIcon} style={{ backgroundColor: '#f0fdf4' }}>
-                            <People24Regular style={{ color: COLORS.present }} />
+                        {/* Total Records */}
+                        <div className={styles.summaryCard}>
+                            <div className={styles.summaryCardTop}>
+                                <span className={styles.summaryLabel}>Total Records</span>
+                                <div className={styles.summaryIcon} style={{ backgroundColor: '#f0fdf4' }}>
+                                    <People24Regular style={{ color: COLORS.present }} />
+                                </div>
+                            </div>
+                            <span className={styles.summaryValue}>{totalRecords}</span>
+                            <span className={styles.summarySubtext}>
+                                Across {stats.totalSessions} sessions
+                            </span>
+                        </div>
+
+                        {/* Attendance Rate — donut */}
+                        <div className={styles.donutCard}>
+                            <span className={styles.donutLabel}>Attendance Rate</span>
+                            <div className={styles.donutCenter} style={{ position: 'relative' }}>
+                                <DonutMini percentage={attendanceRate} color={COLORS.present} size={80} strokeWidth={7} />
+                                <span className={styles.donutPercent}>{attendanceRate}%</span>
+                            </div>
+                        </div>
+
+                        {/* Onsite Rate — donut */}
+                        <div className={styles.donutCard}>
+                            <span className={styles.donutLabel}>Onsite Rate</span>
+                            <div className={styles.donutCenter} style={{ position: 'relative' }}>
+                                <DonutMini percentage={onsiteRate} color={COLORS.onsite} size={80} strokeWidth={7} />
+                                <span className={styles.donutPercent}>{onsiteRate}%</span>
+                            </div>
                         </div>
                     </div>
-                    <span className={styles.summaryValue}>{totalRecords}</span>
-                    <span className={styles.summarySubtext}>
-                        {hasData ? `Across ${stats.totalSessions} sessions` : 'Waiting for first session'}
-                    </span>
-                </div>
 
-                {/* Attendance Rate — donut */}
-                <div className={styles.donutCard}>
-                    <span className={styles.donutLabel}>Attendance Rate</span>
-                    <div className={styles.donutCenter} style={{ position: 'relative' }}>
-                        <DonutMini percentage={attendanceRate} color={COLORS.present} size={80} strokeWidth={7} />
-                        <span className={styles.donutPercent}>{attendanceRate}%</span>
-                    </div>
-                </div>
-
-                {/* Late Rate — donut */}
-                <div className={styles.donutCard}>
-                    <span className={styles.donutLabel}>Late Rate</span>
-                    <div className={styles.donutCenter} style={{ position: 'relative' }}>
-                        <DonutMini percentage={lateRate} color={COLORS.late} size={80} strokeWidth={7} />
-                        <span className={styles.donutPercent}>{lateRate}%</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* ---- Attendance Trend (full width bar chart) ---- */}
-            <div className={styles.chartCard} style={{ position: 'relative' }}>
-                <div className={styles.chartHeader}>
-                    <div>
-                        <div className={styles.chartTitle}>Attendance Trend</div>
-                        <div className={styles.chartSubtitle}>Daily breakdown of attendance status</div>
-                    </div>
-                    <div className={styles.legendRow}>
-                        <div className={styles.legendItem}>
-                            <div className={styles.legendDot} style={{ backgroundColor: COLORS.present }} />
-                            Present
-                        </div>
-                        <div className={styles.legendItem}>
-                            <div className={styles.legendDot} style={{ backgroundColor: COLORS.late }} />
-                            Late
-                        </div>
-                        <div className={styles.legendItem}>
-                            <div className={styles.legendDot} style={{ backgroundColor: COLORS.absent }} />
-                            Absent
-                        </div>
-                    </div>
-                </div>
-                <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={activeTrend} barGap={2} barCategoryGap="20%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="present" fill={COLORS.present} name="Present" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="late" fill={COLORS.late} name="Late" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="absent" fill={COLORS.absent} name="Absent" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-                {!hasTrend && (
-                    <div className={styles.noDataOverlay}>
-                        <span className={styles.noDataBadge}>Sample data — real data will appear after sessions</span>
-                    </div>
-                )}
-            </div>
-
-            {/* ---- Two column charts ---- */}
-            <div className={styles.chartsGrid}>
-                {/* Status Distribution Pie */}
-                <div className={styles.chartCard} style={{ position: 'relative' }}>
-                    <div className={styles.chartHeader}>
-                        <div>
-                            <div className={styles.chartTitle}>Status Distribution</div>
-                            <div className={styles.chartSubtitle}>Breakdown by attendance status</div>
-                        </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                            <Pie
-                                data={statusData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={50}
-                                outerRadius={85}
-                                fill="#8884d8"
-                                dataKey="value"
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                labelLine={false}
-                            >
-                                {statusData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip content={<CustomTooltip />} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                    {!hasData && (
-                        <div className={styles.noDataOverlay}>
-                            <span className={styles.noDataBadge}>Sample data</span>
+                    {/* ---- Attendance Trend (full width bar chart) ---- */}
+                    {hasTrend && (
+                        <div className={styles.chartCard}>
+                            <div className={styles.chartHeader}>
+                                <div>
+                                    <div className={styles.chartTitle}>Attendance Trend</div>
+                                    <div className={styles.chartSubtitle}>Daily breakdown of attendance mode</div>
+                                </div>
+                                <div className={styles.legendRow}>
+                                    <div className={styles.legendItem}>
+                                        <div className={styles.legendDot} style={{ backgroundColor: COLORS.onsite }} />
+                                        Onsite
+                                    </div>
+                                    <div className={styles.legendItem}>
+                                        <div className={styles.legendDot} style={{ backgroundColor: COLORS.online }} />
+                                        Online
+                                    </div>
+                                </div>
+                            </div>
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={trendData} barGap={2} barCategoryGap="20%">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Bar dataKey="onsite" fill={COLORS.onsite} name="Onsite" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="online" fill={COLORS.online} name="Online" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
                     )}
-                </div>
 
-                {/* Mode Distribution */}
-                <div className={styles.chartCard} style={{ position: 'relative' }}>
-                    <div className={styles.chartHeader}>
-                        <div>
-                            <div className={styles.chartTitle}>Mode Distribution</div>
-                            <div className={styles.chartSubtitle}>Onsite vs Online attendance</div>
-                        </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={modeData} barCategoryGap="30%">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                            <XAxis dataKey="name" tick={{ fontSize: 13, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                            <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="value" name="Students" radius={[6, 6, 0, 0]}>
-                                {modeData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={index === 0 ? COLORS.onsite : COLORS.online} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                    {!hasData && (
-                        <div className={styles.noDataOverlay}>
-                            <span className={styles.noDataBadge}>Sample data</span>
-                        </div>
-                    )}
-                </div>
-            </div>
+                    {/* ---- Two column charts ---- */}
+                    <div className={styles.chartsGrid}>
+                        {/* Mode Distribution Pie */}
+                        {modeData.length > 0 && (
+                            <div className={styles.chartCard}>
+                                <div className={styles.chartHeader}>
+                                    <div>
+                                        <div className={styles.chartTitle}>Mode Distribution</div>
+                                        <div className={styles.chartSubtitle}>Onsite vs Online attendance</div>
+                                    </div>
+                                </div>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <PieChart>
+                                        <Pie
+                                            data={modeData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={50}
+                                            outerRadius={85}
+                                            fill="#8884d8"
+                                            dataKey="value"
+                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {modeData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.name === 'Onsite' ? COLORS.onsite : COLORS.online} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
 
-            {/* ---- Monthly Trend (area chart) ---- */}
-            <div className={styles.chartCard} style={{ position: 'relative' }}>
-                <div className={styles.chartHeader}>
-                    <div>
-                        <div className={styles.chartTitle}>Monthly Overview</div>
-                        <div className={styles.chartSubtitle}>Sessions conducted and average attendance rate per month</div>
+                        {/* Mode Distribution Bar */}
+                        {modeData.length > 0 && (
+                            <div className={styles.chartCard}>
+                                <div className={styles.chartHeader}>
+                                    <div>
+                                        <div className={styles.chartTitle}>Mode Comparison</div>
+                                        <div className={styles.chartSubtitle}>Students attending Onsite vs Online</div>
+                                    </div>
+                                </div>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <BarChart data={modeData} barCategoryGap="30%">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 13, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="value" name="Students" radius={[6, 6, 0, 0]}>
+                                            {modeData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.name === 'Onsite' ? COLORS.onsite : COLORS.online} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
                     </div>
-                    <div className={styles.legendRow}>
-                        <div className={styles.legendItem}>
-                            <div className={styles.legendDot} style={{ backgroundColor: COLORS.primary }} />
-                            Sessions
-                        </div>
-                        <div className={styles.legendItem}>
-                            <div className={styles.legendDot} style={{ backgroundColor: COLORS.gold }} />
-                            Avg Attendance %
-                        </div>
-                    </div>
-                </div>
-                <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={PLACEHOLDER_MONTHLY} barGap={4} barCategoryGap="15%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="sessions" fill={COLORS.primary} name="Sessions" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="avgAttendance" fill={COLORS.gold} name="Avg Attendance %" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-                <div className={styles.noDataOverlay}>
-                    <span className={styles.noDataBadge}>Sample data — monthly trends will populate over time</span>
-                </div>
-            </div>
+                </>
+            )}
         </div>
     );
 }

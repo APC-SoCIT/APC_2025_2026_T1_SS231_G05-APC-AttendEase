@@ -45,19 +45,21 @@ function downloadBlob(content, filename, mimeType) {
  * Flatten Supabase attendance rows into export-ready objects
  */
 function flattenAttendanceData(records) {
-    return records.map(r => ({
-        'Date': formatDate(r.check_in_time || r.created_at),
-        'Course Code': r.sessions?.courses?.course_code || r.course_code || '-',
-        'Course Name': r.sessions?.courses?.description || r.course_name || '-',
-        'Student Number': r.user_profiles?.student_number || r.student_number || '-',
-        'Student Name': r.user_profiles
+    return records.map(r => {
+        const courseCode = r.sessions?.courses?.course_code || r.course_code || '';
+        const courseDesc = r.sessions?.courses?.description || r.course_name || '';
+        const className = courseCode ? `${courseCode}${courseDesc ? ' — ' + courseDesc : ''}` : '-';
+        const studentName = r.user_profiles
             ? `${r.user_profiles.first_name || ''} ${r.user_profiles.last_name || ''}`.trim()
-            : (r.student_name || '-'),
-        'Mode': r.attendance_type || '-',
-        'Status': r.status || '-',
-        'Confidence': r.confidence_score != null ? `${Math.round(r.confidence_score)}%` : 'N/A',
-        'Check-In Time': formatDate(r.check_in_time),
-    }));
+            : (r.student_name || '-');
+        return {
+            'Class Name': className,
+            'Student Name': studentName,
+            'Time In': formatDate(r.check_in_time),
+            'Time Out': formatDate(r.check_out_time),
+            'Status': (r.attendance_type || '-').charAt(0).toUpperCase() + (r.attendance_type || '-').slice(1),
+        };
+    });
 }
 
 /**
@@ -91,15 +93,13 @@ export function exportAttendancePDF(records, filename = `attendance_report_${for
     doc.text(`Generated: ${formatDate(new Date())}`, 14, 28);
     doc.text(`Total Records: ${rows.length}`, 14, 34);
 
-    const tableHeaders = ['Date', 'Course', 'Student', 'Student #', 'Mode', 'Status', 'Confidence'];
+    const tableHeaders = ['Class Name', 'Student Name', 'Time In', 'Time Out', 'Status'];
     const tableData = rows.map(r => [
-        r['Date'],
-        r['Course Code'],
+        r['Class Name'],
         r['Student Name'],
-        r['Student Number'],
-        r['Mode'],
+        r['Time In'],
+        r['Time Out'],
         r['Status'],
-        r['Confidence'],
     ]);
 
     autoTable(doc, {
@@ -120,17 +120,24 @@ export function exportAttendancePDF(records, filename = `attendance_report_${for
  * Flatten Supabase engagement rows into export-ready objects
  */
 function flattenEngagementData(records) {
-    return records.map(r => ({
-        'Timestamp': formatDate(r.timestamp),
-        'Session Date': r.sessions?.session_date
-            ? new Date(r.sessions.session_date).toLocaleDateString()
-            : '-',
-        'Course Code': r.sessions?.courses?.course_code || '-',
-        'Student ID': r.student_id || '-',
-        'Event Type': r.event_type || '-',
-        'Engagement Score': r.engagement_score != null ? r.engagement_score : '-',
-        'Duration (s)': r.duration_seconds != null ? r.duration_seconds : '-',
-    }));
+    return records.map(r => {
+        const courseCode = r.sessions?.courses?.course_code || '';
+        const courseDesc = r.sessions?.courses?.description || '';
+        const className = courseCode ? `${courseCode}${courseDesc ? ' — ' + courseDesc : ''}` : '-';
+        const studentName = r.user_profiles
+            ? `${r.user_profiles.first_name || ''} ${r.user_profiles.last_name || ''}`.trim()
+            : (r.student_id || '-');
+        // Map event types to simplified categories
+        let engagement = 'Present';
+        const et = r.event_type || '';
+        if (['hand_raised', 'speaking', 'engaged'].includes(et)) engagement = 'Engaged';
+        else if (['sleeping', 'disengaged'].includes(et)) engagement = 'Disengaged';
+        return {
+            'Class Name': className,
+            'Student Name': studentName,
+            'Engagement': engagement,
+        };
+    });
 }
 
 /**
@@ -164,15 +171,11 @@ export function exportEngagementPDF(records, filename = `engagement_report_${for
     doc.text(`Generated: ${formatDate(new Date())}`, 14, 28);
     doc.text(`Total Events: ${rows.length}`, 14, 34);
 
-    const tableHeaders = ['Timestamp', 'Session Date', 'Course', 'Student ID', 'Event', 'Score', 'Duration'];
+    const tableHeaders = ['Class Name', 'Student Name', 'Engagement'];
     const tableData = rows.map(r => [
-        r['Timestamp'],
-        r['Session Date'],
-        r['Course Code'],
-        r['Student ID'],
-        r['Event Type'],
-        r['Engagement Score'],
-        r['Duration (s)'],
+        r['Class Name'],
+        r['Student Name'],
+        r['Engagement'],
     ]);
 
     autoTable(doc, {
