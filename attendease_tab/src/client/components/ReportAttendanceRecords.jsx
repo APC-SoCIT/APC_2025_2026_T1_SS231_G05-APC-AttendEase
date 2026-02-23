@@ -15,22 +15,31 @@ import {
     Search24Regular,
     ChevronLeft20Regular,
     ChevronRight20Regular,
+    ArrowSync20Regular,
 } from '@fluentui/react-icons';
 import { getAllAttendanceRecords } from '../../services/supabase/attendanceService.js';
 import { fetchCourses } from '../../services/supabase/referenceData.js';
 
+/* ------------------------------------------------------------------ */
+/*  Styles                                                            */
+/* ------------------------------------------------------------------ */
 const useStyles = makeStyles({
     container: {
         display: 'flex',
         flexDirection: 'column',
-        ...shorthands.gap('16px'),
+        ...shorthands.gap('20px'),
     },
+    /* Filter bar */
     filterBar: {
         display: 'flex',
         flexWrap: 'wrap',
         ...shorthands.gap('12px'),
         alignItems: 'flex-end',
-        ...shorthands.padding('16px'),
+        ...shorthands.padding('20px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
     },
     filterGroup: {
         display: 'flex',
@@ -38,11 +47,23 @@ const useStyles = makeStyles({
         ...shorthands.gap('6px'),
         minWidth: '150px',
     },
+    filterLabel: {
+        fontSize: '12px',
+        fontWeight: '600',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+    },
+    /* Table card */
     tableCard: {
-        ...shorthands.padding('20px'),
+        ...shorthands.padding('24px'),
         display: 'flex',
         flexDirection: 'column',
         ...shorthands.gap('16px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
     },
     controls: {
         display: 'flex',
@@ -51,40 +72,106 @@ const useStyles = makeStyles({
         flexWrap: 'wrap',
         ...shorthands.gap('12px'),
     },
+    tableWrapper: {
+        overflowX: 'auto',
+        borderRadius: '10px',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
+    },
     table: {
         width: '100%',
         borderCollapse: 'collapse',
-        fontSize: '14px',
+        fontSize: '13px',
     },
     tableHeader: {
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#f8fafc',
         textAlign: 'left',
-        ...shorthands.padding('12px'),
-        fontWeight: '600',
+        ...shorthands.padding('12px', '16px'),
+        fontWeight: '700',
+        fontSize: '12px',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
         cursor: 'pointer',
-        '&:hover': { backgroundColor: '#e0e0e0' },
+        '&:hover': { backgroundColor: '#f1f5f9' },
+        whiteSpace: 'nowrap',
     },
     tableCell: {
-        ...shorthands.padding('12px'),
-        ...shorthands.borderBottom('1px', 'solid', '#e0e0e0'),
+        ...shorthands.padding('12px', '16px'),
+        ...shorthands.borderBottom('1px', 'solid', '#f0f0f0'),
+        color: '#334155',
+        fontSize: '13px',
     },
+    tableRowHover: {
+        '&:hover': { backgroundColor: '#fafbfc' },
+    },
+    /* Pagination */
     pagination: {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         ...shorthands.gap('12px'),
-        marginTop: '16px',
+        ...shorthands.padding('8px', '0'),
     },
+    /* Empty state */
     emptyState: {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        ...shorthands.padding('40px'),
+        ...shorthands.padding('60px', '20px'),
         ...shorthands.gap('8px'),
-        color: '#94a3b8',
+    },
+    emptyIcon: {
+        width: '64px',
+        height: '64px',
+        borderRadius: '50%',
+        backgroundColor: '#f8fafc',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: '8px',
+        fontSize: '28px',
+    },
+    /* Count badge */
+    countBadge: {
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontSize: '12px',
+        fontWeight: '600',
+        ...shorthands.padding('4px', '12px'),
+        borderRadius: '20px',
     },
 });
 
+/* ------------------------------------------------------------------ */
+/*  Status badge color helper                                         */
+/* ------------------------------------------------------------------ */
+const statusColor = (status) => {
+    switch (status) {
+        case 'present': return 'success';
+        case 'late': return 'warning';
+        case 'absent': return 'danger';
+        default: return 'subtle';
+    }
+};
+
+const statusStyle = (status) => {
+    const map = {
+        present: { backgroundColor: '#dcfce7', color: '#166534' },
+        late: { backgroundColor: '#fef3c7', color: '#92400e' },
+        absent: { backgroundColor: '#fee2e2', color: '#991b1b' },
+    };
+    return map[status] || { backgroundColor: '#f1f5f9', color: '#64748b' };
+};
+
+const modeStyle = (mode) => {
+    return mode === 'onsite'
+        ? { backgroundColor: '#dbeafe', color: '#1e40af' }
+        : { backgroundColor: '#f3e8ff', color: '#6b21a8' };
+};
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
 export default function ReportAttendanceRecords() {
     const styles = useStyles();
 
@@ -108,18 +195,14 @@ export default function ReportAttendanceRecords() {
     // Sort
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-    useEffect(() => {
-        loadCourses();
-    }, []);
+    useEffect(() => { loadCourses(); }, []);
 
     useEffect(() => {
         setCurrentPage(1);
         loadRecords();
     }, [dateRange, selectedCourse, selectedStatus, selectedMode]);
 
-    useEffect(() => {
-        loadRecords();
-    }, [currentPage]);
+    useEffect(() => { loadRecords(); }, [currentPage]);
 
     const loadCourses = async () => {
         const result = await fetchCourses();
@@ -149,7 +232,7 @@ export default function ReportAttendanceRecords() {
         setIsLoading(false);
     };
 
-    // Client-side search filtering (on currently loaded page)
+    // Client-side search filtering
     const filteredRecords = useMemo(() => {
         if (!searchQuery) return records;
         const q = searchQuery.toLowerCase();
@@ -190,9 +273,9 @@ export default function ReportAttendanceRecords() {
     };
 
     const formatDate = (date) => {
-        if (!date) return '-';
+        if (!date) return '—';
         return new Date(date).toLocaleString('en-US', {
-            month: '2-digit', day: '2-digit', year: 'numeric',
+            month: 'short', day: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit',
         });
     };
@@ -202,15 +285,27 @@ export default function ReportAttendanceRecords() {
         loadRecords();
     };
 
+    const handleReset = () => {
+        setDateRange('30');
+        setSelectedCourse('all');
+        setSelectedStatus('all');
+        setSelectedMode('all');
+        setSearchQuery('');
+    };
+
+    const sortIndicator = (key) =>
+        sortConfig.key === key ? (sortConfig.direction === 'asc' ? ' ↑' : ' ↓') : '';
+
     return (
         <div className={styles.container}>
             {/* Filter Bar */}
-            <Card className={styles.filterBar}>
+            <div className={styles.filterBar}>
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Date Range</Text>
+                    <span className={styles.filterLabel}>Date Range</span>
                     <Dropdown
                         value={dateRange === '7' ? 'Last 7 Days' : dateRange === '30' ? 'Last 30 Days' : 'Last 90 Days'}
                         onOptionSelect={(e, d) => setDateRange(d.optionValue)}
+                        style={{ minWidth: '140px' }}
                     >
                         <Option value="7">Last 7 Days</Option>
                         <Option value="30">Last 30 Days</Option>
@@ -219,10 +314,11 @@ export default function ReportAttendanceRecords() {
                 </div>
 
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Course</Text>
+                    <span className={styles.filterLabel}>Course</span>
                     <Dropdown
-                        value={selectedCourse === 'all' ? 'All Courses' : courses.find(c => c.id === selectedCourse)?.course_code || 'All Courses'}
+                        value={selectedCourse === 'all' ? 'All Courses' : courses.find(c => c.id === selectedCourse)?.course_code || 'All'}
                         onOptionSelect={(e, d) => setSelectedCourse(d.optionValue)}
+                        style={{ minWidth: '160px' }}
                     >
                         <Option value="all">All Courses</Option>
                         {courses.map(c => (
@@ -232,24 +328,25 @@ export default function ReportAttendanceRecords() {
                 </div>
 
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Status</Text>
+                    <span className={styles.filterLabel}>Status</span>
                     <Dropdown
                         value={selectedStatus === 'all' ? 'All Statuses' : selectedStatus}
                         onOptionSelect={(e, d) => setSelectedStatus(d.optionValue)}
+                        style={{ minWidth: '130px' }}
                     >
                         <Option value="all">All Statuses</Option>
                         <Option value="present">Present</Option>
                         <Option value="late">Late</Option>
                         <Option value="absent">Absent</Option>
-                        <Option value="unknown">Unknown</Option>
                     </Dropdown>
                 </div>
 
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Mode</Text>
+                    <span className={styles.filterLabel}>Mode</span>
                     <Dropdown
                         value={selectedMode === 'all' ? 'All Modes' : selectedMode}
                         onOptionSelect={(e, d) => setSelectedMode(d.optionValue)}
+                        style={{ minWidth: '120px' }}
                     >
                         <Option value="all">All Modes</Option>
                         <Option value="onsite">Onsite</Option>
@@ -257,60 +354,60 @@ export default function ReportAttendanceRecords() {
                     </Dropdown>
                 </div>
 
-                <Button appearance="outline" onClick={() => {
-                    setDateRange('30'); setSelectedCourse('all');
-                    setSelectedStatus('all'); setSelectedMode('all');
-                    setSearchQuery('');
-                }}>Reset</Button>
-            </Card>
+                <Button appearance="subtle" onClick={handleReset} size="small" style={{ color: '#64748b' }}>
+                    Reset
+                </Button>
+            </div>
 
             {/* Data Table */}
-            <Card className={styles.tableCard}>
+            <div className={styles.tableCard}>
                 <div className={styles.controls}>
                     <Input
                         placeholder="Search by name, course, or student #..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        contentBefore={<Search24Regular />}
-                        style={{ minWidth: '280px' }}
+                        contentBefore={<Search24Regular style={{ color: '#94a3b8' }} />}
+                        style={{ minWidth: '280px', maxWidth: '400px' }}
                     />
-                    <Text size={200} style={{ color: '#666' }}>
-                        {totalCount} records total
-                    </Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className={styles.countBadge}>{totalCount} records</span>
+                        <Button appearance="subtle" icon={<ArrowSync20Regular />} onClick={loadRecords} size="small" />
+                    </div>
                 </div>
 
                 {isLoading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                    <div style={{ padding: '60px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
                         <Spinner size="small" />
-                        <Text>Loading records...</Text>
+                        <Text size={300} style={{ color: '#64748b' }}>Loading records...</Text>
                     </div>
                 ) : sortedRecords.length === 0 ? (
                     <div className={styles.emptyState}>
-                        <Text weight="semibold">No attendance records found</Text>
-                        <Text size={200}>Try adjusting your filters or date range.</Text>
+                        <div className={styles.emptyIcon}>📋</div>
+                        <Text weight="semibold" size={400} style={{ color: '#334155' }}>No attendance records found</Text>
+                        <Text size={200} style={{ color: '#94a3b8' }}>Try adjusting your filters or date range.</Text>
                     </div>
                 ) : (
                     <>
-                        <div style={{ overflowX: 'auto' }}>
+                        <div className={styles.tableWrapper}>
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
                                         <th className={styles.tableHeader} onClick={() => handleSort('date')}>
-                                            Date {sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                            Date{sortIndicator('date')}
                                         </th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('course')}>
-                                            Course {sortConfig.key === 'course' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                            Course{sortIndicator('course')}
                                         </th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('student')}>
-                                            Student {sortConfig.key === 'student' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                            Student{sortIndicator('student')}
                                         </th>
                                         <th className={styles.tableHeader}>Student #</th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('mode')}>
-                                            Mode {sortConfig.key === 'mode' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                            Mode{sortIndicator('mode')}
                                         </th>
                                         <th className={styles.tableHeader} onClick={() => handleSort('status')}>
-                                            Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                            Status{sortIndicator('status')}
                                         </th>
                                         <th className={styles.tableHeader}>Confidence</th>
                                     </tr>
@@ -319,29 +416,45 @@ export default function ReportAttendanceRecords() {
                                     {sortedRecords.map((record, index) => (
                                         <tr key={record.id || index}>
                                             <td className={styles.tableCell}>{formatDate(record.check_in_time)}</td>
-                                            <td className={styles.tableCell}>{record.sessions?.courses?.course_code || '—'}</td>
+                                            <td className={styles.tableCell}>
+                                                <span style={{ fontWeight: 600, color: '#294972' }}>
+                                                    {record.sessions?.courses?.course_code || '—'}
+                                                </span>
+                                            </td>
                                             <td className={styles.tableCell}>
                                                 {record.user_profiles?.last_name}, {record.user_profiles?.first_name}
                                             </td>
-                                            <td className={styles.tableCell}>{record.user_profiles?.student_number || '—'}</td>
+                                            <td className={styles.tableCell} style={{ color: '#64748b' }}>
+                                                {record.user_profiles?.student_number || '—'}
+                                            </td>
                                             <td className={styles.tableCell}>
-                                                <Badge color={record.attendance_type === 'onsite' ? 'informative' : 'brand'}>
+                                                <span style={{
+                                                    ...modeStyle(record.attendance_type),
+                                                    padding: '3px 10px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    textTransform: 'capitalize',
+                                                }}>
                                                     {record.attendance_type}
-                                                </Badge>
+                                                </span>
                                             </td>
                                             <td className={styles.tableCell}>
-                                                <Badge
-                                                    color={
-                                                        record.status === 'present' ? 'success' :
-                                                        record.status === 'late' ? 'warning' :
-                                                        record.status === 'absent' ? 'danger' : 'subtle'
-                                                    }
-                                                >
+                                                <span style={{
+                                                    ...statusStyle(record.status),
+                                                    padding: '3px 10px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    textTransform: 'capitalize',
+                                                }}>
                                                     {record.status}
-                                                </Badge>
+                                                </span>
                                             </td>
                                             <td className={styles.tableCell}>
-                                                {record.confidence_score != null ? `${Number(record.confidence_score).toFixed(0)}%` : '—'}
+                                                {record.confidence_score != null
+                                                    ? <span style={{ fontWeight: 600 }}>{Number(record.confidence_score).toFixed(0)}%</span>
+                                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
                                             </td>
                                         </tr>
                                     ))}
@@ -356,19 +469,23 @@ export default function ReportAttendanceRecords() {
                                     appearance="subtle"
                                     disabled={currentPage === 1}
                                     onClick={() => setCurrentPage(p => p - 1)}
+                                    size="small"
                                 />
-                                <Text size={200}>Page {currentPage} of {totalPages}</Text>
+                                <Text size={200} style={{ color: '#64748b', fontWeight: 600 }}>
+                                    Page {currentPage} of {totalPages}
+                                </Text>
                                 <Button
                                     icon={<ChevronRight20Regular />}
                                     appearance="subtle"
                                     disabled={currentPage === totalPages}
                                     onClick={() => setCurrentPage(p => p + 1)}
+                                    size="small"
                                 />
                             </div>
                         )}
                     </>
                 )}
-            </Card>
+            </div>
         </div>
     );
 }

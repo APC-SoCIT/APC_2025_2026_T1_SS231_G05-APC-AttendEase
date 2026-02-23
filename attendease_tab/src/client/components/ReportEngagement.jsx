@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
     makeStyles,
     shorthands,
-    Card,
     Text,
     Badge,
     Dropdown,
@@ -20,11 +19,15 @@ import {
     Tooltip,
     Legend,
     ResponsiveContainer,
+    Cell,
 } from 'recharts';
 import { getSessionEngagementSummary, getCourseEngagementSummary } from '../../services/supabase/engagementService.js';
 import { getAllCompletedSessions } from '../../services/supabase/sessionService.js';
 import { fetchCourses } from '../../services/supabase/referenceData.js';
 
+/* ------------------------------------------------------------------ */
+/*  Shared Styles                                                     */
+/* ------------------------------------------------------------------ */
 const useStyles = makeStyles({
     container: {
         display: 'flex',
@@ -32,14 +35,18 @@ const useStyles = makeStyles({
         ...shorthands.gap('20px'),
     },
     subTabBar: {
-        ...shorthands.padding('0', '0', '12px', '0'),
+        ...shorthands.padding('0', '0', '8px', '0'),
     },
     filterBar: {
         display: 'flex',
         flexWrap: 'wrap',
         ...shorthands.gap('12px'),
         alignItems: 'flex-end',
-        ...shorthands.padding('16px'),
+        ...shorthands.padding('20px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
     },
     filterGroup: {
         display: 'flex',
@@ -47,64 +54,165 @@ const useStyles = makeStyles({
         ...shorthands.gap('6px'),
         minWidth: '280px',
     },
-    summaryGrid: {
+    filterLabel: {
+        fontSize: '12px',
+        fontWeight: '600',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+    },
+    /* Summary cards */
+    summaryRow: {
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-        ...shorthands.gap('16px'),
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        ...shorthands.gap('14px'),
     },
     summaryCard: {
         ...shorthands.padding('20px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
         display: 'flex',
         flexDirection: 'column',
-        ...shorthands.gap('8px'),
+        ...shorthands.gap('6px'),
         alignItems: 'center',
         textAlign: 'center',
     },
-    chartCard: {
-        ...shorthands.padding('20px'),
-        display: 'flex',
-        flexDirection: 'column',
-        ...shorthands.gap('12px'),
+    summaryLabel: {
+        fontSize: '11px',
+        fontWeight: '700',
+        color: '#8492a6',
+        textTransform: 'uppercase',
+        letterSpacing: '0.6px',
     },
-    tableCard: {
-        ...shorthands.padding('20px'),
+    summaryValue: {
+        fontSize: '28px',
+        fontWeight: '800',
+        color: '#1e293b',
+        lineHeight: '1',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    },
+    /* Chart card */
+    chartCard: {
+        ...shorthands.padding('24px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
         display: 'flex',
         flexDirection: 'column',
-        ...shorthands.gap('12px'),
+        ...shorthands.gap('16px'),
+    },
+    chartTitle: {
+        fontSize: '16px',
+        fontWeight: '700',
+        color: '#1e293b',
+    },
+    chartSubtitle: {
+        fontSize: '12px',
+        color: '#94a3b8',
+    },
+    /* Table card */
+    tableCard: {
+        ...shorthands.padding('24px'),
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
+        display: 'flex',
+        flexDirection: 'column',
+        ...shorthands.gap('16px'),
+    },
+    tableWrapper: {
+        overflowX: 'auto',
+        borderRadius: '10px',
+        ...shorthands.border('1px', 'solid', '#f0f0f0'),
     },
     table: {
         width: '100%',
         borderCollapse: 'collapse',
-        fontSize: '14px',
+        fontSize: '13px',
     },
     tableHeader: {
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#f8fafc',
         textAlign: 'left',
-        ...shorthands.padding('12px'),
-        fontWeight: '600',
+        ...shorthands.padding('12px', '16px'),
+        fontWeight: '700',
+        fontSize: '12px',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
     },
     tableCell: {
-        ...shorthands.padding('12px'),
-        ...shorthands.borderBottom('1px', 'solid', '#e0e0e0'),
+        ...shorthands.padding('12px', '16px'),
+        ...shorthands.borderBottom('1px', 'solid', '#f0f0f0'),
+        color: '#334155',
     },
+    /* Empty state */
     emptyState: {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        ...shorthands.padding('40px'),
+        ...shorthands.padding('60px', '20px'),
         ...shorthands.gap('8px'),
-        color: '#94a3b8',
+    },
+    emptyIcon: {
+        width: '64px',
+        height: '64px',
+        borderRadius: '50%',
+        backgroundColor: '#f8fafc',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: '8px',
+        fontSize: '28px',
     },
 });
 
-const ENGAGEMENT_COLORS = {
-    hand_raised: '#2e7d32',
-    engaged: '#1976d2',
-    speaking: '#0288d1',
-    sleeping: '#d32f2f',
-    disengaged: '#ed6c02',
+/* ------------------------------------------------------------------ */
+/*  Colors                                                            */
+/* ------------------------------------------------------------------ */
+const COLORS = {
+    hand_raised: '#36C752',
+    engaged: '#294972',
+    speaking: '#0ea5e9',
+    sleeping: '#F1511B',
+    disengaged: '#FCB53B',
 };
 
+const scoreBadgeStyle = (score) => {
+    const n = Number(score);
+    if (n >= 70) return { backgroundColor: '#dcfce7', color: '#166534' };
+    if (n >= 40) return { backgroundColor: '#fef3c7', color: '#92400e' };
+    return { backgroundColor: '#fee2e2', color: '#991b1b' };
+};
+
+/* ------------------------------------------------------------------ */
+/*  Custom Tooltip                                                    */
+/* ------------------------------------------------------------------ */
+function CustomTooltip({ active, payload, label }) {
+    if (active && payload && payload.length) {
+        return (
+            <div style={{
+                backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>{label}</p>
+                {payload.map((entry, i) => (
+                    <p key={i} style={{ margin: '2px 0 0', fontSize: '12px', color: entry.color }}>
+                        {entry.name}: <strong>{entry.value}</strong>
+                    </p>
+                ))}
+            </div>
+        );
+    }
+    return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main Export                                                       */
+/* ------------------------------------------------------------------ */
 export default function ReportEngagement() {
     const styles = useStyles();
     const [subTab, setSubTab] = useState('per-session');
@@ -123,6 +231,9 @@ export default function ReportEngagement() {
     );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Per Session View                                                  */
+/* ------------------------------------------------------------------ */
 function PerSessionView({ styles }) {
     const [sessions, setSessions] = useState([]);
     const [selectedSession, setSelectedSession] = useState(null);
@@ -130,13 +241,8 @@ function PerSessionView({ styles }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingSessions, setIsLoadingSessions] = useState(true);
 
-    useEffect(() => {
-        loadSessions();
-    }, []);
-
-    useEffect(() => {
-        if (selectedSession) loadSummary();
-    }, [selectedSession]);
+    useEffect(() => { loadSessions(); }, []);
+    useEffect(() => { if (selectedSession) loadSummary(); }, [selectedSession]);
 
     const loadSessions = async () => {
         setIsLoadingSessions(true);
@@ -153,26 +259,26 @@ function PerSessionView({ styles }) {
         setIsLoading(false);
     };
 
-    const formatDate = (d) => d ? new Date(d).toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-';
+    const formatDate = (d) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
     const selectedSessionInfo = sessions.find(s => s.id === selectedSession);
 
     const chartData = summary ? [
-        { name: 'Hand Raised', value: summary.handRaises, fill: ENGAGEMENT_COLORS.hand_raised },
-        { name: 'Engaged', value: summary.engagedEvents, fill: ENGAGEMENT_COLORS.engaged },
-        { name: 'Speaking', value: summary.speakingEvents, fill: ENGAGEMENT_COLORS.speaking },
-        { name: 'Sleeping', value: summary.sleepingEvents, fill: ENGAGEMENT_COLORS.sleeping },
-        { name: 'Disengaged', value: summary.disengagedEvents, fill: ENGAGEMENT_COLORS.disengaged },
+        { name: 'Hand Raised', value: summary.handRaises, fill: COLORS.hand_raised },
+        { name: 'Engaged', value: summary.engagedEvents, fill: COLORS.engaged },
+        { name: 'Speaking', value: summary.speakingEvents, fill: COLORS.speaking },
+        { name: 'Sleeping', value: summary.sleepingEvents, fill: COLORS.sleeping },
+        { name: 'Disengaged', value: summary.disengagedEvents, fill: COLORS.disengaged },
     ] : [];
 
     return (
         <>
-            <Card className={styles.filterBar}>
+            <div className={styles.filterBar}>
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Select Session</Text>
+                    <span className={styles.filterLabel}>Select Session</span>
                     {isLoadingSessions ? (
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <Spinner size="tiny" /><Text size={200}>Loading sessions...</Text>
+                            <Spinner size="tiny" /><Text size={200} style={{ color: '#94a3b8' }}>Loading sessions...</Text>
                         </div>
                     ) : sessions.length === 0 ? (
                         <Text size={200} style={{ color: '#94a3b8' }}>No completed sessions found.</Text>
@@ -190,68 +296,73 @@ function PerSessionView({ styles }) {
                         </Dropdown>
                     )}
                 </div>
-            </Card>
+            </div>
 
             {!selectedSession ? (
                 <div className={styles.emptyState}>
-                    <Text weight="semibold" size={400}>Select a session to view engagement</Text>
-                    <Text size={200}>Choose a completed session from the dropdown above.</Text>
+                    <div className={styles.emptyIcon}>📊</div>
+                    <Text weight="semibold" size={400} style={{ color: '#334155' }}>Select a session to view engagement</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>Choose a completed session from the dropdown above.</Text>
                 </div>
             ) : isLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    <Spinner size="small" /><Text>Loading engagement data...</Text>
+                <div style={{ padding: '60px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+                    <Spinner size="small" /><Text size={300} style={{ color: '#64748b' }}>Loading engagement data...</Text>
                 </div>
             ) : !summary || summary.totalEvents === 0 ? (
                 <div className={styles.emptyState}>
-                    <Text weight="semibold">No engagement data for this session</Text>
-                    <Text size={200}>Engagement events will appear once facial recognition captures hand raises, sleeping, etc.</Text>
+                    <div className={styles.emptyIcon}>📈</div>
+                    <Text weight="semibold" size={400} style={{ color: '#334155' }}>No engagement data for this session</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>Engagement events will appear once facial recognition captures hand raises, sleeping, etc.</Text>
                 </div>
             ) : (
                 <>
-                    <div className={styles.summaryGrid}>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Total Events</Text>
-                            <Badge appearance="filled" color="brand" size="large">{summary.totalEvents}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Hand Raises</Text>
-                            <Badge appearance="filled" color="success" size="large">{summary.handRaises}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Sleeping</Text>
-                            <Badge appearance="filled" color="danger" size="large">{summary.sleepingEvents}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Disengaged</Text>
-                            <Badge appearance="filled" color="warning" size="large">{summary.disengagedEvents}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Avg Score</Text>
-                            <Badge appearance="filled" color="informative" size="large">{summary.avgEngagementScore || '—'}</Badge>
-                        </Card>
+                    <div className={styles.summaryRow}>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Total Events</span>
+                            <span className={styles.summaryValue}>{summary.totalEvents}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Hand Raises</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.hand_raised }}>{summary.handRaises}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Sleeping</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.sleeping }}>{summary.sleepingEvents}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Disengaged</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.disengaged }}>{summary.disengagedEvents}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Avg Score</span>
+                            <span className={styles.summaryValue}>{summary.avgEngagementScore || '—'}</span>
+                        </div>
                     </div>
 
-                    <Card className={styles.chartCard}>
-                        <Text weight="semibold" size={400}>Event Distribution</Text>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
-                                <YAxis />
-                                <Tooltip />
-                                <Bar dataKey="value" fill="#1976d2">
+                    <div className={styles.chartCard}>
+                        <div>
+                            <div className={styles.chartTitle}>Event Distribution</div>
+                            <div className={styles.chartSubtitle}>Engagement events captured during this session</div>
+                        </div>
+                        <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={chartData} barCategoryGap="20%">
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="value" name="Events" radius={[6, 6, 0, 0]}>
                                     {chartData.map((entry, index) => (
-                                        <Bar key={index} dataKey="value" fill={entry.fill} />
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
                                     ))}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
-                    </Card>
+                    </div>
 
-                    {summary.studentBreakdown.length > 0 && (
-                        <Card className={styles.tableCard}>
-                            <Text weight="semibold" size={400}>Per-Student Engagement</Text>
-                            <div style={{ overflowX: 'auto' }}>
+                    {summary.studentBreakdown && summary.studentBreakdown.length > 0 && (
+                        <div className={styles.tableCard}>
+                            <div className={styles.chartTitle}>Per-Student Engagement</div>
+                            <div className={styles.tableWrapper}>
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
@@ -267,7 +378,7 @@ function PerSessionView({ styles }) {
                                     <tbody>
                                         {summary.studentBreakdown.map((s, i) => (
                                             <tr key={s.student_id || i}>
-                                                <td className={styles.tableCell}>{s.student_id}</td>
+                                                <td className={styles.tableCell} style={{ fontWeight: 600, color: '#294972' }}>{s.student_id}</td>
                                                 <td className={styles.tableCell}>{s.hand_raised}</td>
                                                 <td className={styles.tableCell}>{s.engaged}</td>
                                                 <td className={styles.tableCell}>{s.speaking}</td>
@@ -275,9 +386,15 @@ function PerSessionView({ styles }) {
                                                 <td className={styles.tableCell}>{s.disengaged}</td>
                                                 <td className={styles.tableCell}>
                                                     {s.avg_score != null ? (
-                                                        <Badge color={Number(s.avg_score) >= 70 ? 'success' : Number(s.avg_score) >= 40 ? 'warning' : 'danger'}>
+                                                        <span style={{
+                                                            ...scoreBadgeStyle(s.avg_score),
+                                                            padding: '3px 10px',
+                                                            borderRadius: '12px',
+                                                            fontSize: '11px',
+                                                            fontWeight: 600,
+                                                        }}>
                                                             {s.avg_score}
-                                                        </Badge>
+                                                        </span>
                                                     ) : '—'}
                                                 </td>
                                             </tr>
@@ -285,7 +402,7 @@ function PerSessionView({ styles }) {
                                     </tbody>
                                 </table>
                             </div>
-                        </Card>
+                        </div>
                     )}
                 </>
             )}
@@ -293,6 +410,9 @@ function PerSessionView({ styles }) {
     );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Per Course View                                                   */
+/* ------------------------------------------------------------------ */
 function PerCourseView({ styles }) {
     const [courses, setCourses] = useState([]);
     const [selectedCourse, setSelectedCourse] = useState(null);
@@ -300,13 +420,8 @@ function PerCourseView({ styles }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingCourses, setIsLoadingCourses] = useState(true);
 
-    useEffect(() => {
-        loadCourses();
-    }, []);
-
-    useEffect(() => {
-        if (selectedCourse) loadReport();
-    }, [selectedCourse]);
+    useEffect(() => { loadCourses(); }, []);
+    useEffect(() => { if (selectedCourse) loadReport(); }, [selectedCourse]);
 
     const loadCourses = async () => {
         setIsLoadingCourses(true);
@@ -323,7 +438,7 @@ function PerCourseView({ styles }) {
         setIsLoading(false);
     };
 
-    const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-';
+    const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
     const selectedCourseName = courses.find(c => c.id === selectedCourse);
 
     const trendChartData = reportData?.sessions?.map(s => ({
@@ -337,12 +452,12 @@ function PerCourseView({ styles }) {
 
     return (
         <>
-            <Card className={styles.filterBar}>
+            <div className={styles.filterBar}>
                 <div className={styles.filterGroup}>
-                    <Text size={200} weight="semibold">Select Course</Text>
+                    <span className={styles.filterLabel}>Select Course</span>
                     {isLoadingCourses ? (
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <Spinner size="tiny" /><Text size={200}>Loading courses...</Text>
+                            <Spinner size="tiny" /><Text size={200} style={{ color: '#94a3b8' }}>Loading courses...</Text>
                         </div>
                     ) : (
                         <Dropdown
@@ -356,70 +471,75 @@ function PerCourseView({ styles }) {
                         </Dropdown>
                     )}
                 </div>
-            </Card>
+            </div>
 
             {!selectedCourse ? (
                 <div className={styles.emptyState}>
-                    <Text weight="semibold" size={400}>Select a course to view engagement</Text>
-                    <Text size={200}>Choose a course from the dropdown above.</Text>
+                    <div className={styles.emptyIcon}>📚</div>
+                    <Text weight="semibold" size={400} style={{ color: '#334155' }}>Select a course to view engagement</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>Choose a course from the dropdown above.</Text>
                 </div>
             ) : isLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    <Spinner size="small" /><Text>Loading course engagement...</Text>
+                <div style={{ padding: '60px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+                    <Spinner size="small" /><Text size={300} style={{ color: '#64748b' }}>Loading course engagement...</Text>
                 </div>
             ) : !reportData || !reportData.totals ? (
                 <div className={styles.emptyState}>
-                    <Text weight="semibold">No engagement data for this course</Text>
-                    <Text size={200}>No sessions or engagement events have been recorded yet.</Text>
+                    <div className={styles.emptyIcon}>📈</div>
+                    <Text weight="semibold" size={400} style={{ color: '#334155' }}>No engagement data for this course</Text>
+                    <Text size={200} style={{ color: '#94a3b8' }}>No sessions or engagement events have been recorded yet.</Text>
                 </div>
             ) : (
                 <>
-                    <div className={styles.summaryGrid}>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Sessions</Text>
-                            <Badge appearance="filled" color="brand" size="large">{reportData.totals.totalSessions}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Total Events</Text>
-                            <Badge appearance="filled" color="informative" size="large">{reportData.totals.totalEvents}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Hand Raises</Text>
-                            <Badge appearance="filled" color="success" size="large">{reportData.totals.handRaises}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Sleeping</Text>
-                            <Badge appearance="filled" color="danger" size="large">{reportData.totals.sleepingEvents}</Badge>
-                        </Card>
-                        <Card className={styles.summaryCard}>
-                            <Text size={200} style={{ color: '#666' }}>Avg Score</Text>
-                            <Badge appearance="filled" color="informative" size="large">{reportData.totals.avgScore || '—'}</Badge>
-                        </Card>
+                    <div className={styles.summaryRow}>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Sessions</span>
+                            <span className={styles.summaryValue}>{reportData.totals.totalSessions}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Total Events</span>
+                            <span className={styles.summaryValue}>{reportData.totals.totalEvents}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Hand Raises</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.hand_raised }}>{reportData.totals.handRaises}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Sleeping</span>
+                            <span className={styles.summaryValue} style={{ color: COLORS.sleeping }}>{reportData.totals.sleepingEvents}</span>
+                        </div>
+                        <div className={styles.summaryCard}>
+                            <span className={styles.summaryLabel}>Avg Score</span>
+                            <span className={styles.summaryValue}>{reportData.totals.avgScore || '—'}</span>
+                        </div>
                     </div>
 
                     {trendChartData.length > 0 && (
-                        <Card className={styles.chartCard}>
-                            <Text weight="semibold" size={400}>Engagement Trend Across Sessions</Text>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <BarChart data={trendChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                    <YAxis />
-                                    <Tooltip />
+                        <div className={styles.chartCard}>
+                            <div>
+                                <div className={styles.chartTitle}>Engagement Trend Across Sessions</div>
+                                <div className={styles.chartSubtitle}>How engagement metrics changed over sessions</div>
+                            </div>
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={trendChartData} barGap={2} barCategoryGap="15%">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<CustomTooltip />} />
                                     <Legend />
-                                    <Bar dataKey="handRaises" fill={ENGAGEMENT_COLORS.hand_raised} name="Hand Raised" />
-                                    <Bar dataKey="engaged" fill={ENGAGEMENT_COLORS.engaged} name="Engaged" />
-                                    <Bar dataKey="sleeping" fill={ENGAGEMENT_COLORS.sleeping} name="Sleeping" />
-                                    <Bar dataKey="disengaged" fill={ENGAGEMENT_COLORS.disengaged} name="Disengaged" />
+                                    <Bar dataKey="handRaises" fill={COLORS.hand_raised} name="Hand Raised" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="engaged" fill={COLORS.engaged} name="Engaged" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="sleeping" fill={COLORS.sleeping} name="Sleeping" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="disengaged" fill={COLORS.disengaged} name="Disengaged" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
-                        </Card>
+                        </div>
                     )}
 
-                    {reportData.sessions.length > 0 && (
-                        <Card className={styles.tableCard}>
-                            <Text weight="semibold" size={400}>Per-Session Breakdown</Text>
-                            <div style={{ overflowX: 'auto' }}>
+                    {reportData.sessions && reportData.sessions.length > 0 && (
+                        <div className={styles.tableCard}>
+                            <div className={styles.chartTitle}>Per-Session Breakdown</div>
+                            <div className={styles.tableWrapper}>
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
@@ -435,7 +555,7 @@ function PerCourseView({ styles }) {
                                     <tbody>
                                         {reportData.sessions.map((s, i) => (
                                             <tr key={s.session_id || i}>
-                                                <td className={styles.tableCell}>{formatDate(s.session_date)}</td>
+                                                <td className={styles.tableCell} style={{ fontWeight: 600 }}>{formatDate(s.session_date)}</td>
                                                 <td className={styles.tableCell}>{s.totalEvents}</td>
                                                 <td className={styles.tableCell}>{s.handRaises}</td>
                                                 <td className={styles.tableCell}>{s.engagedEvents}</td>
@@ -443,9 +563,15 @@ function PerCourseView({ styles }) {
                                                 <td className={styles.tableCell}>{s.disengagedEvents}</td>
                                                 <td className={styles.tableCell}>
                                                     {s.avgScore != null ? (
-                                                        <Badge color={Number(s.avgScore) >= 70 ? 'success' : Number(s.avgScore) >= 40 ? 'warning' : 'danger'}>
+                                                        <span style={{
+                                                            ...scoreBadgeStyle(s.avgScore),
+                                                            padding: '3px 10px',
+                                                            borderRadius: '12px',
+                                                            fontSize: '11px',
+                                                            fontWeight: 600,
+                                                        }}>
                                                             {s.avgScore}
-                                                        </Badge>
+                                                        </span>
                                                     ) : '—'}
                                                 </td>
                                             </tr>
@@ -453,7 +579,7 @@ function PerCourseView({ styles }) {
                                     </tbody>
                                 </table>
                             </div>
-                        </Card>
+                        </div>
                     )}
                 </>
             )}

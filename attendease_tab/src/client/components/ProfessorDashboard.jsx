@@ -31,6 +31,7 @@ import {
   updateSchedule,
   deleteSchedule
 } from '../../services/scheduleServices/scheduleService';
+import { startSession, endSession, getScheduleSessionHistory } from '../../services/supabase/sessionService';
 import '../../services/scheduleServices/testSchedule'; // Enable browser console testing
 import { supabase } from '../../config/supabase.config.js';
 
@@ -576,16 +577,6 @@ const useStyles = makeStyles({
 
 const DEFAULT_UNKNOWN = [];
 
-// Change to real data from database
-const getMeetingsForClass = (schedule) => {
-  if (!schedule) return [];
-  return [
-    { id: 1, name: 'Meeting #3', date: new Date().toLocaleDateString(), time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
-    { id: 2, name: 'Meeting #2', date: '02-17-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
-    { id: 3, name: 'Meeting #1', date: '02-12-2026', time: `${schedule.startTime || 'TBD'} - ${schedule.endTime || 'TBD'}` },
-  ];
-};
-
 function ProfessorDashboard({ userContext }) {
   const styles = useStyles();
   const [onsiteAttendance, setOnsiteAttendance] = useState([]);
@@ -618,6 +609,10 @@ function ProfessorDashboard({ userContext }) {
 
   // State to track selected checkboxes for export: { [classId]: [meetingId1, meetingId2] }
   const [selectedMeetings, setSelectedMeetings] = useState({});
+
+  // Session tracking state
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [classSessions, setClassSessions] = useState({}); // { [scheduleId]: sessionsArray }
 
   // Ref to track if the user manually selected a class
   const isManualOverrideRef = useRef(false);
@@ -698,6 +693,79 @@ function ProfessorDashboard({ userContext }) {
     const intervalId = setInterval(load, 60000);
     return () => { mounted = false; clearInterval(intervalId); };
   }, []);
+
+  // --- Session helpers ---
+  const getMeetingsForClass = (schedule) => {
+    if (!schedule) return [];
+    const sessions = classSessions[schedule.id] || [];
+    return sessions.map((session, idx) => {
+      const startDate = session.session_date
+        ? new Date(session.session_date + 'T00:00:00').toLocaleDateString()
+        : 'N/A';
+      const startTime = session.start_time
+        ? new Date(session.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+        : 'TBD';
+      const endTime = session.end_time
+        ? new Date(session.end_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+        : 'TBD';
+      return {
+        id: session.id,
+        name: `Session #${sessions.length - idx}`,
+        date: startDate,
+        time: `${startTime} - ${endTime}`,
+      };
+    });
+  };
+
+  const loadAllClassSessions = async (schedulesList) => {
+    const sessionsMap = {};
+    for (const schedule of (schedulesList || schedules)) {
+      if (schedule.course_id) {
+        const result = await getScheduleSessionHistory(schedule.id, schedule.course_id);
+        if (result.success && result.sessions) {
+          sessionsMap[schedule.id] = result.sessions;
+        }
+      }
+    }
+    setClassSessions(sessionsMap);
+  };
+
+  // Load sessions when schedules change
+  useEffect(() => {
+    if (schedules.length > 0) {
+      loadAllClassSessions(schedules);
+    }
+  }, [schedules]);
+
+  const handleStatusChange = async (status) => {
+    if (status.isActive) {
+      // Camera started → create session
+      setCameraStartTime(status.startTime);
+      if (currentClass?.course_id) {
+        const result = await startSession(currentClass.course_id, currentClass.id);
+        if (result.success) {
+          setActiveSessionId(result.session.id);
+          console.log('Session started:', result.session.id);
+        } else {
+          console.error('Failed to start session:', result.error);
+        }
+      }
+    } else {
+      // Camera stopped → end session
+      setCameraStopTime(status.stopTime);
+      if (activeSessionId) {
+        const result = await endSession(activeSessionId);
+        if (result.success) {
+          console.log('Session ended:', activeSessionId);
+          setActiveSessionId(null);
+          // Refresh sessions so Class Records updates immediately
+          await loadAllClassSessions();
+        } else {
+          console.error('Failed to end session:', result.error);
+        }
+      }
+    }
+  };
 
   const handleEnterClass = (schedule) => {
     setCurrentClass(schedule);
@@ -1083,6 +1151,7 @@ function ProfessorDashboard({ userContext }) {
             }}
             onMessagesUpdate={handleMessagesUpdate}
             onEngagementUpdate={handleEngagementUpdate}
+            onStatusChange={handleStatusChange}
           />
         </Card>
       </div>

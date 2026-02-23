@@ -10,10 +10,8 @@ import {
 import AdminShell from './AdminShell';
 import ReportOverview from './ReportOverview';
 import ReportAttendanceRecords from './ReportAttendanceRecords';
-import ReportCourses from './ReportCourses';
 import ReportStudents from './ReportStudents';
 import ReportEngagement from './ReportEngagement';
-import ReportGenerate from './ReportGenerate';
 
 const useStyles = makeStyles({
     cardHeader: {
@@ -30,11 +28,12 @@ const useStyles = makeStyles({
     },
     tabsContainer: {
         backgroundColor: 'white',
-        ...shorthands.borderRadius('8px'),
-        ...shorthands.padding('20px'),
+        ...shorthands.borderRadius('12px'),
+        ...shorthands.padding('24px'),
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
     },
     tabContent: {
-        ...shorthands.padding('20px', '0'),
+        ...shorthands.padding('24px', '0'),
         display: 'flex',
         flexDirection: 'column',
         ...shorthands.gap('24px'),
@@ -49,9 +48,9 @@ function AdminReports() {
         <AdminShell>
             <div className={styles.cardHeader}>
                 <div className={styles.headerLeft}>
-                    <Text size={600} weight="bold">View Reports</Text>
+                    <Text size={600} weight="bold" style={{ color: '#1e293b' }}>View Reports</Text>
                     <Text size={200} style={{ color: '#64748b' }}>
-                        Monitor attendance records, course analytics, student performance, and engagement metrics.
+                        Monitor attendance records, student performance, and engagement metrics.
                     </Text>
                 </div>
             </div>
@@ -63,19 +62,15 @@ function AdminReports() {
                 >
                     <Tab value="overview">Overview</Tab>
                     <Tab value="attendance-records">Attendance Records</Tab>
-                    <Tab value="course-reports">Course Reports</Tab>
                     <Tab value="student-reports">Student Reports</Tab>
                     <Tab value="engagement">Engagement</Tab>
-                    <Tab value="generate-report">Generate Report</Tab>
                 </TabList>
 
                 <div className={styles.tabContent}>
                     {selectedTab === 'overview' && <ReportOverview />}
                     {selectedTab === 'attendance-records' && <ReportAttendanceRecords />}
-                    {selectedTab === 'course-reports' && <ReportCourses />}
                     {selectedTab === 'student-reports' && <ReportStudents />}
                     {selectedTab === 'engagement' && <ReportEngagement />}
-                    {selectedTab === 'generate-report' && <ReportGenerate />}
                 </div>
             </Card>
         </AdminShell>
